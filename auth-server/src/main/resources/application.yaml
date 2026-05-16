@@ -14,6 +14,7 @@ spring:
       password: password
     oauth2:
       authorizationserver:
+        issuer: ${AUTH_SERVER_ISSUER:http://localhost:9090}
         client:
           oidc-client:
             registration:

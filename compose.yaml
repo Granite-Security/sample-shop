@@ -10,8 +10,17 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/authdb
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=postgres
-    depends_on:
-      - postgres
+      - AUTH_SERVER_ISSUER=http://auth-server:9090
+      - SERVER_PORT=9090
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:9090/login"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+#    depends_on:
+#      postgres:
+#        condition: service_started
 
   gateway:
     build:
@@ -21,8 +30,10 @@ services:
       - "8080:8080"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - OIDC_ISSUER_URI=http://auth-server:9090
     depends_on:
-      - auth-server
+      auth-server:
+        condition: service_healthy
 
   greetings:
     build:
@@ -32,15 +43,15 @@ services:
       - "8060:8060"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-  #    depends_on:
-  #      - auth-server
+    depends_on:
+      - auth-server
 
-  postgres:
-    image: postgres:17-alpine
-    container_name: postgres
-    environment:
-      - POSTGRES_DB=authdb
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-    ports:
-      - "5432:5432"
+#  postgres:
+#    image: postgres:17-alpine
+#    container_name: postgres
+#    environment:
+#      - POSTGRES_DB=authdb
+#      - POSTGRES_USER=postgres
+#      - POSTGRES_PASSWORD=postgres
+#    ports:
+#      - "5432:5432"
