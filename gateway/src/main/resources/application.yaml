@@ -23,3 +23,7 @@ spring:
               - user.read
   codec:
     max-in-memory-size: 10MB
+
+microservices:
+  greetings:
+    uri: ${GREETINGS_MICROSERVICE:http://localhost:8060}
