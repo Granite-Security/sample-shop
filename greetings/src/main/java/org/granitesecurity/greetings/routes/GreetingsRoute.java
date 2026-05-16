@@ -18,6 +18,7 @@ public class GreetingsRoute {
     RouterFunction<ServerResponse> greetingsRouter(GreetingsHandler greetingsHandler) {
         return RouterFunctions.route()
                 .GET("/api/greetings", greetingsHandler::respondWithGreeting)
+                .GET("/api/secured", request -> ServerResponse.ok().bodyValue("This is a secured endpoint"))
                 .build();
 
     }

@@ -1,5 +1,39 @@
 server:
   port: 9090
+
+logging:
+  level:
+    org.springframework.security: trace
+
 spring:
   application:
     name: auth-server
+  security:
+    user:
+      name: user
+      password: password
+    oauth2:
+      authorizationserver:
+        client:
+          oidc-client:
+            registration:
+              client-id: "oidc-client"
+              client-secret: "{bcrypt}$2a$10$yJ6.SWuLb1Ps4GTyrzdZReSdFH9kAltY4o9DEK.0zNy7Nk33pUYT2"
+              client-authentication-methods:
+                - "client_secret_basic"
+              authorization-grant-types:
+                - "authorization_code"
+                - "refresh_token"
+                - "client_credentials"
+              redirect-uris:
+                - "http://127.0.0.1:8080/login/oauth2/code/oidc-client"
+                - "http://localhost:8080/login/oauth2/code/oidc-client"
+              post-logout-redirect-uris:
+                - "http://127.0.0.1:8080/"
+              scopes:
+                - "openid"
+                - "profile"
+                - "email"
+                - "user.read"
+                - "user.write"
+            require-authorization-consent: true

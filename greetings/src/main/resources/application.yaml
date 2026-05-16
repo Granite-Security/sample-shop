@@ -1,5 +1,12 @@
 server:
-    port: 8060
+  port: 8060
 spring:
   application:
     name: greetings
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_EXTERNAL_ISSUER_URI:http://localhost:9090}
+  codec:
+    max-in-memory-size: 10MB

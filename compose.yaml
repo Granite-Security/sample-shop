@@ -13,6 +13,17 @@ services:
     depends_on:
       - postgres
 
+  gateway:
+    build:
+      context: ./gateway
+    container_name: gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      - auth-server
+
   greetings:
     build:
       context: ./greetings
@@ -21,8 +32,8 @@ services:
       - "8060:8060"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-#    depends_on:
-#      - auth-server
+  #    depends_on:
+  #      - auth-server
 
   postgres:
     image: postgres:17-alpine
