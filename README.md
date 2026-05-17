@@ -1,8 +1,8 @@
 Granite Security
 
-1. Oauth2 Authorization Server
-2. Shop -> hello World -> Resource Server
-3. Gateway -> Client
+To run with docker compose:
+1. add in /etc/hosts the following entries:
+127.0.0.1 auth greetings gateway
 
 
 Technology stack:

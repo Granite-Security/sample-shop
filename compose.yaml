@@ -31,6 +31,7 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - OIDC_ISSUER_URI=http://auth-server:9090
+      - OIDC_REDIRECT_URI=http://gateway:8080/login/oauth2/code/oidc-client
       - MICROSERVICES_GREETINGS_URI=http://greetings:8060
       - GREETINGS_MICROSERVICE=http://greetings:8060
     depends_on:
@@ -45,6 +46,8 @@ services:
       - "8060:8060"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - AUTH_ISSUER_URI=http://auth-server:9090
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://auth-server:9090
     depends_on:
       - auth-server
 
