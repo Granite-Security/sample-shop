@@ -11,6 +11,7 @@ services:
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=postgres
       - AUTH_SERVER_ISSUER=http://auth-server:9090
+      - OIDC_CLIENT_SECRET_ENCODED={noop}iaka
       - SERVER_PORT=9090
     healthcheck:
       test: ["CMD", "wget", "--spider", "http://localhost:9090/login"]
@@ -31,7 +32,7 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - OIDC_ISSUER_URI=http://auth-server:9090
-      - OIDC_REDIRECT_URI=http://gateway:8080/login/oauth2/code/oidc-client
+      - OIDC_CLIENT_SECRET=iaka
       - MICROSERVICES_GREETINGS_URI=http://greetings:8060
       - GREETINGS_MICROSERVICE=http://greetings:8060
     depends_on:

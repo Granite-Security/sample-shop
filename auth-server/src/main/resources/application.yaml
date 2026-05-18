@@ -19,7 +19,7 @@ spring:
           oidc-client:
             registration:
               client-id: "oidc-client"
-              client-secret: "{bcrypt}$2a$10$yJ6.SWuLb1Ps4GTyrzdZReSdFH9kAltY4o9DEK.0zNy7Nk33pUYT2"
+              client-secret: ${OIDC_CLIENT_SECRET_ENCODED:{noop}iaka}
               client-authentication-methods:
                 - "client_secret_basic"
               authorization-grant-types:
