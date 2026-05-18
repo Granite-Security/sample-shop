@@ -1,5 +1,15 @@
 Granite Security
 
+           Internet
+               |
+      Application Gateway (Hub)
+               |
+        -------------------
+        |                 |
+    FE AKS (Spoke)    BE AKS (Spoke)
+        |                 |
+    Microservices     Databases
+
 To run with docker compose:
 1. add in /etc/hosts the following entries:
 127.0.0.1 auth greetings gateway
