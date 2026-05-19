@@ -9,9 +9,9 @@ spring:
   application:
     name: auth-server
   security:
-    user:
-      name: user
-      password: password
+#    user:
+#      name: user
+#      password: password
     oauth2:
       authorizationserver:
         issuer: ${AUTH_SERVER_ISSUER:http://localhost:9090}
