@@ -1,6 +1,7 @@
-In Auth-Server:
-Why is that exception for the anonymous users?
-
-In Greetings Service, for Mac M1
-2026-05-16T21:09:30.214+02:00 ERROR 4000 --- [greetings] [     parallel-1] i.n.r.d.DnsServerAddressStreamProviders  : Unable to load io.netty.resolver.dns.macos.MacOSDnsServerAddressStreamProvider, fallback to system defaults. This may result in incorrect DNS resolutions on MacOS. Check whether you have a dependency on 'io.netty:netty-resolver-dns-native-macos'. Use DEBUG level to see the full stack: java.lang.UnsatisfiedLinkError: failed to load the required native library
-
+# auth-server:
+  - ticket:
+    - add db to the microservice
+    - store users and roles
+  - spike
+    - store providers in db
+    - explore on-behalf-of flow
