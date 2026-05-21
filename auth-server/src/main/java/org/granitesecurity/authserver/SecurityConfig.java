@@ -6,6 +6,7 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -14,9 +15,15 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.FactorGrantedAuthority;
+import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.oauth2.client.registration.ClientRegistration;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
@@ -36,13 +43,35 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
+    @Value("${app.oauth2.gateway-client.secret:{noop}secret}")
+    private String gatewayClientSecret;
 
+    @Value("${app.oauth2.gateway-client.redirect-uri:http://localhost:8080/login/oauth2/code/oidc-client}")
+    private String gatewayClientRedirectUri;
+
+    @Value("${app.oauth2.gateway-client.post-logout-redirect-uri:http://localhost:8080/}")
+    private String gatewayClientPostLogoutRedirectUri;
+
+    @Value("${spring.security.oauth2.authorizationserver.issuer:http://localhost:9090}")
+    private String issuer;
+
+    @Value("${GOOGLE_CLIENT_ID:google-client-id}")
+    private String googleClientId;
+
+    @Value("${GOOGLE_CLIENT_SECRET:google-client-secret}")
+    private String googleClientSecret;
+
+    @Value("${GOOGLE_REDIRECT_URI:{baseUrl}/login/oauth2/code/{registrationId}}")
+    private String googleRedirectUri;
 
     @Bean
     @Order(1)
@@ -58,11 +87,11 @@ public class SecurityConfig {
                         authorize
                                 .anyRequest().authenticated()
                 )
-                // Redirect to the login page when not authenticated from the
-                // authorization endpoint
+                // Start Google login when not authenticated from the
+                // authorization endpoint. Form login remains available at /login.
                 .exceptionHandling((exceptions) -> exceptions
                         .defaultAuthenticationEntryPointFor(
-                                new LoginUrlAuthenticationEntryPoint("/login"),
+                                new LoginUrlAuthenticationEntryPoint("/oauth2/authorization/google"),
                                 new MediaTypeRequestMatcher(MediaType.TEXT_HTML)
                         )
                 );
@@ -76,13 +105,32 @@ public class SecurityConfig {
             throws Exception {
         http
                 .authorizeHttpRequests((authorize) -> authorize
+                        .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 )
                 // Form login handles the redirect to the login page from the
                 // authorization server filter chain
-                .formLogin(Customizer.withDefaults());
+                .formLogin(Customizer.withDefaults())
+                .oauth2Login((oauth2) -> oauth2
+                        .redirectionEndpoint((redirection) -> redirection
+                                .baseUri("/login/oauth2/code/*")
+                        )
+                        .userInfoEndpoint((userInfo) -> userInfo
+                                .userAuthoritiesMapper(oAuth2LoginAuthoritiesMapper())
+                        )
+                );
 
         return http.build();
+    }
+
+    private GrantedAuthoritiesMapper oAuth2LoginAuthoritiesMapper() {
+        return (authorities) -> {
+            Set<GrantedAuthority> mappedAuthorities = new HashSet<>(authorities);
+            mappedAuthorities.add(FactorGrantedAuthority.withAuthority(FactorGrantedAuthority.AUTHORIZATION_CODE_AUTHORITY)
+                    .issuedAt(Instant.now())
+                    .build());
+            return mappedAuthorities;
+        };
     }
 
     @Bean
@@ -100,12 +148,12 @@ public class SecurityConfig {
     public RegisteredClientRepository registeredClientRepository() {
         RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
                 .clientId("oidc-client")
-                .clientSecret("{noop}secret")
+                .clientSecret(gatewayClientSecret)
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .redirectUri("http://localhost:8080/login/oauth2/code/oidc-client")
-                .postLogoutRedirectUri("http://localhost:8080/")
+                .redirectUri(gatewayClientRedirectUri)
+                .postLogoutRedirectUri(gatewayClientPostLogoutRedirectUri)
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
                 .scope(StandardClaimNames.EMAIL)
@@ -113,6 +161,26 @@ public class SecurityConfig {
                 .build();
 
         return new InMemoryRegisteredClientRepository(oidcClient);
+    }
+
+    @Bean
+    public ClientRegistrationRepository clientRegistrationRepository() {
+        ClientRegistration googleRegistration = ClientRegistration.withRegistrationId("google")
+                .clientId(googleClientId)
+                .clientSecret(googleClientSecret)
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .redirectUri(googleRedirectUri)
+                .scope(OidcScopes.OPENID, OidcScopes.PROFILE, StandardClaimNames.EMAIL)
+                .authorizationUri("https://accounts.google.com/o/oauth2/v2/auth")
+                .tokenUri("https://www.googleapis.com/oauth2/v4/token")
+                .jwkSetUri("https://www.googleapis.com/oauth2/v3/certs")
+                .userInfoUri("https://www.googleapis.com/oauth2/v3/userinfo")
+                .userNameAttributeName(StandardClaimNames.SUB)
+                .clientName("Google")
+                .build();
+
+        return new InMemoryClientRegistrationRepository(googleRegistration);
     }
 
     @Bean
@@ -135,7 +203,9 @@ public class SecurityConfig {
 
     @Bean
     public AuthorizationServerSettings authorizationServerSettings() {
-        return AuthorizationServerSettings.builder().build();
+        return AuthorizationServerSettings.builder()
+                .issuer(issuer)
+                .build();
     }
 
 

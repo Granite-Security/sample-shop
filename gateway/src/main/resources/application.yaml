@@ -8,7 +8,11 @@ spring:
       client:
         provider:
           oidc-client:
-            issuer-uri: ${OIDC_ISSUER_URI:http://localhost:9090}
+            authorization-uri: ${OIDC_AUTHORIZATION_URI:${OIDC_ISSUER_URI:http://localhost:9090}/oauth2/authorize}
+            token-uri: ${OIDC_TOKEN_URI:${OIDC_ISSUER_URI:http://localhost:9090}/oauth2/token}
+            jwk-set-uri: ${OIDC_JWK_SET_URI:${OIDC_ISSUER_URI:http://localhost:9090}/oauth2/jwks}
+            user-info-uri: ${OIDC_USER_INFO_URI:${OIDC_ISSUER_URI:http://localhost:9090}/userinfo}
+            user-name-attribute: sub
         registration:
           oidc-client:
             provider: oidc-client
