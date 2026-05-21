@@ -87,11 +87,11 @@ public class SecurityConfig {
                         authorize
                                 .anyRequest().authenticated()
                 )
-                // Start Google login when not authenticated from the
-                // authorization endpoint. Form login remains available at /login.
+                // Show the login page when not authenticated from the
+                // authorization endpoint so users can choose form or Google login.
                 .exceptionHandling((exceptions) -> exceptions
                         .defaultAuthenticationEntryPointFor(
-                                new LoginUrlAuthenticationEntryPoint("/oauth2/authorization/google"),
+                                new LoginUrlAuthenticationEntryPoint("/login"),
                                 new MediaTypeRequestMatcher(MediaType.TEXT_HTML)
                         )
                 );
