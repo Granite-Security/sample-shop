@@ -12,6 +12,10 @@ services:
       - SPRING_DATASOURCE_PASSWORD=postgres
       - AUTH_SERVER_ISSUER=http://auth-server:9090
       - OIDC_CLIENT_SECRET_ENCODED={noop}iaka
+      - OIDC_CLIENT_REDIRECT_URI=http://localhost:8080/login/oauth2/code/oidc-client
+      - OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI=http://localhost:8080/
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - SERVER_PORT=9090
     healthcheck:
       test: ["CMD", "wget", "--spider", "http://localhost:9090/login"]
@@ -32,6 +36,7 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - OIDC_ISSUER_URI=http://auth-server:9090
+      - OIDC_AUTHORIZATION_URI=http://localhost:9090/oauth2/authorize
       - OIDC_CLIENT_SECRET=iaka
       - MICROSERVICES_GREETINGS_URI=http://greetings:8060
       - GREETINGS_MICROSERVICE=http://greetings:8060
