@@ -23,9 +23,9 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
-#    depends_on:
-#      postgres:
-#        condition: service_started
+    depends_on:
+      postgres:
+        condition: service_started
 
   gateway:
     build:
@@ -57,12 +57,12 @@ services:
     depends_on:
       - auth-server
 
-#  postgres:
-#    image: postgres:17-alpine
-#    container_name: postgres
-#    environment:
-#      - POSTGRES_DB=authdb
-#      - POSTGRES_USER=postgres
-#      - POSTGRES_PASSWORD=postgres
-#    ports:
-#      - "5432:5432"
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres
+    environment:
+      - POSTGRES_DB=authdb
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
