@@ -1,0 +1,8 @@
+- make a api for online shop:
+    - there are:
+        - products
+        - orders
+        - cart
+        - shop users, managers, others
+        - there is shop and admin area
+        - payment method should out of scope (future)
