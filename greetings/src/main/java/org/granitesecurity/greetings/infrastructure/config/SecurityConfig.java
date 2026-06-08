@@ -1,4 +1,4 @@
-package org.granitesecurity.greetings.security;
+package org.granitesecurity.greetings.infrastructure.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,10 +17,10 @@ import java.util.Collection;
 import java.util.List;
 
 @Configuration
-public class GreetingsSec {
+public class SecurityConfig {
 
     @Bean
-    public SecurityWebFilterChain securityWebFilterChain(org.springframework.security.config.web.server.ServerHttpSecurity http) {
+    public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(exchange -> exchange
@@ -33,8 +33,6 @@ public class GreetingsSec {
                 .build();
     }
 
-
-
     @Bean
     public ReactiveJwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtGrantedAuthoritiesConverter scopesConverter = new JwtGrantedAuthoritiesConverter();
@@ -42,10 +40,8 @@ public class GreetingsSec {
         Converter<Jwt, Collection<GrantedAuthority>> combined = jwt -> {
             Collection<GrantedAuthority> authorities = new ArrayList<>();
 
-            // scopes → SCOPE_*
             authorities.addAll(scopesConverter.convert(jwt));
 
-            // roles → ROLE_*
             List<String> roles = jwt.getClaimAsStringList("roles");
             if (roles != null) {
                 roles.stream()
@@ -59,5 +55,4 @@ public class GreetingsSec {
         converter.setJwtGrantedAuthoritiesConverter(new ReactiveJwtGrantedAuthoritiesConverterAdapter(combined));
         return converter;
     }
-
 }

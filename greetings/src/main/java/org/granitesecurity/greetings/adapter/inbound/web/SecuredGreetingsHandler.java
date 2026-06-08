@@ -1,4 +1,4 @@
-package org.granitesecurity.greetings.handler;
+package org.granitesecurity.greetings.adapter.inbound.web;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
@@ -14,8 +14,8 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class SecuredGreetingsHandler {
-    public Mono<ServerResponse> respondWithSecuredGreeting(ServerRequest serverRequest) {
 
+    public Mono<ServerResponse> respondWithSecuredGreeting(ServerRequest serverRequest) {
         return serverRequest.principal()
                 .cast(Authentication.class)
                 .flatMap(auth -> {
@@ -27,7 +27,6 @@ public class SecuredGreetingsHandler {
                     Object details = auth.getDetails();
                     log.info("Authenticated user details: {}", details);
 
-
                     String authorities = auth.getAuthorities().stream()
                             .map(GrantedAuthority::getAuthority)
                             .collect(Collectors.joining(", "));
@@ -35,6 +34,5 @@ public class SecuredGreetingsHandler {
                     return ServerResponse.ok()
                             .bodyValue("Hello, " + name + "! This is a secured greeting. Your grants and roles: [" + authorities + "]" + credentials.toString());
                 });
-
     }
 }

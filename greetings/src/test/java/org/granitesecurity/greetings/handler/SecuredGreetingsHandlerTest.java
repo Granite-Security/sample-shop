@@ -1,8 +1,10 @@
 package org.granitesecurity.greetings.handler;
 
+import org.granitesecurity.greetings.adapter.inbound.web.SecuredGreetingsHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.reactive.function.server.EntityResponse;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
@@ -30,6 +32,12 @@ class SecuredGreetingsHandlerTest {
                 new SimpleGrantedAuthority("ROLE_USER"),
                 new SimpleGrantedAuthority("SCOPE_read")
         ));
+
+        Jwt jwt = mock(Jwt.class);
+        when(jwt.toString()).thenReturn("mock-jwt-token");
+        when(jwt.getHeaders()).thenReturn(new java.util.HashMap<>());
+        when(jwt.getClaims()).thenReturn(new java.util.HashMap<>());
+        when(authentication.getCredentials()).thenReturn(jwt);
 
         doReturn(Mono.just(authentication)).when(request).principal();
 
