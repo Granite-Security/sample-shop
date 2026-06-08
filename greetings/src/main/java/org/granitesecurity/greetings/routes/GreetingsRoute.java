@@ -17,7 +17,7 @@ public class GreetingsRoute {
         return RouterFunctions.route()
                 .GET("/api/greetings", greetingsHandler::respondWithGreeting)
                 .GET("/api/secured", securedGreetingsHandler::respondWithSecuredGreeting)
+                .GET("/api/hello", greetingsHandler::hello)
                 .build();
-
     }
 }
