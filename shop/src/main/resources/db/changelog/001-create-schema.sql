@@ -47,3 +47,9 @@ CREATE TABLE order_item (
 );
 CREATE INDEX idx_order_item_order_id ON order_item(order_id);
 --rollback DROP TABLE order_item;
+
+--changeset junie:001-add-image-url
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'product' AND column_name = 'image_url'
+ALTER TABLE product ADD COLUMN image_url VARCHAR(512);
+--rollback ALTER TABLE product DROP COLUMN image_url;

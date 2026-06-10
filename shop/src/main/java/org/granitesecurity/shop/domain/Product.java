@@ -17,6 +17,8 @@ public class Product {
     private String description;
     private BigDecimal price;
     private Integer stock;
+    @Column("image_url")
+    private String imageUrl;
     @Column("category_id")
     private Long categoryId;
     @Column("created_at")

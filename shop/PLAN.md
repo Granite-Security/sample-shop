@@ -127,7 +127,7 @@ These shape every step below, so keep them in mind:
 
 ## Phase 5 — Web layer (reactive endpoints)
 
-> **Pick a routing style and stay consistent.** `greetings` uses functional `RouterFunction`s; for CRUD breadth, annotated `@RestController` with reactive return types is usually simpler. Recommend annotated controllers here; note the choice in code.
+> ** routing style: stay consistent.** `greetings` uses functional `RouterFunction`s; Always delegate to a specialized handler.
 
 ### Step 5.1 — Catalog endpoints (public read)
 - **Do:** `GET /api/shop/products`, `GET /api/shop/products/{id}`, `GET /api/shop/categories`. Read-only browsing can be public (align with the gateway's `permitAll` style for `/api/greetings/**`).
