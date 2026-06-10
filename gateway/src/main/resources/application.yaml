@@ -31,3 +31,5 @@ spring:
 microservices:
   greetings:
     uri: ${GREETINGS_MICROSERVICE:http://localhost:8060}
+  shop:
+    uri: ${SHOP_MICROSERVICE:http://localhost:8061}

@@ -153,7 +153,7 @@ These shape every step below, so keep them in mind:
 
 ### Step 6.2 — Wire into the gateway
 - **Goal:** Reach the shop through the edge.
-- **Do:** Add a route in `gateway`'s `RouterConfig` for `/api/shop/**` → shop service URI, with `TokenRelay` on the authenticated paths (mirror the `greetings-secured` route). Add the shop service to the root `compose.yaml` with its issuer/datasource env vars.
+- **Do:** Add a route in `gateway`'s `RouterConfig` for `/api/shop/**` → shop service URI, with `TokenRelay` on the authenticated paths (mirror the `greetings-secured` route). 
 - **Done when:** A browser-authenticated request through the gateway carries the JWT to the shop.
 
 ---

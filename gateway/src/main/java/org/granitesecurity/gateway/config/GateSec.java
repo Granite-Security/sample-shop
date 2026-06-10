@@ -17,6 +17,8 @@ public class GateSec {
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(exchange -> exchange
                         .pathMatchers("/api/greetings/**").permitAll()
+                        .pathMatchers("/api/shop/products/**").permitAll()
+                        .pathMatchers("/api/shop/categories").permitAll()
                         .anyExchange().authenticated()
                 )
                 .oauth2Login(Customizer.withDefaults())
