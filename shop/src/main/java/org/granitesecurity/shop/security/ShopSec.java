@@ -3,6 +3,7 @@ package org.granitesecurity.shop.security;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -24,8 +25,18 @@ public class ShopSec {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(exchange -> exchange
+                        .pathMatchers(HttpMethod.GET, "/api/shop/products",
+                                "/api/shop/products/**", "/api/shop/categories").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/shop/orders",
+                                "/api/shop/orders/**").authenticated()
+                        .pathMatchers(HttpMethod.POST, "/api/shop/orders").authenticated()
+                        .pathMatchers(HttpMethod.POST, "/api/shop/products",
+                                "/api/shop/categories").hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.PUT, "/api/shop/products/**",
+                                "/api/shop/categories/**").hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.DELETE, "/api/shop/products/**",
+                                "/api/shop/categories/**").hasRole("ADMIN")
                         .pathMatchers("/api/greetings/**").permitAll()
-                        .pathMatchers("/api/catalog/**").hasAnyRole("USER", "ADMIN")
                         .anyExchange().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
