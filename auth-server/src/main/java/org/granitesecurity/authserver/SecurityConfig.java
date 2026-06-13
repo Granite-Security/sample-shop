@@ -159,6 +159,7 @@ public class SecurityConfig {
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .redirectUri(gatewayClientRedirectUri)
+                .redirectUri("https://oauth.pstmn.io/v1/callback")  // add this
                 .postLogoutRedirectUri(gatewayClientPostLogoutRedirectUri)
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
