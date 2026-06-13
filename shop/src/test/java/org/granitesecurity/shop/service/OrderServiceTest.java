@@ -142,7 +142,9 @@ class OrderServiceTest {
         CustomerOrder order2 = new CustomerOrder("testuser", "SHIPPED", BigDecimal.valueOf(50.00));
         order2.setId(20L);
 
-        when(customerOrderRepository.findByUsername("testuser"))
+        when(customerOrderRepository.countByUsername("testuser"))
+                .thenReturn(Mono.just(2L));
+        when(customerOrderRepository.findByUsernamePaged("testuser", 20, 0L))
                 .thenReturn(Flux.just(order1, order2));
 
         when(orderItemRepository.findByOrderId(10L)).thenReturn(Flux.just(
@@ -152,9 +154,15 @@ class OrderServiceTest {
                 new OrderItem(20L, 2L, 1, BigDecimal.valueOf(50.00))
         ));
 
-        StepVerifier.create(orderService.getOrdersForUser("testuser"))
-                .expectNextMatches(r -> r.id().equals(10L) && r.items().size() == 1)
-                .expectNextMatches(r -> r.id().equals(20L) && r.items().size() == 1)
+        StepVerifier.create(orderService.getOrdersForUser("testuser", 0, 20))
+                .assertNext(result -> {
+                    assert result.total() == 2;
+                    assert result.items().size() == 2;
+                    assert result.items().get(0).id().equals(10L);
+                    assert result.items().get(0).items().size() == 1;
+                    assert result.items().get(1).id().equals(20L);
+                    assert result.items().get(1).items().size() == 1;
+                })
                 .verifyComplete();
     }
 

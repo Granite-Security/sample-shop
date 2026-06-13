@@ -8,7 +8,6 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.granitesecurity.shop.dto.OrderResponse;
 import org.granitesecurity.shop.dto.PlaceOrderRequest;
 import org.granitesecurity.shop.service.OrderService;
-import org.granitesecurity.shop.service.ShopException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
@@ -36,22 +35,21 @@ public class OrderHandler {
         return request.bodyToMono(PlaceOrderRequest.class)
                 .zipWith(getUsername(request))
                 .flatMap(tuple -> orderService.placeOrder(tuple.getT2(), tuple.getT1()))
-                .flatMap(order -> ServerResponse.ok().bodyValue(order))
-                .onErrorResume(ShopException.class,
-                        e -> ServerResponse.badRequest().bodyValue(e.getMessage()));
+                .flatMap(order -> ServerResponse.ok().bodyValue(order));
     }
 
     @Operation(operationId = "getOrders", summary = "List current user's orders", description = "Returns orders for the authenticated user only")
     @SecurityRequirement(name = "bearer-jwt")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "List of orders"),
+            @ApiResponse(responseCode = "200", description = "Paginated list of orders"),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content())
     })
     public Mono<ServerResponse> getOrders(ServerRequest request) {
+        int page = Integer.parseInt(request.queryParam("page").orElse("0"));
+        int size = Integer.parseInt(request.queryParam("size").orElse("20"));
         return getUsername(request)
-                .flatMapMany(orderService::getOrdersForUser)
-                .collectList()
-                .flatMap(orders -> ServerResponse.ok().bodyValue(orders));
+                .flatMap(username -> orderService.getOrdersForUser(username, page, size))
+                .flatMap(result -> ServerResponse.ok().bodyValue(result));
     }
 
     @Operation(operationId = "getOrder", summary = "Get an order by ID", description = "Returns the order only if it belongs to the authenticated user")
@@ -65,8 +63,7 @@ public class OrderHandler {
         Long id = Long.valueOf(request.pathVariable("id"));
         return getUsername(request)
                 .flatMap(username -> orderService.getOrder(id, username))
-                .flatMap(order -> ServerResponse.ok().bodyValue(order))
-                .onErrorResume(ShopException.class, e -> ServerResponse.notFound().build());
+                .flatMap(order -> ServerResponse.ok().bodyValue(order));
     }
 
     private Mono<String> getUsername(ServerRequest request) {

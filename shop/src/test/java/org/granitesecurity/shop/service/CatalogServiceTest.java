@@ -43,11 +43,16 @@ class CatalogServiceTest {
         var cat2 = new Category("Books", "Pages");
         cat2.setId(2L);
 
-        when(categoryRepository.findAll()).thenReturn(Flux.just(cat1, cat2));
+        when(categoryRepository.count()).thenReturn(Mono.just(2L));
+        when(categoryRepository.findAllPaged(20, 0L)).thenReturn(Flux.just(cat1, cat2));
 
-        StepVerifier.create(catalogService.getAllCategories())
-                .expectNext(new CategoryResponse(1L, "Electronics", "Devices"))
-                .expectNext(new CategoryResponse(2L, "Books", "Pages"))
+        StepVerifier.create(catalogService.getAllCategories(0, 20))
+                .assertNext(result -> {
+                    assert result.total() == 2;
+                    assert result.items().size() == 2;
+                    assert result.items().get(0).name().equals("Electronics");
+                    assert result.items().get(1).name().equals("Books");
+                })
                 .verifyComplete();
     }
 
@@ -140,10 +145,14 @@ class CatalogServiceTest {
         product.setId(1L);
         product.setDescription("Desc");
 
-        when(productRepository.findAll()).thenReturn(Flux.just(product));
+        when(productRepository.count()).thenReturn(Mono.just(1L));
+        when(productRepository.findAllPaged(20, 0L)).thenReturn(Flux.just(product));
 
-        StepVerifier.create(catalogService.getAllProducts())
-                .assertNext(r -> {
+        StepVerifier.create(catalogService.getAllProducts(0, 20))
+                .assertNext(result -> {
+                    assert result.total() == 1;
+                    assert result.items().size() == 1;
+                    var r = result.items().get(0);
                     assert r.id().equals(1L);
                     assert r.name().equals("A");
                     assert r.description().equals("Desc");

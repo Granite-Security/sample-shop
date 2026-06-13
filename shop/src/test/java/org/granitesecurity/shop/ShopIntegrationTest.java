@@ -1,6 +1,7 @@
 package org.granitesecurity.shop;
 
 import org.granitesecurity.shop.dto.OrderResponse;
+import org.granitesecurity.shop.dto.PagedResult;
 import org.granitesecurity.shop.dto.ProductResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,16 +45,16 @@ class ShopIntegrationTest extends AbstractTestcontainers {
     }
 
     private ProductResponse fetchFirstProduct() {
-        List<ProductResponse> products = webTestClient
+        PagedResult<ProductResponse> result = webTestClient
                 .get().uri("/api/shop/products")
                 .exchange()
                 .expectStatus().isOk()
-                .expectBodyList(ProductResponse.class)
+                .expectBody(new org.springframework.core.ParameterizedTypeReference<PagedResult<ProductResponse>>() {})
                 .returnResult()
                 .getResponseBody();
 
-        assert products != null && !products.isEmpty() : "Seed products should exist";
-        return products.get(0);
+        assert result != null && !result.items().isEmpty() : "Seed products should exist";
+        return result.items().get(0);
     }
 
     private OrderResponse placeOrder(Long productId, int quantity) {
@@ -101,17 +102,17 @@ class ShopIntegrationTest extends AbstractTestcontainers {
         assert fetched.total().compareTo(BigDecimal.ZERO) > 0 : "Order total should be positive";
         assert !fetched.items().isEmpty() : "Order should have items";
 
-        List<OrderResponse> userOrders = webTestClient
+        PagedResult<OrderResponse> userOrdersPage = webTestClient
                 .mutateWith(mockJwt().jwt(jwt -> jwt.subject("testuser")))
                 .get().uri("/api/shop/orders")
                 .exchange()
                 .expectStatus().isOk()
-                .expectBodyList(OrderResponse.class)
+                .expectBody(new org.springframework.core.ParameterizedTypeReference<PagedResult<OrderResponse>>() {})
                 .returnResult()
                 .getResponseBody();
 
-        assert userOrders != null : "User orders list should not be null";
-        assert userOrders.stream().anyMatch(o -> o.id().equals(orderId)) : "Order should be in user's order list";
+        assert userOrdersPage != null : "User orders list should not be null";
+        assert userOrdersPage.items().stream().anyMatch(o -> o.id().equals(orderId)) : "Order should be in user's order list";
     }
 
     @Test

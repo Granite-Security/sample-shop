@@ -5,6 +5,7 @@ import org.granitesecurity.shop.dto.CreateCategoryRequest;
 import org.granitesecurity.shop.dto.CreateProductRequest;
 import org.granitesecurity.shop.dto.OrderItemResponse;
 import org.granitesecurity.shop.dto.OrderResponse;
+import org.granitesecurity.shop.dto.PagedResult;
 import org.granitesecurity.shop.dto.PlaceOrderRequest;
 import org.granitesecurity.shop.dto.ProductResponse;
 import org.granitesecurity.shop.service.CatalogService;
@@ -15,10 +16,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
@@ -56,16 +57,17 @@ class ShopRouteTest extends AbstractTestcontainers {
 
     @Test
     void productsListShouldBePublic() {
-        when(catalogService.getAllProducts()).thenReturn(Flux.just(
+        var products = new PagedResult<>(List.of(
                 new ProductResponse(1L, "Widget", "desc", BigDecimal.TEN, 5, 1L, null)
-        ));
+        ), 1L, 0, 20);
+        when(catalogService.getAllProducts(0, 20)).thenReturn(Mono.just(products));
 
         webTestClient.get().uri("/api/shop/products")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
-                .jsonPath("$[0].id").isEqualTo(1)
-                .jsonPath("$[0].name").isEqualTo("Widget");
+                .jsonPath("$.items[0].id").isEqualTo(1)
+                .jsonPath("$.items[0].name").isEqualTo("Widget");
     }
 
     @Test
@@ -86,7 +88,7 @@ class ShopRouteTest extends AbstractTestcontainers {
     @Test
     void productByIdShouldReturn404WhenMissing() {
         when(catalogService.getProduct(99L))
-                .thenReturn(Mono.error(new ShopException("Product not found: 99")));
+                .thenReturn(Mono.error(new ShopException("Product not found: 99", HttpStatus.NOT_FOUND, "Not Found")));
 
         webTestClient.get().uri("/api/shop/products/99")
                 .exchange()
@@ -95,16 +97,17 @@ class ShopRouteTest extends AbstractTestcontainers {
 
     @Test
     void categoriesListShouldBePublic() {
-        when(catalogService.getAllCategories()).thenReturn(Flux.just(
+        var categories = new PagedResult<>(List.of(
                 new CategoryResponse(1L, "Electronics", "Devices")
-        ));
+        ), 1L, 0, 20);
+        when(catalogService.getAllCategories(0, 20)).thenReturn(Mono.just(categories));
 
         webTestClient.get().uri("/api/shop/categories")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
-                .jsonPath("$[0].id").isEqualTo(1)
-                .jsonPath("$[0].name").isEqualTo("Electronics");
+                .jsonPath("$.items[0].id").isEqualTo(1)
+                .jsonPath("$.items[0].name").isEqualTo("Electronics");
     }
 
     @Test
@@ -166,9 +169,10 @@ class ShopRouteTest extends AbstractTestcontainers {
 
     @Test
     void listOrdersShouldSucceedWithUserJwt() {
-        when(orderService.getOrdersForUser("testuser")).thenReturn(Flux.just(
+        var orders = new PagedResult<>(List.of(
                 new OrderResponse(1L, "testuser", "PENDING", BigDecimal.TEN, Instant.now(), List.of())
-        ));
+        ), 1L, 0, 20);
+        when(orderService.getOrdersForUser(anyString(), eq(0), eq(20))).thenReturn(Mono.just(orders));
 
         webTestClient
                 .mutateWith(mockJwt().jwt(jwt -> jwt.subject("testuser")))
@@ -176,7 +180,7 @@ class ShopRouteTest extends AbstractTestcontainers {
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
-                .jsonPath("$[0].username").isEqualTo("testuser");
+                .jsonPath("$.items[0].username").isEqualTo("testuser");
     }
 
     @Test
@@ -204,7 +208,7 @@ class ShopRouteTest extends AbstractTestcontainers {
     @Test
     void getOrderByIdShouldReturn404ForForeignUser() {
         when(orderService.getOrder(eq(1L), anyString()))
-                .thenReturn(Mono.error(new ShopException("Order not found: 1")));
+                .thenReturn(Mono.error(new ShopException("Order not found: 1", HttpStatus.NOT_FOUND, "Not Found")));
 
         webTestClient
                 .mutateWith(mockJwt().jwt(jwt -> jwt.subject("otheruser")))

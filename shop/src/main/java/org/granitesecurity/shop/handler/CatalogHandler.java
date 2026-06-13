@@ -7,9 +7,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import org.granitesecurity.shop.dto.CategoryResponse;
 import org.granitesecurity.shop.dto.CreateCategoryRequest;
 import org.granitesecurity.shop.dto.CreateProductRequest;
+import org.granitesecurity.shop.dto.PagedResult;
 import org.granitesecurity.shop.dto.ProductResponse;
 import org.granitesecurity.shop.service.CatalogService;
-import org.granitesecurity.shop.service.ShopException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
@@ -25,9 +25,12 @@ public class CatalogHandler {
     }
 
     @Operation(operationId = "getAllProducts", summary = "List all products", description = "Public catalog listing")
-    @ApiResponses(@ApiResponse(responseCode = "200", description = "List of products"))
+    @ApiResponses(@ApiResponse(responseCode = "200", description = "Paginated list of products"))
     public Mono<ServerResponse> getAllProducts(ServerRequest request) {
-        return ServerResponse.ok().body(catalogService.getAllProducts(), ProductResponse.class);
+        int page = Integer.parseInt(request.queryParam("page").orElse("0"));
+        int size = Integer.parseInt(request.queryParam("size").orElse("20"));
+        return catalogService.getAllProducts(page, size)
+                .flatMap(result -> ServerResponse.ok().bodyValue(result));
     }
 
     @Operation(operationId = "getProduct", summary = "Get a product by ID", description = "Public product detail")
@@ -38,14 +41,16 @@ public class CatalogHandler {
     public Mono<ServerResponse> getProduct(ServerRequest request) {
         Long id = Long.valueOf(request.pathVariable("id"));
         return catalogService.getProduct(id)
-                .flatMap(product -> ServerResponse.ok().bodyValue(product))
-                .onErrorResume(ShopException.class, e -> ServerResponse.notFound().build());
+                .flatMap(product -> ServerResponse.ok().bodyValue(product));
     }
 
     @Operation(operationId = "getAllCategories", summary = "List all categories", description = "Public category listing")
-    @ApiResponses(@ApiResponse(responseCode = "200", description = "List of categories"))
+    @ApiResponses(@ApiResponse(responseCode = "200", description = "Paginated list of categories"))
     public Mono<ServerResponse> getAllCategories(ServerRequest request) {
-        return ServerResponse.ok().body(catalogService.getAllCategories(), CategoryResponse.class);
+        int page = Integer.parseInt(request.queryParam("page").orElse("0"));
+        int size = Integer.parseInt(request.queryParam("size").orElse("20"));
+        return catalogService.getAllCategories(page, size)
+                .flatMap(result -> ServerResponse.ok().bodyValue(result));
     }
 
     @Operation(operationId = "createProduct", summary = "Create a product", description = "Admin only")
@@ -69,8 +74,7 @@ public class CatalogHandler {
         Long id = Long.valueOf(request.pathVariable("id"));
         return request.bodyToMono(CreateProductRequest.class)
                 .flatMap(req -> catalogService.updateProduct(id, req))
-                .flatMap(product -> ServerResponse.ok().bodyValue(product))
-                .onErrorResume(ShopException.class, e -> ServerResponse.notFound().build());
+                .flatMap(product -> ServerResponse.ok().bodyValue(product));
     }
 
     @Operation(operationId = "deleteProduct", summary = "Delete a product", description = "Admin only")
@@ -105,8 +109,7 @@ public class CatalogHandler {
         Long id = Long.valueOf(request.pathVariable("id"));
         return request.bodyToMono(CreateCategoryRequest.class)
                 .flatMap(req -> catalogService.updateCategory(id, req))
-                .flatMap(category -> ServerResponse.ok().bodyValue(category))
-                .onErrorResume(ShopException.class, e -> ServerResponse.notFound().build());
+                .flatMap(category -> ServerResponse.ok().bodyValue(category));
     }
 
     @Operation(operationId = "deleteCategory", summary = "Delete a category", description = "Admin only")

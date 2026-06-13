@@ -5,10 +5,12 @@ import org.granitesecurity.shop.domain.OrderItem;
 import org.granitesecurity.shop.domain.Product;
 import org.granitesecurity.shop.dto.OrderItemResponse;
 import org.granitesecurity.shop.dto.OrderResponse;
+import org.granitesecurity.shop.dto.PagedResult;
 import org.granitesecurity.shop.dto.PlaceOrderRequest;
 import org.granitesecurity.shop.repository.CustomerOrderRepository;
 import org.granitesecurity.shop.repository.OrderItemRepository;
 import org.granitesecurity.shop.repository.ProductRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
@@ -103,17 +105,23 @@ public class OrderService {
                 });
     }
 
-    public Flux<OrderResponse> getOrdersForUser(String username) {
-        return customerOrderRepository.findByUsername(username)
+    public Mono<PagedResult<OrderResponse>> getOrdersForUser(String username, int page, int size) {
+        long offset = (long) page * size;
+        Mono<Long> count = customerOrderRepository.countByUsername(username);
+        Flux<OrderResponse> items = customerOrderRepository.findByUsernamePaged(username, size, offset)
                 .flatMap(this::enrichOrder);
+        return count.zipWith(items.collectList())
+                .map(tuple -> new PagedResult<>(tuple.getT2(), tuple.getT1(), page, size));
     }
 
     public Mono<OrderResponse> getOrder(Long id, String username) {
         return customerOrderRepository.findById(id)
-                .switchIfEmpty(Mono.error(new ShopException("Order not found: " + id)))
+                .switchIfEmpty(Mono.error(
+                        new ShopException("Order not found: " + id, HttpStatus.NOT_FOUND, "Not Found")))
                 .flatMap(order -> {
                     if (!order.getUsername().equals(username)) {
-                        return Mono.error(new ShopException("Order not found: " + id));
+                        return Mono.error(
+                                new ShopException("Order not found: " + id, HttpStatus.NOT_FOUND, "Not Found"));
                     }
                     return enrichOrder(order);
                 });

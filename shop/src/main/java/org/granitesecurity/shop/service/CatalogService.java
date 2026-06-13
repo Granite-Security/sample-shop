@@ -5,9 +5,11 @@ import org.granitesecurity.shop.domain.Product;
 import org.granitesecurity.shop.dto.CategoryResponse;
 import org.granitesecurity.shop.dto.CreateCategoryRequest;
 import org.granitesecurity.shop.dto.CreateProductRequest;
+import org.granitesecurity.shop.dto.PagedResult;
 import org.granitesecurity.shop.dto.ProductResponse;
 import org.granitesecurity.shop.repository.CategoryRepository;
 import org.granitesecurity.shop.repository.ProductRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -23,14 +25,20 @@ public class CatalogService {
         this.productRepository = productRepository;
     }
 
-    public Flux<CategoryResponse> getAllCategories() {
-        return categoryRepository.findAll().map(this::toCategoryResponse);
+    public Mono<PagedResult<CategoryResponse>> getAllCategories(int page, int size) {
+        long offset = (long) page * size;
+        Mono<Long> count = categoryRepository.count();
+        Flux<CategoryResponse> items = categoryRepository.findAllPaged(size, offset)
+                .map(this::toCategoryResponse);
+        return count.zipWith(items.collectList())
+                .map(tuple -> new PagedResult<>(tuple.getT2(), tuple.getT1(), page, size));
     }
 
     public Mono<CategoryResponse> getCategory(Long id) {
         return categoryRepository.findById(id)
                 .map(this::toCategoryResponse)
-                .switchIfEmpty(Mono.error(new ShopException("Category not found: " + id)));
+                .switchIfEmpty(Mono.error(
+                        new ShopException("Category not found: " + id, HttpStatus.NOT_FOUND, "Not Found")));
     }
 
     public Mono<CategoryResponse> createCategory(CreateCategoryRequest request) {
@@ -40,7 +48,8 @@ public class CatalogService {
 
     public Mono<CategoryResponse> updateCategory(Long id, CreateCategoryRequest request) {
         return categoryRepository.findById(id)
-                .switchIfEmpty(Mono.error(new ShopException("Category not found: " + id)))
+                .switchIfEmpty(Mono.error(
+                        new ShopException("Category not found: " + id, HttpStatus.NOT_FOUND, "Not Found")))
                 .flatMap(existing -> {
                     existing.setName(request.name());
                     existing.setDescription(request.description());
@@ -53,8 +62,13 @@ public class CatalogService {
         return categoryRepository.deleteById(id);
     }
 
-    public Flux<ProductResponse> getAllProducts() {
-        return productRepository.findAll().map(this::toProductResponse);
+    public Mono<PagedResult<ProductResponse>> getAllProducts(int page, int size) {
+        long offset = (long) page * size;
+        Mono<Long> count = productRepository.count();
+        Flux<ProductResponse> items = productRepository.findAllPaged(size, offset)
+                .map(this::toProductResponse);
+        return count.zipWith(items.collectList())
+                .map(tuple -> new PagedResult<>(tuple.getT2(), tuple.getT1(), page, size));
     }
 
     public Flux<ProductResponse> getProductsByCategory(Long categoryId) {
@@ -64,7 +78,8 @@ public class CatalogService {
     public Mono<ProductResponse> getProduct(Long id) {
         return productRepository.findById(id)
                 .map(this::toProductResponse)
-                .switchIfEmpty(Mono.error(new ShopException("Product not found: " + id)));
+                .switchIfEmpty(Mono.error(
+                        new ShopException("Product not found: " + id, HttpStatus.NOT_FOUND, "Not Found")));
     }
 
     public Mono<ProductResponse> createProduct(CreateProductRequest request) {
@@ -76,7 +91,8 @@ public class CatalogService {
 
     public Mono<ProductResponse> updateProduct(Long id, CreateProductRequest request) {
         return productRepository.findById(id)
-                .switchIfEmpty(Mono.error(new ShopException("Product not found: " + id)))
+                .switchIfEmpty(Mono.error(
+                        new ShopException("Product not found: " + id, HttpStatus.NOT_FOUND, "Not Found")))
                 .flatMap(existing -> {
                     existing.setName(request.name());
                     existing.setDescription(request.description());
