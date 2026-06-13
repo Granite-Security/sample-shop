@@ -100,11 +100,6 @@ a handful of full integration tests.
   retrievable and owner-scoped.
 - **Done when:** Green run proves migrations + wiring + persistence cohere.
 
-### Step 1.6 — Wire tests into the build / CI
-- **Goal:** Tests run automatically.
-- **Do:** Ensure `./gradlew test` runs the suite; document Docker requirement for
-  Testcontainers. (Optionally add a GitHub Actions / CI workflow later.)
-- **Done when:** `./gradlew :shop:test` is green locally from a clean checkout.
 
 ---
 
