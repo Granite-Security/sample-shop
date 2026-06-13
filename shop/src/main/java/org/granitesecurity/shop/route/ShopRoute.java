@@ -17,8 +17,7 @@ public class ShopRoute {
             CatalogHandler catalogHandler,
             OrderHandler orderHandler) {
         return RouterFunctions.route()
-                .GET("/api/greetings", greetingsHandler::respondWithGreeting)
-                .GET("/api/shop", request -> ServerResponse.ok().bodyValue("Welcome to the shop!"))
+                .GET("/api/shop/greetings", greetingsHandler::respondWithGreeting)
 
                 // Catalog — public read
                 .GET("/api/shop/products", catalogHandler::getAllProducts)

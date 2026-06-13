@@ -26,7 +26,8 @@ public class ShopSec {
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .authorizeExchange(exchange -> exchange
                         .pathMatchers(HttpMethod.GET, "/api/shop/products",
-                                "/api/shop/products/**", "/api/shop/categories").permitAll()
+                                "/api/shop/products/**", "/api/shop/categories",
+                                "/api/shop/greetings/**").permitAll()
                         .pathMatchers(HttpMethod.GET, "/api/shop/orders",
                                 "/api/shop/orders/**").authenticated()
                         .pathMatchers(HttpMethod.POST, "/api/shop/orders").authenticated()
@@ -36,7 +37,6 @@ public class ShopSec {
                                 "/api/shop/categories/**").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.DELETE, "/api/shop/products/**",
                                 "/api/shop/categories/**").hasRole("ADMIN")
-                        .pathMatchers("/api/greetings/**").permitAll()
                         .anyExchange().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
