@@ -19,6 +19,8 @@ public class GateSec {
                         .pathMatchers("/api/greetings/**").permitAll()
                         .pathMatchers("/api/shop/products/**").permitAll()
                         .pathMatchers("/api/shop/categories").permitAll()
+                        .pathMatchers("/v3/api-docs/**", "/swagger-ui/**",
+                                "/swagger-ui.html", "/webjars/swagger-ui/**").permitAll()
                         .anyExchange().authenticated()
                 )
                 .oauth2Login(Customizer.withDefaults())

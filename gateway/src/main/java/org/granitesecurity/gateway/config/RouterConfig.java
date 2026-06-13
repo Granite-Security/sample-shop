@@ -30,6 +30,10 @@ public class RouterConfig {
                         .path("/api/shop/**")
                         .filters(f -> f.filter(tokenRelay.apply()))
                         .uri(shopServiceUri))
+                .route("shop-openapi", r -> r
+                        .path("/v3/api-docs/**", "/swagger-ui/**",
+                                "/swagger-ui.html", "/webjars/swagger-ui/**")
+                        .uri(shopServiceUri))
                 .build();
     }
 }

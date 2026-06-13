@@ -22,3 +22,6 @@ spring:
           issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:${AUTH_ISSUER_URI:http://localhost:9090}}
   codec:
     max-in-memory-size: 10MB
+
+springdoc:
+  paths-to-match: /api/shop/**,/api/greetings/**

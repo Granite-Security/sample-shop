@@ -28,6 +28,8 @@ public class ShopSec {
                         .pathMatchers(HttpMethod.GET, "/api/shop/products",
                                 "/api/shop/products/**", "/api/shop/categories",
                                 "/api/shop/greetings/**").permitAll()
+                        .pathMatchers("/v3/api-docs/**", "/swagger-ui/**",
+                                "/swagger-ui.html", "/webjars/swagger-ui/**").permitAll()
                         .pathMatchers(HttpMethod.GET, "/api/shop/orders",
                                 "/api/shop/orders/**").authenticated()
                         .pathMatchers(HttpMethod.POST, "/api/shop/orders").authenticated()

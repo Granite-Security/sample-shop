@@ -1,6 +1,13 @@
 package org.granitesecurity.shop.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 
-public record OrderItemResponse(Long id, Long productId, Integer quantity, BigDecimal unitPrice) {
+@Schema(description = "Item within an order")
+public record OrderItemResponse(
+        @Schema(description = "Order item ID", example = "1") Long id,
+        @Schema(description = "Product ID", example = "1") Long productId,
+        @Schema(description = "Quantity ordered", example = "2") Integer quantity,
+        @Schema(description = "Price per unit at time of order", example = "79.99") BigDecimal unitPrice
+) {
 }

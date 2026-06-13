@@ -1,5 +1,10 @@
 package org.granitesecurity.shop.handler;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.granitesecurity.shop.dto.OrderResponse;
 import org.granitesecurity.shop.dto.PlaceOrderRequest;
 import org.granitesecurity.shop.service.OrderService;
@@ -20,6 +25,13 @@ public class OrderHandler {
         this.orderService = orderService;
     }
 
+    @Operation(operationId = "placeOrder", summary = "Place an order", description = "Authenticated users place orders. Stock is decremented.")
+    @SecurityRequirement(name = "bearer-jwt")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Order placed successfully"),
+            @ApiResponse(responseCode = "400", description = "Validation error — insufficient stock or invalid items", content = @Content()),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content())
+    })
     public Mono<ServerResponse> placeOrder(ServerRequest request) {
         return request.bodyToMono(PlaceOrderRequest.class)
                 .zipWith(getUsername(request))
@@ -29,6 +41,12 @@ public class OrderHandler {
                         e -> ServerResponse.badRequest().bodyValue(e.getMessage()));
     }
 
+    @Operation(operationId = "getOrders", summary = "List current user's orders", description = "Returns orders for the authenticated user only")
+    @SecurityRequirement(name = "bearer-jwt")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "List of orders"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content())
+    })
     public Mono<ServerResponse> getOrders(ServerRequest request) {
         return getUsername(request)
                 .flatMapMany(orderService::getOrdersForUser)
@@ -36,6 +54,13 @@ public class OrderHandler {
                 .flatMap(orders -> ServerResponse.ok().bodyValue(orders));
     }
 
+    @Operation(operationId = "getOrder", summary = "Get an order by ID", description = "Returns the order only if it belongs to the authenticated user")
+    @SecurityRequirement(name = "bearer-jwt")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Order found"),
+            @ApiResponse(responseCode = "404", description = "Order not found or not owned by user", content = @Content()),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content())
+    })
     public Mono<ServerResponse> getOrder(ServerRequest request) {
         Long id = Long.valueOf(request.pathVariable("id"));
         return getUsername(request)
