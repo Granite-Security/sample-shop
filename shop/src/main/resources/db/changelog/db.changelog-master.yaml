@@ -5,3 +5,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/002-seed-products.sql
       relativeToChangelogFile: false
+  - include:
+      file: db/changelog/003-add-outbox.sql
+      relativeToChangelogFile: false

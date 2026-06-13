@@ -171,7 +171,7 @@ dual-write hazards, and reflect lifecycle in an explicit status machine.
 ### Step 4.1 — Order status state machine
 - **Goal:** Model the order lifecycle.
 - **Do:** Define states `PENDING → PAID → SHIPPED → DELIVERED`, plus
-  `PAYMENT_FAILED`, `CANCELLED`. Encode allowed transitions; reject invalid ones.
+  `PAYMENT_FAILED`, `CANCELLED`, as well as order `RETURNED` → `REINBURSED` . Encode allowed transitions; reject invalid ones.
 - **Done when:** Status transitions are centralized and unit-tested.
 
 ### Step 4.2 — Outbox table + write-on-commit

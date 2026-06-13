@@ -2,11 +2,12 @@ package org.granitesecurity.shop.service;
 
 import org.granitesecurity.shop.domain.CustomerOrder;
 import org.granitesecurity.shop.domain.OrderItem;
+import org.granitesecurity.shop.domain.OutboxEvent;
 import org.granitesecurity.shop.domain.Product;
-import org.granitesecurity.shop.dto.OrderResponse;
 import org.granitesecurity.shop.dto.PlaceOrderRequest;
 import org.granitesecurity.shop.repository.CustomerOrderRepository;
 import org.granitesecurity.shop.repository.OrderItemRepository;
+import org.granitesecurity.shop.repository.OutboxRepository;
 import org.granitesecurity.shop.repository.ProductRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,7 +23,6 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -36,6 +36,9 @@ class OrderServiceTest {
 
     @Mock
     private ProductRepository productRepository;
+
+    @Mock
+    private OutboxRepository outboxRepository;
 
     @InjectMocks
     private OrderService orderService;
@@ -64,6 +67,8 @@ class OrderServiceTest {
 
         when(productRepository.save(any(Product.class))).thenReturn(Mono.just(product1), Mono.just(product2));
 
+        when(outboxRepository.save(any(OutboxEvent.class))).thenReturn(Mono.just(new OutboxEvent()));
+
         PlaceOrderRequest request = new PlaceOrderRequest(List.of(
                 new PlaceOrderRequest.LineItem(1L, 2),
                 new PlaceOrderRequest.LineItem(2L, 3)
@@ -82,6 +87,7 @@ class OrderServiceTest {
         verify(productRepository, times(2)).save(any(Product.class));
         verify(customerOrderRepository).save(any(CustomerOrder.class));
         verify(orderItemRepository).saveAll(any(List.class));
+        verify(outboxRepository).save(any(OutboxEvent.class));
     }
 
     @Test

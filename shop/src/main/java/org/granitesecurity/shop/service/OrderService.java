@@ -1,7 +1,11 @@
 package org.granitesecurity.shop.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.granitesecurity.shop.domain.CustomerOrder;
 import org.granitesecurity.shop.domain.OrderItem;
+import org.granitesecurity.shop.domain.OrderStatus;
+import org.granitesecurity.shop.domain.OutboxEvent;
 import org.granitesecurity.shop.domain.Product;
 import org.granitesecurity.shop.dto.OrderItemResponse;
 import org.granitesecurity.shop.dto.OrderResponse;
@@ -9,6 +13,7 @@ import org.granitesecurity.shop.dto.PagedResult;
 import org.granitesecurity.shop.dto.PlaceOrderRequest;
 import org.granitesecurity.shop.repository.CustomerOrderRepository;
 import org.granitesecurity.shop.repository.OrderItemRepository;
+import org.granitesecurity.shop.repository.OutboxRepository;
 import org.granitesecurity.shop.repository.ProductRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -17,25 +22,31 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Service
 public class OrderService {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
     private final CustomerOrderRepository customerOrderRepository;
     private final OrderItemRepository orderItemRepository;
     private final ProductRepository productRepository;
+    private final OutboxRepository outboxRepository;
 
     public OrderService(CustomerOrderRepository customerOrderRepository,
                         OrderItemRepository orderItemRepository,
-                        ProductRepository productRepository) {
+                        ProductRepository productRepository,
+                        OutboxRepository outboxRepository) {
         this.customerOrderRepository = customerOrderRepository;
         this.orderItemRepository = orderItemRepository;
         this.productRepository = productRepository;
+        this.outboxRepository = outboxRepository;
     }
 
     @Transactional
@@ -76,7 +87,7 @@ public class OrderService {
             items.add(new OrderItem(null, line.productId(), line.quantity(), product.getPrice()));
         }
 
-        CustomerOrder order = new CustomerOrder(username, "PENDING", total);
+        CustomerOrder order = new CustomerOrder(username, OrderStatus.PENDING.name(), total);
         return Mono.just(new OrderContext(order, items, productMap));
     }
 
@@ -101,8 +112,39 @@ public class OrderService {
 
                     return orderItemRepository.saveAll(itemsWithOrderId).collectList()
                             .flatMap(savedItems -> Mono.when(stockUpdates).thenReturn(savedOrder))
+                            .flatMap(order -> {
+                                OutboxEvent outbox = createOutboxEvent(order, itemsWithOrderId);
+                                return outboxRepository.save(outbox).thenReturn(order);
+                            })
                             .flatMap(order -> buildOrderResponse(order, itemsWithOrderId));
                 });
+    }
+
+    private OutboxEvent createOutboxEvent(CustomerOrder order, List<OrderItem> items) {
+        try {
+            String payload = OBJECT_MAPPER.writeValueAsString(buildPayload(order, items));
+            return new OutboxEvent("order", String.valueOf(order.getId()), "OrderPlaced", payload, "PENDING");
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to serialize outbox payload", e);
+        }
+    }
+
+    private Map<String, Object> buildPayload(CustomerOrder order, List<OrderItem> items) {
+        List<Map<String, Object>> itemList = items.stream().map(item -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("productId", item.getProductId());
+            m.put("quantity", item.getQuantity());
+            m.put("unitPrice", item.getUnitPrice());
+            return m;
+        }).toList();
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("orderId", order.getId());
+        payload.put("customerId", order.getUsername());
+        payload.put("items", itemList);
+        payload.put("total", order.getTotal());
+        payload.put("orderedAt", Instant.now().toString());
+        return payload;
     }
 
     public Mono<PagedResult<OrderResponse>> getOrdersForUser(String username, int page, int size) {

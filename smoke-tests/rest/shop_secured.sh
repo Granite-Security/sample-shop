@@ -18,9 +18,9 @@ curl -c "$COOKIE_JAR" -b "$COOKIE_JAR" -s -D /tmp/shop_login_headers.txt \
   -d "username=user&password=password&_csrf=$CSRF" -o /dev/null
 
 LOCATION=$(grep -i "^Location" /tmp/shop_login_headers.txt | awk '{print $2}' | tr -d '\r\n')
-HTML=$(curl -c "$COOKIE_JAR" -b "$COOKIE_JAR" -s -D /tmp/shop_auth_headers.txt "$LOCATION" -o /tmp/shop_auth_body.txt)
+curl -c "$COOKIE_JAR" -b "$COOKIE_JAR" -s -D /tmp/shop_auth_headers.txt "$LOCATION" -o /tmp/shop_auth_body.txt
 
-if echo "$HTML" | grep -q "Consent required"; then
+if grep -q "Consent required" /tmp/shop_auth_body.txt; then
   STATE=$(echo "$HTML" | grep -o 'name="state" value="[^"]*"' | awk -F 'value="' '{print $2}' | awk -F '"' '{print $1}')
   curl -c "$COOKIE_JAR" -b "$COOKIE_JAR" -s -D /tmp/shop_consent_headers.txt \
     -X POST http://localhost:9090/oauth2/authorize \
@@ -43,9 +43,10 @@ PRODUCTS=$(curl -b "$COOKIE_JAR" -s http://localhost:8080/api/shop/products)
 FIRST_ID=$(echo "$PRODUCTS" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
-if data:
-    print(data[0]['id'])
-    print(data[0]['name'])
+items = data.get('items', [])
+if items:
+    print(items[0]['id'])
+    print(items[0]['name'])
 ")
 PRODUCT_ID=$(echo "$FIRST_ID" | head -1)
 PRODUCT_NAME=$(echo "$FIRST_ID" | tail -1)

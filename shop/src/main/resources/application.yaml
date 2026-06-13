@@ -23,5 +23,18 @@ spring:
   codec:
     max-in-memory-size: 10MB
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+
 springdoc:
   paths-to-match: /api/shop/**,/api/greetings/**
+
+app:
+  outbox:
+    poll-interval: 5000
