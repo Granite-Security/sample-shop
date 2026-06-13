@@ -169,6 +169,19 @@ public class OrderService {
                 });
     }
 
+    public Mono<Void> updateOrderStatus(Long orderId, OrderStatus targetStatus) {
+        return customerOrderRepository.findById(orderId)
+                .flatMap(order -> {
+                    OrderStatus current = OrderStatus.valueOf(order.getStatus());
+                    if (!current.canTransitionTo(targetStatus)) {
+                        return Mono.empty();
+                    }
+                    order.setStatus(targetStatus.name());
+                    order.setUpdatedAt(Instant.now());
+                    return customerOrderRepository.save(order).then();
+                });
+    }
+
     private Mono<OrderResponse> enrichOrder(CustomerOrder order) {
         return orderItemRepository.findByOrderId(order.getId())
                 .map(item -> new OrderItemResponse(
