@@ -21,7 +21,7 @@ LOCATION=$(grep -i "^Location" /tmp/shop_login_headers.txt | awk '{print $2}' | 
 curl -c "$COOKIE_JAR" -b "$COOKIE_JAR" -s -D /tmp/shop_auth_headers.txt "$LOCATION" -o /tmp/shop_auth_body.txt
 
 if grep -q "Consent required" /tmp/shop_auth_body.txt; then
-  STATE=$(echo "$HTML" | grep -o 'name="state" value="[^"]*"' | awk -F 'value="' '{print $2}' | awk -F '"' '{print $1}')
+  STATE=$(grep -o 'name="state" value="[^"]*"' /tmp/shop_auth_body.txt | awk -F 'value="' '{print $2}' | awk -F '"' '{print $1}')
   curl -c "$COOKIE_JAR" -b "$COOKIE_JAR" -s -D /tmp/shop_consent_headers.txt \
     -X POST http://localhost:9090/oauth2/authorize \
     -d "scope=openid&scope=profile&scope=email&client_id=oidc-client&state=$STATE" \

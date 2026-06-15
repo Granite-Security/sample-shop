@@ -1,0 +1,7 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/001-create-payment-table.sql
+      relativeToChangelogFile: false
+  - include:
+      file: db/changelog/002-add-outbox.sql
+      relativeToChangelogFile: false
