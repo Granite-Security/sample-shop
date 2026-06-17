@@ -2,9 +2,12 @@ const BASE = 'http://localhost:8080';
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
+
+  if (options.body) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   const res = await fetch(`${BASE}${path}`, {
     ...options,
@@ -19,12 +22,20 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new Error('Unauthorized');
   }
 
-  const data = await res.json();
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Expected JSON, got ${res.status}: ${text.slice(0, 200)}`);
+  }
   if (!res.ok) {
-    const msg = data.detail ?? data.title ?? res.statusText;
+    const msg = (data as Record<string, unknown>).detail as string
+      ?? (data as Record<string, unknown>).title as string
+      ?? res.statusText;
     throw new Error(msg);
   }
-  return data;
+  return data as T;
 }
 
 import type {

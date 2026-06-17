@@ -30,6 +30,10 @@ public class RouterConfig {
                         .path("/api/secured/**")
                         .filters(f->f.filter(tokenRelay.apply()))
                         .uri(greetingsServiceUri))
+                .route("shop-public", r -> r
+                        .path("/api/shop/products/**",
+                                "/api/shop/categories", "/api/shop/categories/**")
+                        .uri(shopServiceUri))
                 .route("shop-service", r -> r
                         .path("/api/shop/**")
                         .filters(f -> f.filter(tokenRelay.apply()))
@@ -38,6 +42,9 @@ public class RouterConfig {
                         .path("/v3/api-docs/**", "/swagger-ui/**",
                                 "/swagger-ui.html", "/webjars/swagger-ui/**")
                         .uri(shopServiceUri))
+                .route("spa", r -> r
+                        .path("/**")
+                        .uri("http://localhost:5173"))
                 .build();
     }
 
