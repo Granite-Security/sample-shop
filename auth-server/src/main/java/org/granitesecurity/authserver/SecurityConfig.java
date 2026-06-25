@@ -159,6 +159,7 @@ public class SecurityConfig {
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .redirectUri(gatewayClientRedirectUri)
+//                .redirectUri("http://localhost:5173/login/oauth2/code/oidc-client")
                 .redirectUri("https://oauth.pstmn.io/v1/callback")  // add this
                 .postLogoutRedirectUri(gatewayClientPostLogoutRedirectUri)
                 .scope(OidcScopes.OPENID)
