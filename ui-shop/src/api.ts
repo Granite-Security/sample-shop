@@ -1,4 +1,4 @@
-const BASE = 'http://localhost:8080';
+const BASE = '';
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
