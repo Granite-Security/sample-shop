@@ -48,7 +48,7 @@ public class RouterConfig {
     }
 
     @Bean
-    RouterFunction<ServerResponse> routes(UserHandler handler) {
+    RouterFunction<ServerResponse> frontendRoutes(UserHandler handler) {
         return RouterFunctions.route()
                 .GET("/api/user/me", handler::me)
                 .GET("/assets/**", request -> ServerResponse.ok()
