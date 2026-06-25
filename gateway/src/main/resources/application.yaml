@@ -35,5 +35,3 @@ microservices:
     uri: ${GREETINGS_MICROSERVICE:http://localhost:8060}
   shop:
     uri: ${SHOP_MICROSERVICE:http://localhost:8061}
-  ui:
-    uri: ${UI_MICROSERVICE:http://localhost:5173}
