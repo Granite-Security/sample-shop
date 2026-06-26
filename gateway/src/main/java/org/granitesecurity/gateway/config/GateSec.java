@@ -33,9 +33,10 @@ public class GateSec {
                         .pathMatchers("/").permitAll()
                         .anyExchange().authenticated()
                 )
-                .oauth2Login(oauth2 -> oauth2
-                        .authenticationSuccessHandler(spaRedirectHandler())
-                )
+                .oauth2Login(Customizer.withDefaults())
+//                .oauth2Login(oauth2 -> oauth2
+//                        .authenticationSuccessHandler(spaRedirectHandler())
+//                )
                 .oauth2Client(Customizer.withDefaults())
                 .build();
     }
