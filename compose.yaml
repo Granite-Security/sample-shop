@@ -101,7 +101,7 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/authdb
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=postgres
-      - AUTH_SERVER_ISSUER=http://auth-server:9090
+      - AUTH_SERVER_ISSUER=http://gateway:8080/auth
       - OIDC_CLIENT_SECRET_ENCODED={noop}iaka
       - OIDC_CLIENT_REDIRECT_URI=http://localhost:8080/login/oauth2/code/oidc-client
       - OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI=http://gateway:8080/
@@ -109,7 +109,7 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - SERVER_PORT=9090
     healthcheck:
-      test: ["CMD", "wget", "--spider", "http://localhost:9090/login"]
+      test: ["CMD", "wget", "--spider", "http://localhost:9090/auth/login"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -126,12 +126,12 @@ services:
       - "8080:8080"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - OIDC_ISSUER_URI=http://auth-server:9090
-      - OIDC_AUTHORIZATION_URI=http://localhost:9090/oauth2/authorize
+      - OIDC_ISSUER_URI=http://gateway:8080/auth
       - OIDC_CLIENT_SECRET=iaka
       - MICROSERVICES_GREETINGS_URI=http://greetings:8060
       - GREETINGS_MICROSERVICE=http://greetings:8060
       - SHOP_MICROSERVICE=http://shop:8061
+      - AUTH_SERVER_MICROSERVICE=http://auth-server:9090
     depends_on:
       auth-server:
         condition: service_healthy
@@ -144,10 +144,11 @@ services:
       - "8060:8060"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - AUTH_ISSUER_URI=http://auth-server:9090
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://auth-server:9090
+      - AUTH_ISSUER_URI=http://gateway:8080/auth
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
     depends_on:
-      - auth-server
+      gateway:
+        condition: service_started
 
   shop:
     build:
@@ -163,11 +164,11 @@ services:
       - SHOP_JDBC_URL=jdbc:postgresql://shop-postgres:5432/shopdb
       - SHOP_JDBC_USERNAME=myuser
       - SHOP_JDBC_PASSWORD=secret
-      - AUTH_ISSUER_URI=http://auth-server:9090
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://auth-server:9090
+      - AUTH_ISSUER_URI=http://gateway:8080/auth
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
     depends_on:
-      auth-server:
+      gateway:
         condition: service_started
       shop-postgres:
         condition: service_started
@@ -192,11 +193,11 @@ services:
       - PAYMENT_JDBC_URL=jdbc:postgresql://payment-postgres:5432/paymentdb
       - PAYMENT_JDBC_USERNAME=myuser
       - PAYMENT_JDBC_PASSWORD=secret
-      - AUTH_ISSUER_URI=http://auth-server:9090
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://auth-server:9090
+      - AUTH_ISSUER_URI=http://gateway:8080/auth
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
     depends_on:
-      auth-server:
+      gateway:
         condition: service_started
       payment-postgres:
         condition: service_started

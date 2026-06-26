@@ -1,5 +1,8 @@
 server:
   port: 9090
+  servlet:
+    context-path: /auth
+  forward-headers-strategy: framework
 
 logging:
   level:
@@ -21,7 +24,7 @@ spring:
   security:
     oauth2:
       authorizationserver:
-        issuer: ${AUTH_SERVER_ISSUER:http://localhost:9090}
+        issuer: ${AUTH_SERVER_ISSUER:http://localhost:8080/auth}
 
 app:
   oauth2:

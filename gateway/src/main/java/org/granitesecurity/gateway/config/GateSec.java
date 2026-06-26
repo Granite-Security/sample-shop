@@ -30,6 +30,7 @@ public class GateSec {
                         .pathMatchers("/v3/api-docs/**", "/swagger-ui/**",
                                 "/swagger-ui.html", "/webjars/swagger-ui/**").permitAll()
                         .pathMatchers("/api/user/me").permitAll()
+                        .pathMatchers("/auth/**").permitAll()
                         .pathMatchers("/").permitAll()
                         .anyExchange().authenticated()
                 )

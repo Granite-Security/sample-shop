@@ -21,10 +21,10 @@ spring:
       client:
         provider:
           oidc-client:
-            authorization-uri: ${OIDC_AUTHORIZATION_URI:${OIDC_ISSUER_URI:http://localhost:9090}/oauth2/authorize}
-            token-uri: ${OIDC_TOKEN_URI:${OIDC_ISSUER_URI:http://localhost:9090}/oauth2/token}
-            jwk-set-uri: ${OIDC_JWK_SET_URI:${OIDC_ISSUER_URI:http://localhost:9090}/oauth2/jwks}
-            user-info-uri: ${OIDC_USER_INFO_URI:${OIDC_ISSUER_URI:http://localhost:9090}/userinfo}
+            authorization-uri: ${OIDC_AUTHORIZATION_URI:${OIDC_ISSUER_URI:http://localhost:8080/auth}/oauth2/authorize}
+            token-uri: ${OIDC_TOKEN_URI:${OIDC_ISSUER_URI:http://localhost:8080/auth}/oauth2/token}
+            jwk-set-uri: ${OIDC_JWK_SET_URI:${OIDC_ISSUER_URI:http://localhost:8080/auth}/oauth2/jwks}
+            user-info-uri: ${OIDC_USER_INFO_URI:${OIDC_ISSUER_URI:http://localhost:8080/auth}/userinfo}
             user-name-attribute: sub
         registration:
           oidc-client:
@@ -46,3 +46,5 @@ microservices:
     uri: ${GREETINGS_MICROSERVICE:http://localhost:8060}
   shop:
     uri: ${SHOP_MICROSERVICE:http://localhost:8061}
+  auth-server:
+    uri: ${AUTH_SERVER_MICROSERVICE:http://localhost:9090}

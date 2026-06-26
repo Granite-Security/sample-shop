@@ -20,6 +20,9 @@ public class RouterConfig {
     @Value("${microservices.shop.uri}")
     private String shopServiceUri;
 
+    @Value("${microservices.auth-server.uri:http://localhost:9090}")
+    private String authServerUri;
+
     @Bean
     RouteLocator gatewayRouter(RouteLocatorBuilder builder, TokenRelayGatewayFilterFactory tokenRelay) {
         return builder.routes()
@@ -38,6 +41,9 @@ public class RouterConfig {
                         .path("/v3/api-docs/**", "/swagger-ui/**",
                                 "/swagger-ui.html", "/webjars/swagger-ui/**")
                         .uri(shopServiceUri))
+                .route("auth-server", r -> r
+                        .path("/auth/**")
+                        .uri(authServerUri))
                 .build();
     }
 
