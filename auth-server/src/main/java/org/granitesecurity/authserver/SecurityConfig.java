@@ -67,6 +67,9 @@ public class SecurityConfig {
     @Value("${app.oauth2.spa-client.redirect-uri:http://localhost:5173/callback}")
     private String spaClientRedirectUri;
 
+    @Value("${app.oauth2.external-client.secret:{noop}my-secret}")
+    private String externalClientSecret;
+
     @Value("${GOOGLE_CLIENT_ID:google-client-id}")
     private String googleClientId;
 
@@ -186,7 +189,15 @@ public class SecurityConfig {
                         .build())
                 .build();
 
-        return new InMemoryRegisteredClientRepository(oidcClient, spaClient);
+        RegisteredClient externalClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId("external-service")
+                .clientSecret(externalClientSecret)
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .scope(OidcScopes.OPENID)
+                .build();
+
+        return new InMemoryRegisteredClientRepository(oidcClient, spaClient, externalClient);
     }
 
     @Bean

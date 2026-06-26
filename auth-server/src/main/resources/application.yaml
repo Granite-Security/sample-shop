@@ -34,3 +34,5 @@ app:
       post-logout-redirect-uri: ${OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI:http://localhost:8080/}
     spa-client:
       redirect-uri: ${SPA_CLIENT_REDIRECT_URI:http://localhost:5173/callback}
+    external-client:
+      secret: ${EXTERNAL_CLIENT_SECRET:{noop}my-secret}
