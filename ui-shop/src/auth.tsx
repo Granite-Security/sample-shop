@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
-import { api } from './api';
+import { userManager } from './oauth';
+import { setAccessToken } from './api';
+import type { User as OidcUser } from 'oidc-client-ts';
 
 interface User {
   name: string;
@@ -20,21 +22,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    api.me()
-      .then(data => {
-        if (data.authenticated && data.name) {
-          setUser({ name: data.name!, claims: data.claims ?? {} });
-        } else {
-          setUser(null);
-        }
-      })
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
+  const updateUser = useCallback((oidcUser: OidcUser | null) => {
+    if (oidcUser && !oidcUser.expired) {
+      const claims = oidcUser.profile as Record<string, unknown>;
+      const name = (claims.preferred_username as string) ?? (claims.sub as string);
+      setUser({ name, claims });
+      setAccessToken(oidcUser.access_token);
+    } else {
+      setUser(null);
+      setAccessToken(null);
+    }
   }, []);
 
+  useEffect(() => {
+    userManager.getUser().then(updateUser).finally(() => setLoading(false));
+
+    const handleUserLoaded = (oidcUser: OidcUser) => updateUser(oidcUser);
+    const handleUserUnloaded = () => updateUser(null);
+
+    userManager.events.addUserLoaded(handleUserLoaded);
+    userManager.events.addUserUnloaded(handleUserUnloaded);
+
+    return () => {
+      userManager.events.removeUserLoaded(handleUserLoaded);
+      userManager.events.removeUserUnloaded(handleUserUnloaded);
+    };
+  }, [updateUser]);
+
   const logout = useCallback(() => {
-    window.location.href = '/auth/logout';
+    userManager.signoutRedirect({ post_logout_redirect_uri: window.location.origin });
   }, []);
 
   const isAuthenticated = user !== null;

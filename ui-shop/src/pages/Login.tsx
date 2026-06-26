@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useAuth } from '../auth';
 import { useNavigate } from 'react-router';
+import { userManager } from '../oauth';
 
 export default function Login() {
   const { isAuthenticated, loading } = useAuth();
@@ -11,7 +12,7 @@ export default function Login() {
     if (isAuthenticated) {
       navigate('/', { replace: true });
     } else {
-      window.location.href = '/oauth2/authorization/oidc-client';
+      userManager.signinRedirect();
     }
   }, [isAuthenticated, loading, navigate]);
 

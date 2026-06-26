@@ -1,15 +1,16 @@
 package org.granitesecurity.gateway.config;
 
-import org.granitesecurity.gateway.handler.UserHandler;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cloud.gateway.filter.factory.TokenRelayGatewayFilterFactory;
 import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerResponse;
+
+import java.net.URI;
 
 @Configuration
 public class RouterConfig {
@@ -23,19 +24,20 @@ public class RouterConfig {
     @Value("${microservices.auth-server.uri:http://localhost:9090}")
     private String authServerUri;
 
+    @Value("${app.spa-origin:http://localhost:5173}")
+    private String spaOrigin;
+
     @Bean
-    RouteLocator gatewayRouter(RouteLocatorBuilder builder, TokenRelayGatewayFilterFactory tokenRelay) {
+    RouteLocator gatewayRouter(RouteLocatorBuilder builder) {
         return builder.routes()
                 .route("greetings-service", r -> r
                         .path("/api/greetings/**")
                         .uri(greetingsServiceUri))
                 .route("greetings-secured", r -> r
                         .path("/api/secured/**")
-                        .filters(f->f.filter(tokenRelay.apply()))
                         .uri(greetingsServiceUri))
                 .route("shop-service", r -> r
                         .path("/api/shop/**")
-                        .filters(f -> f.filter(tokenRelay.apply()))
                         .uri(shopServiceUri))
                 .route("shop-openapi", r -> r
                         .path("/v3/api-docs/**", "/swagger-ui/**",
@@ -48,10 +50,12 @@ public class RouterConfig {
     }
 
     @Bean
-    RouterFunction<ServerResponse> userRoutes(UserHandler handler) {
+    RouterFunction<ServerResponse> indexRedirect() {
         return RouterFunctions.route()
-                .GET("/", handler::redirectToSpa)
-                .GET("/api/user/me", handler::me)
+                .GET("/", request ->
+                        ServerResponse.status(HttpStatus.FOUND)
+                                .headers(h -> h.setLocation(URI.create(spaOrigin + "/")))
+                                .build())
                 .build();
     }
 

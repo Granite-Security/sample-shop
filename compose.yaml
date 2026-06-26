@@ -126,8 +126,6 @@ services:
       - "8080:8080"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - OIDC_ISSUER_URI=http://gateway:8080/auth
-      - OIDC_CLIENT_SECRET=iaka
       - MICROSERVICES_GREETINGS_URI=http://greetings:8060
       - GREETINGS_MICROSERVICE=http://greetings:8060
       - SHOP_MICROSERVICE=http://shop:8061

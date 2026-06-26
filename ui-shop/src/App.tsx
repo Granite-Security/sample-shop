@@ -8,6 +8,7 @@ import Checkout from './pages/Checkout'
 import Orders from './pages/Orders'
 import OrderDetail from './pages/OrderDetail'
 import Login from './pages/Login'
+import Callback from './pages/Callback'
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="orders" element={<Orders />} />
         <Route path="orders/:id" element={<OrderDetail />} />
         <Route path="login" element={<Login />} />
+        <Route path="callback" element={<Callback />} />
       </Route>
     </Routes>
   )

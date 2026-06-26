@@ -64,6 +64,9 @@ public class SecurityConfig {
     @Value("${spring.security.oauth2.authorizationserver.issuer:http://localhost:9090}")
     private String issuer;
 
+    @Value("${app.oauth2.spa-client.redirect-uri:http://localhost:5173/callback}")
+    private String spaClientRedirectUri;
+
     @Value("${GOOGLE_CLIENT_ID:google-client-id}")
     private String googleClientId;
 
@@ -168,7 +171,22 @@ public class SecurityConfig {
                 .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
                 .build();
 
-        return new InMemoryRegisteredClientRepository(oidcClient);
+        RegisteredClient spaClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId("spa-client")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+                .redirectUri(spaClientRedirectUri)
+                .scope(OidcScopes.OPENID)
+                .scope(OidcScopes.PROFILE)
+                .scope(StandardClaimNames.EMAIL)
+                .clientSettings(ClientSettings.builder()
+                        .requireAuthorizationConsent(true)
+                        .requireProofKey(true)
+                        .build())
+                .build();
+
+        return new InMemoryRegisteredClientRepository(oidcClient, spaClient);
     }
 
     @Bean

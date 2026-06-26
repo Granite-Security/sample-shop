@@ -1,21 +1,29 @@
 const BASE = '';
 
+let accessToken: string | null = null;
+
+export function setAccessToken(token: string | null) {
+  accessToken = token;
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
 
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers,
-    credentials: 'include',
   });
 
   if (res.status === 204) return undefined as T;
 
   if (res.status === 401) {
-    window.location.href = `${BASE}/oauth2/authorization/oidc-client`;
     throw new Error('Unauthorized');
   }
 
@@ -71,7 +79,4 @@ export const api = {
 
   placeOrder: (body: PlaceOrderRequest) =>
     request<OrderResponse>('/api/shop/orders', { method: 'POST', body: JSON.stringify(body) }),
-
-  me: () =>
-    request<{ authenticated: boolean; name?: string; claims?: Record<string, unknown> }>('/api/user/me'),
 };
