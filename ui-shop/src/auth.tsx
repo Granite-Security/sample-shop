@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    window.location.href = 'http://localhost:9090/logout';
+    window.location.href = '/auth/logout';
   }, []);
 
   const isAuthenticated = user !== null;

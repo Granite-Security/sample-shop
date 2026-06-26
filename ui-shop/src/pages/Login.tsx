@@ -11,7 +11,7 @@ export default function Login() {
     if (isAuthenticated) {
       navigate('/', { replace: true });
     } else {
-      window.location.href = 'http://localhost:8080/oauth2/authorization/oidc-client';
+      window.location.href = '/oauth2/authorization/oidc-client';
     }
   }, [isAuthenticated, loading, navigate]);
 
