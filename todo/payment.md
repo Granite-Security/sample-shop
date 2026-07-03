@@ -43,7 +43,7 @@ A phased plan for integrating Stripe into the Granite Security e-commerce platfo
 ### Step 2.1 — Create PaymentIntent on order placement
 - **Goal:** When an order is placed (consume `OrderPlaced` Kafka event), create a Stripe `PaymentIntent`.
 - **Do:** Kafka consumer in `payment` listens for `OrderPlaced`. On receipt:
-  1. Retrieve order details (total, currency) — either from event payload or via shop API.
+  1. Retrieve order details (total, currency) —  from event payload or via API.
   2. Call `PaymentIntent.create()` with `amount`, `currency`, `automatic_payment_methods`, `metadata` (order id).
   3. Persist a `Payment` record with the returned `id` and `client_secret`.
   4. Publish `PaymentIntentCreated` Kafka event (carries `client_secret` for the frontend).

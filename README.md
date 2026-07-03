@@ -135,6 +135,7 @@ These variables are passed through from the host to Docker in `compose.yaml`.
 | `AUTH_ISSUER_URI` | `http://localhost:9090` | greetings, shop |
 | `SHOP_R2DBC_URL` | `r2dbc:postgresql://localhost:5433/shopdb` | shop |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | — | payment |
+| `STRIPE_CURRENCY` | `usd` | payment |
 
 ## Project layout
 

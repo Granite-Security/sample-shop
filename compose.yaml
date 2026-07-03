@@ -196,6 +196,7 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - STRIPE_CURRENCY=${STRIPE_CURRENCY:-usd}
     depends_on:
       gateway:
         condition: service_started

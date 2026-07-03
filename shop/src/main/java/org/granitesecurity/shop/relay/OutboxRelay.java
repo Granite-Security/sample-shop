@@ -62,7 +62,7 @@ public class OutboxRelay {
     private Mono<Void> markSent(OutboxEvent event) {
         return outboxRepository.markSent(event.getId())
                 .doOnSuccess(count -> {
-                    if (count > 0) {
+                    if (count != null && count > 0) {
                         log.debug("Marked event {} as SENT", event.getId());
                     }
                 })
