@@ -64,6 +64,12 @@ public class SecurityConfig {
     @Value("${spring.security.oauth2.authorizationserver.issuer:http://localhost:9090}")
     private String issuer;
 
+    @Value("${app.oauth2.spa-client.redirect-uri:http://localhost:5173/callback}")
+    private String spaClientRedirectUri;
+
+    @Value("${app.oauth2.external-client.secret:{noop}my-secret}")
+    private String externalClientSecret;
+
     @Value("${GOOGLE_CLIENT_ID:google-client-id}")
     private String googleClientId;
 
@@ -103,7 +109,7 @@ public class SecurityConfig {
                 // authorization endpoint so users can choose form or Google login.
                 .exceptionHandling((exceptions) -> exceptions
                         .defaultAuthenticationEntryPointFor(
-                                new LoginUrlAuthenticationEntryPoint("/login"),
+                                new LoginUrlAuthenticationEntryPoint(issuer + "/login"),
                                 new MediaTypeRequestMatcher(MediaType.TEXT_HTML)
                         )
                 );
@@ -159,6 +165,8 @@ public class SecurityConfig {
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .redirectUri(gatewayClientRedirectUri)
+//                .redirectUri("http://localhost:5173/login/oauth2/code/oidc-client")
+                .redirectUri("https://oauth.pstmn.io/v1/callback")  // add this
                 .postLogoutRedirectUri(gatewayClientPostLogoutRedirectUri)
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
@@ -166,7 +174,30 @@ public class SecurityConfig {
                 .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
                 .build();
 
-        return new InMemoryRegisteredClientRepository(oidcClient);
+        RegisteredClient spaClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId("spa-client")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+                .redirectUri(spaClientRedirectUri)
+                .scope(OidcScopes.OPENID)
+                .scope(OidcScopes.PROFILE)
+                .scope(StandardClaimNames.EMAIL)
+                .clientSettings(ClientSettings.builder()
+                        .requireAuthorizationConsent(true)
+                        .requireProofKey(true)
+                        .build())
+                .build();
+
+        RegisteredClient externalClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId("external-service")
+                .clientSecret(externalClientSecret)
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .scope(OidcScopes.OPENID)
+                .build();
+
+        return new InMemoryRegisteredClientRepository(oidcClient, spaClient, externalClient);
     }
 
     @Bean

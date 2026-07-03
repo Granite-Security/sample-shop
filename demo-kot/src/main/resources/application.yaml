@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: demo-kot
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:${AUTH_ISSUER_URI:http://localhost:8080/auth}}
+server:
+  port: 8063

@@ -1,0 +1,40 @@
+server:
+    port: 8061
+spring:
+  application:
+    name: shop
+
+  r2dbc:
+    url: ${SHOP_R2DBC_URL:r2dbc:postgresql://localhost:5433/shopdb}
+    username: ${SHOP_R2DBC_USERNAME:myuser}
+    password: ${SHOP_R2DBC_PASSWORD:secret}
+
+  liquibase:
+    url: ${SHOP_JDBC_URL:jdbc:postgresql://localhost:5433/shopdb}
+    user: ${SHOP_JDBC_USERNAME:myuser}
+    password: ${SHOP_JDBC_PASSWORD:secret}
+    change-log: classpath:/db/changelog/db.changelog-master.yaml
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:${AUTH_ISSUER_URI:http://localhost:8080/auth}}
+  codec:
+    max-in-memory-size: 10MB
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+
+springdoc:
+  paths-to-match: /api/shop/**,/api/greetings/**
+
+app:
+  outbox:
+    poll-interval: 5000

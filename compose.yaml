@@ -1,4 +1,95 @@
 services:
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres
+    environment:
+      - POSTGRES_DB=authdb
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+
+
+  shop-postgres:
+    image: 'postgres:latest'
+    container_name: 'shop-postgres'
+    environment:
+      - 'POSTGRES_DB=shopdb'
+      - 'POSTGRES_PASSWORD=secret'
+      - 'POSTGRES_USER=myuser'
+    ports:
+      - ':5433:5432'
+
+  payment-postgres:
+    image: 'postgres:latest'
+    container_name: 'payment-postgres'
+    environment:
+      - 'POSTGRES_DB=paymentdb'
+      - 'POSTGRES_PASSWORD=secret'
+      - 'POSTGRES_USER=myuser'
+    ports:
+      - ':5434:5432'
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      - CLUSTER_ID=granite-cluster-id
+      - KAFKA_NODE_ID=1
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,DOCKER://0.0.0.0:29092
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092,DOCKER://kafka:29092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,DOCKER:PLAINTEXT
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_INTER_BROKER_LISTENER_NAME=DOCKER
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+    healthcheck:
+      test: [ "CMD", "kafka-topics", "--bootstrap-server", "localhost:29092", "--list" ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:latest
+    container_name: schema-registry
+    ports:
+      - "8081:8081"
+    environment:
+      - SCHEMA_REGISTRY_HOST_NAME=schema-registry
+      - SCHEMA_REGISTRY_LISTENERS=http://0.0.0.0:8081
+      - SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS=PLAINTEXT://kafka:29092
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8081" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8090:8080"
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=granite
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:29092
+      - KAFKA_CLUSTERS_0_SCHEMAREGISTRY=http://schema-registry:8081
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+
+
   auth-server:
     build:
       context: ./auth-server
@@ -10,15 +101,15 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/authdb
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=postgres
-      - AUTH_SERVER_ISSUER=http://auth-server:9090
+      - AUTH_SERVER_ISSUER=http://gateway:8080/auth
       - OIDC_CLIENT_SECRET_ENCODED={noop}iaka
       - OIDC_CLIENT_REDIRECT_URI=http://localhost:8080/login/oauth2/code/oidc-client
-      - OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI=http://localhost:8080/
+      - OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI=http://gateway:8080/
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - SERVER_PORT=9090
     healthcheck:
-      test: ["CMD", "wget", "--spider", "http://localhost:9090/login"]
+      test: ["CMD", "wget", "--spider", "http://localhost:9090/auth/login"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -35,11 +126,10 @@ services:
       - "8080:8080"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - OIDC_ISSUER_URI=http://auth-server:9090
-      - OIDC_AUTHORIZATION_URI=http://localhost:9090/oauth2/authorize
-      - OIDC_CLIENT_SECRET=iaka
       - MICROSERVICES_GREETINGS_URI=http://greetings:8060
       - GREETINGS_MICROSERVICE=http://greetings:8060
+      - SHOP_MICROSERVICE=http://shop:8061
+      - AUTH_SERVER_MICROSERVICE=http://auth-server:9090
     depends_on:
       auth-server:
         condition: service_healthy
@@ -52,17 +142,62 @@ services:
       - "8060:8060"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - AUTH_ISSUER_URI=http://auth-server:9090
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://auth-server:9090
+      - AUTH_ISSUER_URI=http://gateway:8080/auth
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
     depends_on:
-      - auth-server
+      gateway:
+        condition: service_started
 
-  postgres:
-    image: postgres:17-alpine
-    container_name: postgres
-    environment:
-      - POSTGRES_DB=authdb
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+  shop:
+    build:
+      context: ./shop
+    container_name: shop
     ports:
-      - "5432:5432"
+      - "8061:8061"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SHOP_R2DBC_URL=r2dbc:postgresql://shop-postgres:5432/shopdb
+      - SHOP_R2DBC_USERNAME=myuser
+      - SHOP_R2DBC_PASSWORD=secret
+      - SHOP_JDBC_URL=jdbc:postgresql://shop-postgres:5432/shopdb
+      - SHOP_JDBC_USERNAME=myuser
+      - SHOP_JDBC_PASSWORD=secret
+      - AUTH_ISSUER_URI=http://gateway:8080/auth
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    depends_on:
+      gateway:
+        condition: service_started
+      shop-postgres:
+        condition: service_started
+    restart: on-failure
+
+
+
+
+
+  payment:
+    build:
+      context: ./payment
+    container_name: payment
+    ports:
+      - "8062:8062"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - PAYMENT_SERVER_PORT=8062
+      - PAYMENT_R2DBC_URL=r2dbc:postgresql://payment-postgres:5432/paymentdb
+      - PAYMENT_R2DBC_USERNAME=myuser
+      - PAYMENT_R2DBC_PASSWORD=secret
+      - PAYMENT_JDBC_URL=jdbc:postgresql://payment-postgres:5432/paymentdb
+      - PAYMENT_JDBC_USERNAME=myuser
+      - PAYMENT_JDBC_PASSWORD=secret
+      - AUTH_ISSUER_URI=http://gateway:8080/auth
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    depends_on:
+      gateway:
+        condition: service_started
+      payment-postgres:
+        condition: service_started
+    restart: on-failure
+

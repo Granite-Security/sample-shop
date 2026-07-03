@@ -1,5 +1,8 @@
 server:
   port: 9090
+  servlet:
+    context-path: /auth
+  forward-headers-strategy: framework
 
 logging:
   level:
@@ -21,7 +24,7 @@ spring:
   security:
     oauth2:
       authorizationserver:
-        issuer: ${AUTH_SERVER_ISSUER:http://localhost:9090}
+        issuer: ${AUTH_SERVER_ISSUER:http://localhost:8080/auth}
 
 app:
   oauth2:
@@ -29,3 +32,7 @@ app:
       secret: ${OIDC_CLIENT_SECRET_ENCODED:{noop}secret}
       redirect-uri: ${OIDC_CLIENT_REDIRECT_URI:http://localhost:8080/login/oauth2/code/oidc-client}
       post-logout-redirect-uri: ${OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI:http://localhost:8080/}
+    spa-client:
+      redirect-uri: ${SPA_CLIENT_REDIRECT_URI:http://localhost:5173/callback}
+    external-client:
+      secret: ${EXTERNAL_CLIENT_SECRET:{noop}my-secret}

@@ -1,0 +1,10 @@
+services:
+  shop-postgres:
+    image: 'postgres:latest'
+    container_name: 'shop-postgres'
+    environment:
+      - 'POSTGRES_DB=shopdb'
+      - 'POSTGRES_PASSWORD=secret'
+      - 'POSTGRES_USER=myuser'
+    ports:
+      - '5433:5432'
