@@ -30,6 +30,12 @@ public class Payment {
     @Column("provider_payment_id")
     private String providerPaymentId;
 
+    @Column("stripe_payment_intent_id")
+    private String stripePaymentIntentId;
+
+    @Column("client_secret")
+    private String clientSecret;
+
     private String status;
 
     @Column("created_at")
@@ -46,6 +52,6 @@ public class Payment {
         this.amount = amount;
         this.currency = currency;
         this.provider = provider;
-        this.status = PaymentStatus.PENDING.name();
+        this.status = PaymentStatus.CREATED.name();
     }
 }

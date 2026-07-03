@@ -1,9 +1,10 @@
 package org.granitesecurity.payment.domain;
 
 public enum PaymentStatus {
-    PENDING,
+    CREATED,
     PROCESSING,
     SUCCEEDED,
     FAILED,
+    CANCELED,
     REFUNDED
 }
