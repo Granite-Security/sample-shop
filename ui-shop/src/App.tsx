@@ -7,6 +7,7 @@ import Cart from './pages/Cart'
 import Checkout from './pages/Checkout'
 import Orders from './pages/Orders'
 import OrderDetail from './pages/OrderDetail'
+import Admin from './pages/Admin'
 import Login from './pages/Login'
 import Callback from './pages/Callback'
 
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="checkout" element={<Checkout />} />
         <Route path="orders" element={<Orders />} />
         <Route path="orders/:id" element={<OrderDetail />} />
+        <Route path="admin" element={<Admin />} />
         <Route path="login" element={<Login />} />
         <Route path="callback" element={<Callback />} />
       </Route>

@@ -6,6 +6,7 @@ import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../auth';
 import { api } from '../api';
 import type { OrderResponse } from '../types';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 type Step = 'review' | 'placing' | 'waiting_payment' | 'payment' | 'confirming' | 'done' | 'failed' | 'error';
 
@@ -63,7 +64,7 @@ function PaymentForm({
   );
 }
 
-export default function Checkout() {
+function CheckoutInner() {
   const { items, total, clearCart } = useCart();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -148,66 +149,6 @@ export default function Checkout() {
     return () => stopPolling();
   }, [stopPolling]);
 
-  if (!isAuthenticated) {
-    navigate('/login', { replace: true });
-    return null;
-  }
-
-  if (items.length === 0 && step === 'review') {
-    return (
-      <div className="page">
-        <h1>Checkout</h1>
-        <p>Your cart is empty.</p>
-        <Link to="/catalog" className="btn">Browse Products</Link>
-      </div>
-    );
-  }
-
-  if (step === 'done') {
-    if (!order) {
-      return (
-        <div className="page">
-          <h1>Order Placed!</h1>
-          <p>Your payment was confirmed. Your order is being processed.</p>
-          <Link to="/orders" className="btn" style={{ marginTop: 16 }}>View Orders</Link>
-        </div>
-      );
-    }
-    return (
-      <div className="page">
-        <h1>Order Placed!</h1>
-        <p>Total: <strong>${Number(order.total).toFixed(2)}</strong></p>
-        <p>Status: <span className={`status status-${order.status.toLowerCase()}`}>{order.status}</span></p>
-        <p style={{ marginTop: 8, color: 'var(--text-secondary)' }}>
-          Payment confirmed. Your order is being processed.
-        </p>
-        <Link to={`/orders/${order.id}`} className="btn" style={{ marginTop: 16 }}>View Order</Link>
-      </div>
-    );
-  }
-
-  if (step === 'failed') {
-    if (!order) {
-      return (
-        <div className="page">
-          <h1>Payment Failed</h1>
-          <p>The payment could not be completed. Please try again or contact support.</p>
-          <Link to="/cart" className="btn" style={{ marginTop: 16 }}>Back to Cart</Link>
-        </div>
-      );
-    }
-    return (
-      <div className="page">
-        <h1>Payment Failed</h1>
-        <p>Order #{order.id} — Status: <span className={`status status-${order.status.toLowerCase()}`}>{order.status}</span></p>
-        <p style={{ marginTop: 8, color: 'var(--danger)' }}>
-          The payment could not be completed. Please try again or contact support.
-        </p>
-        <Link to="/cart" className="btn" style={{ marginTop: 16 }}>Back to Cart</Link>
-      </div>
-    );
-  }
-
   const handlePlaceOrder = async () => {
     setStep('placing');
     setError('');
@@ -220,7 +161,6 @@ export default function Checkout() {
       if (result.clientSecret) {
         setStep('payment');
       } else {
-        // Poll for clientSecret from payment service
         setStep('waiting_payment');
         pollForClientSecret(result.id, Date.now());
       }
@@ -245,6 +185,48 @@ export default function Checkout() {
     }
     pollOrderStatus(order.id);
   }, [order, pollOrderStatus]);
+
+  if (!isAuthenticated) {
+    navigate('/login', { replace: true });
+    return null;
+  }
+
+  if (items.length === 0 && step === 'review') {
+    return (
+      <div className="page">
+        <h1>Checkout</h1>
+        <p>Your cart is empty.</p>
+        <Link to="/catalog" className="btn">Browse Products</Link>
+      </div>
+    );
+  }
+
+  if (step === 'done') {
+    return <ThankYou order={order} />;
+  }
+
+  if (step === 'failed') {
+    const statusLabel = order?.status?.toLowerCase() ?? '';
+    if (!order) {
+      return (
+        <div className="page">
+          <h1>Payment Failed</h1>
+          <p>The payment could not be completed. Please try again or contact support.</p>
+          <Link to="/cart" className="btn" style={{ marginTop: 16 }}>Back to Cart</Link>
+        </div>
+      );
+    }
+    return (
+      <div className="page">
+        <h1>Payment Failed</h1>
+        <p>Order #{order.id} — Status: {statusLabel ? <span className={`status status-${statusLabel}`}>{order.status}</span> : 'Unknown'}</p>
+        <p style={{ marginTop: 8, color: 'var(--danger)' }}>
+          The payment could not be completed. Please try again or contact support.
+        </p>
+        <Link to="/cart" className="btn" style={{ marginTop: 16 }}>Back to Cart</Link>
+      </div>
+    );
+  }
 
   return (
     <div className="page checkout-page">
@@ -324,6 +306,55 @@ export default function Checkout() {
           ) : null}
         </>
       )}
+    </div>
+  );
+}
+
+export default function Checkout() {
+  return (
+    <ErrorBoundary>
+      <CheckoutInner />
+    </ErrorBoundary>
+  );
+}
+
+function ThankYou({ order }: { order: OrderResponse | null }) {
+  const navigate = useNavigate();
+  const id = order?.id;
+  const statusLabel = order?.status?.toLowerCase() ?? 'paid';
+
+  useEffect(() => {
+    if (!id) return;
+    const t = setTimeout(() => navigate(`/orders/${id}`, { replace: true }), 4000);
+    return () => clearTimeout(t);
+  }, [id, navigate]);
+
+  return (
+    <div className="page" style={{ textAlign: 'center', paddingTop: '2rem' }}>
+      <h1>Thank You for Your Purchase!</h1>
+      <p style={{ fontSize: '1.1rem', marginTop: 8 }}>
+        Your payment was successful and your order is being processed.
+      </p>
+      {order && (
+        <>
+          <p style={{ marginTop: 16 }}>
+            Order{' '}
+            <Link to={`/orders/${order.id}`} style={{ fontWeight: 700 }}>
+              #{order.id}
+            </Link>
+            {' '}—{' '}
+            <span className={`status status-${statusLabel}`}>{order.status}</span>
+            {' '}—{' '}
+            <strong>${Number(order.total).toFixed(2)}</strong>
+          </p>
+        </>
+      )}
+      <p style={{ marginTop: 24, color: 'var(--text-secondary)' }}>
+        Redirecting to your order in 4 seconds…
+      </p>
+      <Link to={id ? `/orders/${id}` : '/orders'} className="btn" style={{ marginTop: 12 }}>
+        {id ? 'View Order' : 'View Orders'}
+      </Link>
     </div>
   );
 }
