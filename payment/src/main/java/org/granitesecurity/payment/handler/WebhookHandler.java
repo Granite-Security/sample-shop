@@ -167,6 +167,7 @@ public class WebhookHandler {
         }
         payment.setStatus(newStatus);
         payment.setUpdatedAt(Instant.now());
+        payment.markNotNew();
         return paymentRepository.save(payment);
     }
 

@@ -67,4 +67,8 @@ public class Payment implements Persistable<UUID> {
     public boolean isNew() {
         return isNew;
     }
+
+    public void markNotNew() {
+        this.isNew = false;
+    }
 }

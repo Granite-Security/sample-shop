@@ -83,6 +83,7 @@ public class PaymentService {
 
         payment.setStatus(newStatus);
         payment.setUpdatedAt(Instant.now());
+        payment.markNotNew();
 
         return paymentRepository.save(payment)
                 .flatMap(saved -> publishStatusEvent(saved, newStatus).thenReturn(saved));
