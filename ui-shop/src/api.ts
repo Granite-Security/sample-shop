@@ -30,7 +30,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const data = await res.json();
   if (!res.ok) {
     const msg = data.detail ?? data.title ?? res.statusText;
-    throw new Error(msg);
+    throw new Error(`[${res.status}] ${msg}`);
   }
   return data;
 }
@@ -38,6 +38,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 import type {
   Product, Category, OrderResponse, PagedResult,
   CreateProductRequest, CreateCategoryRequest, PlaceOrderRequest,
+  CreatePaymentIntentResponse
 } from './types';
 
 export const api = {
@@ -79,4 +80,10 @@ export const api = {
 
   placeOrder: (body: PlaceOrderRequest) =>
     request<OrderResponse>('/api/shop/orders', { method: 'POST', body: JSON.stringify(body) }),
+
+  getPaymentIntent: (orderId: number) =>
+    request<CreatePaymentIntentResponse>(`/api/payments/intent/${orderId}`),
+
+  syncPaymentIntent: (orderId: number) =>
+    request<CreatePaymentIntentResponse>(`/api/payments/intent/${orderId}/sync`, { method: 'POST' }),
 };

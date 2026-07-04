@@ -12,6 +12,7 @@ public record OrderResponse(
         @Schema(description = "Order status", example = "PENDING") String status,
         @Schema(description = "Order total", example = "159.98") BigDecimal total,
         @Schema(description = "When the order was created") Instant createdAt,
-        @Schema(description = "Line items in the order") List<OrderItemResponse> items
+        @Schema(description = "Line items in the order") List<OrderItemResponse> items,
+        @Schema(description = "Stripe client secret for payment", example = "pi_xxx_secret_yyy") String clientSecret
 ) {
 }

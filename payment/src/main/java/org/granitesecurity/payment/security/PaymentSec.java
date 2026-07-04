@@ -34,6 +34,7 @@ public class PaymentSec {
                 .cors(Customizer.withDefaults())
                 .authorizeExchange(exchange -> exchange
                         .pathMatchers("/api/payments/webhook").permitAll()
+                        .pathMatchers("/api/payments/intent/**").permitAll()
                         .pathMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .anyExchange().authenticated()
                 )
