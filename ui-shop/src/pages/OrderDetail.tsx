@@ -84,7 +84,7 @@ export default function OrderDetail() {
       <table className="order-items-table">
         <thead>
           <tr>
-            <th>Product ID</th>
+            <th>Product</th>
             <th>Qty</th>
             <th>Unit Price</th>
             <th>Subtotal</th>
@@ -93,7 +93,7 @@ export default function OrderDetail() {
         <tbody>
           {order.items.map(item => (
             <tr key={item.id}>
-              <td>{item.productId}</td>
+              <td><Link to={`/catalog/${item.productId}`}>{item.productName}</Link></td>
               <td>{item.quantity}</td>
               <td>${Number(item.unitPrice).toFixed(2)}</td>
               <td>${(Number(item.unitPrice) * item.quantity).toFixed(2)}</td>

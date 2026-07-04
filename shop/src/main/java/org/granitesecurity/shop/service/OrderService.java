@@ -191,18 +191,36 @@ public class OrderService {
 
     private Mono<OrderResponse> enrichOrder(CustomerOrder order) {
         return orderItemRepository.findByOrderId(order.getId())
-                .map(item -> new OrderItemResponse(
-                        item.getId(), item.getProductId(), item.getQuantity(), item.getUnitPrice()))
                 .collectList()
-                .map(items -> toOrderResponse(order, items, null));
+                .flatMap(items -> resolveProductNames(items)
+                        .map(nameMap -> toOrderResponse(order, items.stream()
+                                .map(item -> toItemResponse(item, nameMap))
+                                .toList(), null)));
     }
 
     private Mono<OrderResponse> buildOrderResponse(CustomerOrder order, List<OrderItem> items, String clientSecret) {
-        List<OrderItemResponse> itemResponses = items.stream()
-                .map(item -> new OrderItemResponse(
-                        item.getId(), item.getProductId(), item.getQuantity(), item.getUnitPrice()))
+        return resolveProductNames(items)
+                .map(nameMap -> toOrderResponse(order, items.stream()
+                        .map(item -> toItemResponse(item, nameMap))
+                        .toList(), clientSecret));
+    }
+
+    private OrderItemResponse toItemResponse(OrderItem item, Map<Long, String> productNames) {
+        return new OrderItemResponse(
+                item.getId(),
+                item.getProductId(),
+                productNames.getOrDefault(item.getProductId(), "Unknown"),
+                item.getQuantity(),
+                item.getUnitPrice());
+    }
+
+    private Mono<Map<Long, String>> resolveProductNames(List<OrderItem> items) {
+        List<Long> productIds = items.stream()
+                .map(OrderItem::getProductId)
+                .distinct()
                 .toList();
-        return Mono.just(toOrderResponse(order, itemResponses, clientSecret));
+        return productRepository.findAllById(productIds)
+                .collectMap(Product::getId, Product::getName);
     }
 
     private OrderResponse toOrderResponse(CustomerOrder order, List<OrderItemResponse> items, String clientSecret) {
