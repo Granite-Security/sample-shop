@@ -16,12 +16,10 @@ const MAX_RETRIES = 25;
 
 function PaymentForm({
   orderId,
-  onConfirming,
   onPaymentConfirmed,
   onError,
 }: {
   orderId: number;
-  onConfirming: () => void;
   onPaymentConfirmed: () => void;
   onError: (msg: string) => void;
 }) {
@@ -32,17 +30,21 @@ function PaymentForm({
   const handlePay = async () => {
     if (!stripe || !elements) return;
     setConfirming(true);
-    onConfirming();
-    const { error } = await stripe.confirmPayment({
-      elements,
-      confirmParams: { return_url: window.location.origin + `/orders/${orderId}` },
-      redirect: 'if_required',
-    });
-    if (error) {
-      onError(error.message ?? 'Payment failed');
+    try {
+      const { error } = await stripe.confirmPayment({
+        elements,
+        confirmParams: { return_url: window.location.origin + `/orders/${orderId}` },
+        redirect: 'if_required',
+      });
+      if (error) {
+        onError(error.message ?? 'Payment failed');
+        setConfirming(false);
+      } else {
+        onPaymentConfirmed();
+      }
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'Payment failed');
       setConfirming(false);
-    } else {
-      onPaymentConfirmed();
     }
   };
 
@@ -208,12 +210,6 @@ export default function Checkout() {
     }
   };
 
-  const handleConfirming = () => {
-    if (!order) return;
-    setStep('confirming');
-    pollOrderStatus(order.id, Date.now());
-  };
-
   const handlePaymentError = (msg: string) => {
     setError(msg);
     setStep('payment');
@@ -221,12 +217,14 @@ export default function Checkout() {
 
   const handlePaymentConfirmed = useCallback(async () => {
     if (!order) return;
+    setStep('confirming');
+    pollOrderStatus(order.id, Date.now());
     try {
       await api.syncPaymentIntent(order.id);
     } catch (e) {
       console.error('Payment sync failed', e);
     }
-  }, [order]);
+  }, [order, pollOrderStatus]);
 
   return (
     <div className="page checkout-page">
@@ -286,7 +284,6 @@ export default function Checkout() {
               >
                 <PaymentForm
                   orderId={order.id}
-                  onConfirming={handleConfirming}
                   onPaymentConfirmed={handlePaymentConfirmed}
                   onError={handlePaymentError}
                 />
