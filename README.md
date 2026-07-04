@@ -104,6 +104,25 @@ cd shop && ./gradlew test
 | `/api/shop/orders` | JWT required | Shop service (token relayed) |
 | `/v3/api-docs/**`, `/swagger-ui/**` | Public | Shop service |
 
+## Stripe setup (payment service)
+
+The payment service requires two env vars for Stripe integration:
+
+```bash
+export STRIPE_SECRET_KEY=sk_test_...   # from Stripe dashboard (API keys)
+export STRIPE_WEBHOOK_SECRET=whsec_... # from Stripe CLI (see below)
+```
+
+To get `STRIPE_WEBHOOK_SECRET`, run the Stripe CLI in a terminal:
+
+```bash
+stripe listen --forward-to localhost:8062/api/payments/webhook
+```
+
+It prints `Your webhook signing secret is whsec_...` on startup — use that value.
+
+These variables are passed through from the host to Docker in `compose.yaml`.
+
 ## Key environment variables
 
 | Variable | Default | Service |
@@ -115,6 +134,8 @@ cd shop && ./gradlew test
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | — | auth-server |
 | `AUTH_ISSUER_URI` | `http://localhost:9090` | greetings, shop |
 | `SHOP_R2DBC_URL` | `r2dbc:postgresql://localhost:5433/shopdb` | shop |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | — | payment |
+| `STRIPE_CURRENCY` | `usd` | payment |
 
 ## Project layout
 

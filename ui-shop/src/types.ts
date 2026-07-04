@@ -17,6 +17,7 @@ export interface Category {
 export interface OrderItemResponse {
   id: number;
   productId: number;
+  productName: string;
   quantity: number;
   unitPrice: number;
 }
@@ -28,6 +29,18 @@ export interface OrderResponse {
   total: number;
   createdAt: string;
   items: OrderItemResponse[];
+  clientSecret?: string;
+}
+
+export interface CreatePaymentIntentResponse {
+  id: string;
+  orderId: number;
+  stripePaymentIntentId: string;
+  clientSecret: string;
+  status: string;
+  amount: number;
+  currency: string;
+  createdAt: string;
 }
 
 export interface PagedResult<T> {

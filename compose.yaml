@@ -129,6 +129,7 @@ services:
       - MICROSERVICES_GREETINGS_URI=http://greetings:8060
       - GREETINGS_MICROSERVICE=http://greetings:8060
       - SHOP_MICROSERVICE=http://shop:8061
+      - PAYMENT_MICROSERVICE=http://payment:8062
       - AUTH_SERVER_MICROSERVICE=http://auth-server:9090
     depends_on:
       auth-server:
@@ -165,6 +166,7 @@ services:
       - AUTH_ISSUER_URI=http://gateway:8080/auth
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - PAYMENT_SERVICE_URI=http://payment:8062
     depends_on:
       gateway:
         condition: service_started
@@ -194,6 +196,9 @@ services:
       - AUTH_ISSUER_URI=http://gateway:8080/auth
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - STRIPE_CURRENCY=${STRIPE_CURRENCY:-usd}
     depends_on:
       gateway:
         condition: service_started

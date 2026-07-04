@@ -67,6 +67,9 @@ public class SecurityConfig {
     @Value("${app.oauth2.spa-client.redirect-uri:http://localhost:5173/callback}")
     private String spaClientRedirectUri;
 
+    @Value("${app.oauth2.spa-client.post-logout-redirect-uri:http://localhost:5173}")
+    private String spaClientPostLogoutRedirectUri;
+
     @Value("${app.oauth2.external-client.secret:{noop}my-secret}")
     private String externalClientSecret;
 
@@ -180,6 +183,7 @@ public class SecurityConfig {
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .redirectUri(spaClientRedirectUri)
+                .postLogoutRedirectUri(spaClientPostLogoutRedirectUri)
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
                 .scope(StandardClaimNames.EMAIL)

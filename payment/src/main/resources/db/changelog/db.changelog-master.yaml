@@ -5,3 +5,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/002-add-outbox.sql
       relativeToChangelogFile: false
+  - include:
+      file: db/changelog/003-add-stripe-schema.sql
+      relativeToChangelogFile: false

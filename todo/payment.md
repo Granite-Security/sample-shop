@@ -8,7 +8,9 @@ A phased plan for integrating Stripe into the Granite Security e-commerce platfo
 
 2. **Webhook-driven state machine** — Stripe sends webhook events (`payment_intent.succeeded`, `payment_intent.payment_failed`) that drive order status transitions. No polling.
 
-3. **Server-side only in the payment service** — a new `payment` microservice (port 8062) owns all Stripe API calls. The shop service never talks to Stripe directly. This keeps concerns separated and lets us test/swap the payment provider.
+3. **Payment service owns Stripe** — the `payment` microservice (port 8062) owns all Stripe API calls. The shop service never talks to Stripe directly.
+   - PaymentIntent creation is **synchronous** (shop calls payment via REST during order placement) so `clientSecret` is available immediately.
+   - Post-payment processing (webhook → status transitions) remains **event-driven** via Kafka.
 
 4. **Idempotency everywhere** — Stripe API calls use idempotency keys; webhook processing is idempotent by `Event` idempotent replay; Kafka events use event ids for deduplication.
 
@@ -40,20 +42,23 @@ A phased plan for integrating Stripe into the Granite Security e-commerce platfo
 
 ## Phase 2 — Stripe API integration (server-side)
 
-### Step 2.1 — Create PaymentIntent on order placement
-- **Goal:** When an order is placed (consume `OrderPlaced` Kafka event), create a Stripe `PaymentIntent`.
-- **Do:** Kafka consumer in `payment` listens for `OrderPlaced`. On receipt:
-  1. Retrieve order details (total, currency) — either from event payload or via shop API.
-  2. Call `PaymentIntent.create()` with `amount`, `currency`, `automatic_payment_methods`, `metadata` (order id).
-  3. Persist a `Payment` record with the returned `id` and `client_secret`.
-  4. Publish `PaymentIntentCreated` Kafka event (carries `client_secret` for the frontend).
-- **Idempotency:** Use `idempotencyKey = "payment-order-{orderId}"` on Stripe API calls.
-- **Done when:** Placing an order produces a Stripe `pi_xxx` with matching amount.
+### Step 2.1 — Create PaymentIntent on order placement (synchronous)
+- **Goal:** When an order is placed via REST, create a Stripe `PaymentIntent` synchronously so the frontend gets `client_secret` immediately.
+- **Do:**
+  1. Payment service exposes `POST /api/payments/intent` (orderId, total, currency, username) — creates `PaymentIntent` via Stripe, persists `Payment`, publishes `PaymentIntentCreated` outbox event.
+  2. Shop's `OrderService.placeOrder()` calls the payment service REST endpoint after persisting the order (includes the user's JWT for auth).
+  3. `OrderResponse` includes the `clientSecret` field.
+  4. The existing Kafka consumer `OrderPlacedConsumer` still works — it's idempotent (skips if payment exists).
+- **Idempotency:** `idempotencyKey = "payment-order-{orderId}"` on Stripe API calls.
+- **Done when:** `POST /api/shop/orders` returns `clientSecret` with the order.
 
-### Step 2.2 — Confirm PaymentIntent (client-driven)
+### Step 2.2 — Confirm PaymentIntent (frontend, Stripe Elements)
 - **Goal:** The frontend collects card details via Stripe Elements and calls `stripe.confirmPayment()`.
-- **Do:** The frontend uses the `client_secret` from `PaymentIntentCreated` to power the payment form. This requires no server-side change — Stripe's JS SDK handles it.
-- **Note:** This is a frontend task; the backend only needs to expose the `client_secret` to the client (via the event or a REST endpoint).
+- **Do:**
+  1. Install `@stripe/stripe-js` + `@stripe/react-stripe-js`.
+  2. `Checkout.tsx` uses the `clientSecret` from `OrderResponse` to render `<Elements>` with `<PaymentElement>`.
+  3. On submit, `stripe.confirmPayment({ elements, redirect: 'if_required' })` processes the payment.
+  4. On success, navigate to order detail page.
 - **Done when:** A client can complete payment in Stripe's test mode using `4242 4242 4242 4242`.
 
 ### Step 2.3 — Stripe webhook endpoint
@@ -153,9 +158,21 @@ A phased plan for integrating Stripe into the Granite Security e-commerce platfo
 | Variable | Default | Used by |
 |---|---|---|
 | `STRIPE_SECRET_KEY` | — | payment service |
-| `STRIPE_PUBLISHABLE_KEY` | — | frontend / payment service |
+| `STRIPE_PUBLISHABLE_KEY` | — | frontend (via `VITE_STRIPE_PUBLISHABLE_KEY` in `.env`) |
 | `STRIPE_WEBHOOK_SECRET` | — | payment service (webhook verification) |
 | `STRIPE_CURRENCY` | `usd` | payment service |
+| `PAYMENT_SERVICE_URI` | `http://localhost:8062` | shop service (to call payment REST endpoint) |
+| `PAYMENT_MICROSERVICE` | `http://payment:8062` | gateway |
+
+## Synchronous REST contract (shop → payment)
+
+Called by shop during `POST /api/shop/orders`:
+
+| Method | Path | Request | Response |
+|---|---|---|---|
+| `POST` | `/api/payments/intent` | `{ orderId, total, currency?, username }` | `{ id, orderId, stripePaymentIntentId, clientSecret, status, amount, currency, createdAt }` |
+
+Idempotent via `payment-order-{orderId}` idempotency key — retry-safe.
 
 ## Kafka event contract (additions)
 

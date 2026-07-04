@@ -2,6 +2,8 @@ package org.granitesecurity.shop.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.granitesecurity.shop.domain.CustomerOrder;
 import org.granitesecurity.shop.domain.OrderItem;
 import org.granitesecurity.shop.domain.OrderStatus;
@@ -32,6 +34,7 @@ import java.util.function.Function;
 @Service
 public class OrderService {
 
+    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final CustomerOrderRepository customerOrderRepository;
@@ -62,7 +65,7 @@ public class OrderService {
         return productRepository.findAllById(productIds)
                 .collectMap(Product::getId, Function.identity())
                 .flatMap(productMap -> validateAndBuild(username, request, productMap))
-                .flatMap(this::persistOrder);
+                .flatMap(ctx -> persistOrder(ctx));
     }
 
     private Mono<OrderContext> validateAndBuild(String username, PlaceOrderRequest request,
@@ -93,31 +96,35 @@ public class OrderService {
 
     private Mono<OrderResponse> persistOrder(OrderContext ctx) {
         return customerOrderRepository.save(ctx.order())
-                .flatMap(savedOrder -> {
-                    List<OrderItem> itemsWithOrderId = ctx.items().stream()
-                            .map(item -> new OrderItem(
-                                    savedOrder.getId(),
-                                    item.getProductId(),
-                                    item.getQuantity(),
-                                    item.getUnitPrice()))
-                            .toList();
+                .flatMap(savedOrder -> saveOrderAndReturnResponse(ctx, savedOrder));
+    }
 
-                    List<Mono<Product>> stockUpdates = ctx.items().stream()
-                            .map(item -> {
-                                Product product = ctx.productMap().get(item.getProductId());
-                                product.setStock(product.getStock() - item.getQuantity());
-                                return productRepository.save(product);
-                            })
-                            .toList();
+    private Mono<OrderResponse> saveOrderAndReturnResponse(OrderContext ctx, CustomerOrder savedOrder) {
+        List<OrderItem> itemsWithOrderId = ctx.items().stream()
+                .map(item -> new OrderItem(
+                        savedOrder.getId(),
+                        item.getProductId(),
+                        item.getQuantity(),
+                        item.getUnitPrice()))
+                .toList();
 
-                    return orderItemRepository.saveAll(itemsWithOrderId).collectList()
-                            .flatMap(savedItems -> Mono.when(stockUpdates).thenReturn(savedOrder))
-                            .flatMap(order -> {
-                                OutboxEvent outbox = createOutboxEvent(order, itemsWithOrderId);
-                                return outboxRepository.save(outbox).thenReturn(order);
-                            })
-                            .flatMap(order -> buildOrderResponse(order, itemsWithOrderId));
-                });
+        List<Mono<Product>> stockUpdates = ctx.items().stream()
+                .map(item -> {
+                    Product product = ctx.productMap().get(item.getProductId());
+                    product.setStock(product.getStock() - item.getQuantity());
+                    return productRepository.save(product);
+                })
+                .toList();
+
+        Mono<CustomerOrder> afterSave = orderItemRepository.saveAll(itemsWithOrderId).collectList()
+                .flatMap(savedItems -> Mono.when(stockUpdates).thenReturn(savedOrder));
+
+        return afterSave.flatMap(order -> {
+            CustomerOrder co = order;
+            OutboxEvent outbox = createOutboxEvent(co, itemsWithOrderId);
+            return outboxRepository.save(outbox)
+                    .flatMap(saved -> buildOrderResponse(co, itemsWithOrderId, null));
+        });
     }
 
     private OutboxEvent createOutboxEvent(CustomerOrder order, List<OrderItem> items) {
@@ -140,7 +147,7 @@ public class OrderService {
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("orderId", order.getId());
-        payload.put("customerId", order.getUsername());
+        payload.put("username", order.getUsername());
         payload.put("items", itemList);
         payload.put("total", order.getTotal());
         payload.put("orderedAt", Instant.now().toString());
@@ -184,28 +191,47 @@ public class OrderService {
 
     private Mono<OrderResponse> enrichOrder(CustomerOrder order) {
         return orderItemRepository.findByOrderId(order.getId())
-                .map(item -> new OrderItemResponse(
-                        item.getId(), item.getProductId(), item.getQuantity(), item.getUnitPrice()))
                 .collectList()
-                .map(items -> toOrderResponse(order, items));
+                .flatMap(items -> resolveProductNames(items)
+                        .map(nameMap -> toOrderResponse(order, items.stream()
+                                .map(item -> toItemResponse(item, nameMap))
+                                .toList(), null)));
     }
 
-    private Mono<OrderResponse> buildOrderResponse(CustomerOrder order, List<OrderItem> items) {
-        List<OrderItemResponse> itemResponses = items.stream()
-                .map(item -> new OrderItemResponse(
-                        item.getId(), item.getProductId(), item.getQuantity(), item.getUnitPrice()))
+    private Mono<OrderResponse> buildOrderResponse(CustomerOrder order, List<OrderItem> items, String clientSecret) {
+        return resolveProductNames(items)
+                .map(nameMap -> toOrderResponse(order, items.stream()
+                        .map(item -> toItemResponse(item, nameMap))
+                        .toList(), clientSecret));
+    }
+
+    private OrderItemResponse toItemResponse(OrderItem item, Map<Long, String> productNames) {
+        return new OrderItemResponse(
+                item.getId(),
+                item.getProductId(),
+                productNames.getOrDefault(item.getProductId(), "Unknown"),
+                item.getQuantity(),
+                item.getUnitPrice());
+    }
+
+    private Mono<Map<Long, String>> resolveProductNames(List<OrderItem> items) {
+        List<Long> productIds = items.stream()
+                .map(OrderItem::getProductId)
+                .distinct()
                 .toList();
-        return Mono.just(toOrderResponse(order, itemResponses));
+        return productRepository.findAllById(productIds)
+                .collectMap(Product::getId, Product::getName);
     }
 
-    private OrderResponse toOrderResponse(CustomerOrder order, List<OrderItemResponse> items) {
+    private OrderResponse toOrderResponse(CustomerOrder order, List<OrderItemResponse> items, String clientSecret) {
         return new OrderResponse(
                 order.getId(),
                 order.getUsername(),
                 order.getStatus(),
                 order.getTotal(),
                 order.getCreatedAt(),
-                items
+                items,
+                clientSecret
         );
     }
 

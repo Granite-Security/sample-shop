@@ -32,9 +32,11 @@ public class OrderHandler {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content())
     })
     public Mono<ServerResponse> placeOrder(ServerRequest request) {
-        return request.bodyToMono(PlaceOrderRequest.class)
-                .zipWith(getUsername(request))
-                .flatMap(tuple -> orderService.placeOrder(tuple.getT2(), tuple.getT1()))
+        var bodyMono = request.bodyToMono(PlaceOrderRequest.class);
+        var usernameMono = getUsername(request);
+        return bodyMono.zipWith(usernameMono)
+                .flatMap(tuple -> orderService.placeOrder(
+                        tuple.getT2(), tuple.getT1()))
                 .flatMap(order -> ServerResponse.ok().bodyValue(order));
     }
 

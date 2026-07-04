@@ -32,12 +32,31 @@ public class EventConsumer {
                 log.warn("Payment event missing orderId: {}", message);
                 return;
             }
-            if (data.containsKey("paymentId")) {
+            Object status = data.get("status");
+            if (status != null) {
+                String s = status.toString();
+                switch (s) {
+                    case "SUCCEEDED" -> {
+                        orderService.updateOrderStatus(orderId, OrderStatus.PAID).block();
+                        log.info("PaymentSucceeded -> order {} marked PAID", orderId);
+                    }
+                    case "FAILED" -> {
+                        orderService.updateOrderStatus(orderId, OrderStatus.PAYMENT_FAILED).block();
+                        log.info("PaymentFailed -> order {} marked PAYMENT_FAILED", orderId);
+                    }
+                    case "CANCELED" -> {
+                        log.info("PaymentCanceled -> order {}, no status transition", orderId);
+                    }
+                    default -> log.warn("Unknown payment status: {}", s);
+                }
+            } else if (data.containsKey("paymentId")) {
                 orderService.updateOrderStatus(orderId, OrderStatus.PAID).block();
-                log.info("PaymentReceived -> order {} marked PAID", orderId);
+                log.info("PaymentReceived (legacy) -> order {} marked PAID", orderId);
             } else if (data.containsKey("reason")) {
                 orderService.updateOrderStatus(orderId, OrderStatus.PAYMENT_FAILED).block();
-                log.info("PaymentFailed -> order {} marked PAYMENT_FAILED", orderId);
+                log.info("PaymentFailed (legacy) -> order {} marked PAYMENT_FAILED", orderId);
+            } else if (data.containsKey("stripePaymentIntentId")) {
+                log.info("PaymentIntentCreated for order {} — awaiting completion", orderId);
             } else {
                 log.warn("Unknown payment event type: {}", message);
             }

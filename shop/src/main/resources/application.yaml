@@ -35,6 +35,9 @@ spring:
 springdoc:
   paths-to-match: /api/shop/**,/api/greetings/**
 
+payment-service:
+  uri: ${PAYMENT_SERVICE_URI:http://localhost:8062}
+
 app:
   outbox:
     poll-interval: 5000

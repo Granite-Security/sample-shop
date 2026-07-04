@@ -6,18 +6,19 @@ export function setAccessToken(token: string | null) {
   accessToken = token;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, options: RequestInit & { skipAuth?: boolean } = {}): Promise<T> {
+  const { skipAuth, ...fetchOpts } = options;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
+    ...(fetchOpts.headers as Record<string, string>),
   };
 
-  if (accessToken) {
+  if (accessToken && !skipAuth) {
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
   const res = await fetch(`${BASE}${path}`, {
-    ...options,
+    ...fetchOpts,
     headers,
   });
 
@@ -30,7 +31,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const data = await res.json();
   if (!res.ok) {
     const msg = data.detail ?? data.title ?? res.statusText;
-    throw new Error(msg);
+    throw new Error(`[${res.status}] ${msg}`);
   }
   return data;
 }
@@ -38,6 +39,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 import type {
   Product, Category, OrderResponse, PagedResult,
   CreateProductRequest, CreateCategoryRequest, PlaceOrderRequest,
+  CreatePaymentIntentResponse
 } from './types';
 
 export const api = {
@@ -79,4 +81,10 @@ export const api = {
 
   placeOrder: (body: PlaceOrderRequest) =>
     request<OrderResponse>('/api/shop/orders', { method: 'POST', body: JSON.stringify(body) }),
+
+  getPaymentIntent: (orderId: number) =>
+    request<CreatePaymentIntentResponse>(`/api/payments/intent/${orderId}`, { skipAuth: true }),
+
+  syncPaymentIntent: (orderId: number) =>
+    request<CreatePaymentIntentResponse>(`/api/payments/intent/${orderId}/sync`, { method: 'POST', skipAuth: true }),
 };

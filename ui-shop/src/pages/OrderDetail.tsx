@@ -1,35 +1,90 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router';
 import { api } from '../api';
-import type { OrderResponse } from '../types';
+import type { OrderResponse, CreatePaymentIntentResponse } from '../types';
+
+const POLL_INTERVAL = 5000;
 
 export default function OrderDetail() {
   const { id } = useParams();
   const [order, setOrder] = useState<OrderResponse | null>(null);
+  const [payment, setPayment] = useState<CreatePaymentIntentResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!id) return;
-    api.getOrder(Number(id))
-      .then(setOrder)
-      .catch(() => setOrder(null))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+
+    const fetch = () => {
+      const orderId = Number(id);
+      Promise.all([
+        api.getOrder(orderId),
+        api.getPaymentIntent(orderId).catch(() => null),
+      ])
+        .then(([o, p]) => {
+          if (cancelled) return;
+          setOrder(o);
+          setPayment(p);
+          setLoading(false);
+          if (o.status !== 'PENDING' && o.status !== 'PROCESSING') {
+            if (pollRef.current) {
+              clearInterval(pollRef.current);
+              pollRef.current = null;
+            }
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setOrder(null);
+          setLoading(false);
+        });
+    };
+
+    fetch();
+    pollRef.current = setInterval(fetch, POLL_INTERVAL);
+
+    return () => {
+      cancelled = true;
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
   }, [id]);
 
-  if (loading) return <div className="page"><p>Loading...</p></div>;
+  if (loading) return (
+    <div className="page" style={{ textAlign: 'center', paddingTop: '3rem' }}>
+      <div className="spinner" style={{ margin: '0 auto 1rem' }} />
+      <p>Loading order...</p>
+    </div>
+  );
   if (!order) return <div className="page"><p>Order not found.</p></div>;
+
+  const statusClass = `status status-${order.status.toLowerCase()}`;
 
   return (
     <div className="page order-detail-page">
-      <h1>Order #{order.id}</h1>
-      <p>Status: <span className={`status status-${order.status.toLowerCase()}`}>{order.status}</span></p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <h1 style={{ margin: 0 }}>Order #{order.id}</h1>
+        <span className={statusClass}>{order.status}</span>
+        {(order.status === 'PENDING' || order.status === 'PROCESSING') && (
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            (refreshing…)
+          </span>
+        )}
+      </div>
+      {payment && (
+        <p>
+          Payment: <span className={`status status-${payment.status.toLowerCase()}`}>{payment.status}</span>
+        </p>
+      )}
       <p>Placed: {new Date(order.createdAt).toLocaleString()}</p>
       <p>Total: <strong>${Number(order.total).toFixed(2)}</strong></p>
-      <h2>Items</h2>
+      <h2 style={{ marginTop: 24 }}>Items</h2>
       <table className="order-items-table">
         <thead>
           <tr>
-            <th>Product ID</th>
+            <th>Product</th>
             <th>Qty</th>
             <th>Unit Price</th>
             <th>Subtotal</th>
@@ -38,7 +93,7 @@ export default function OrderDetail() {
         <tbody>
           {order.items.map(item => (
             <tr key={item.id}>
-              <td>{item.productId}</td>
+              <td><Link to={`/catalog/${item.productId}`}>{item.productName}</Link></td>
               <td>{item.quantity}</td>
               <td>${Number(item.unitPrice).toFixed(2)}</td>
               <td>${(Number(item.unitPrice) * item.quantity).toFixed(2)}</td>
