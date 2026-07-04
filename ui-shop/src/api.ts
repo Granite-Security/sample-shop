@@ -6,18 +6,19 @@ export function setAccessToken(token: string | null) {
   accessToken = token;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(path: string, options: RequestInit & { skipAuth?: boolean } = {}): Promise<T> {
+  const { skipAuth, ...fetchOpts } = options;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
+    ...(fetchOpts.headers as Record<string, string>),
   };
 
-  if (accessToken) {
+  if (accessToken && !skipAuth) {
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
   const res = await fetch(`${BASE}${path}`, {
-    ...options,
+    ...fetchOpts,
     headers,
   });
 
@@ -82,8 +83,8 @@ export const api = {
     request<OrderResponse>('/api/shop/orders', { method: 'POST', body: JSON.stringify(body) }),
 
   getPaymentIntent: (orderId: number) =>
-    request<CreatePaymentIntentResponse>(`/api/payments/intent/${orderId}`),
+    request<CreatePaymentIntentResponse>(`/api/payments/intent/${orderId}`, { skipAuth: true }),
 
   syncPaymentIntent: (orderId: number) =>
-    request<CreatePaymentIntentResponse>(`/api/payments/intent/${orderId}/sync`, { method: 'POST' }),
+    request<CreatePaymentIntentResponse>(`/api/payments/intent/${orderId}/sync`, { method: 'POST', skipAuth: true }),
 };

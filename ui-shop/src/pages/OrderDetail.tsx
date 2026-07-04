@@ -1,13 +1,14 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router';
 import { api } from '../api';
-import type { OrderResponse } from '../types';
+import type { OrderResponse, CreatePaymentIntentResponse } from '../types';
 
 const POLL_INTERVAL = 5000;
 
 export default function OrderDetail() {
   const { id } = useParams();
   const [order, setOrder] = useState<OrderResponse | null>(null);
+  const [payment, setPayment] = useState<CreatePaymentIntentResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -16,10 +17,15 @@ export default function OrderDetail() {
     let cancelled = false;
 
     const fetch = () => {
-      api.getOrder(Number(id))
-        .then(o => {
+      const orderId = Number(id);
+      Promise.all([
+        api.getOrder(orderId),
+        api.getPaymentIntent(orderId).catch(() => null),
+      ])
+        .then(([o, p]) => {
           if (cancelled) return;
           setOrder(o);
+          setPayment(p);
           setLoading(false);
           if (o.status !== 'PENDING' && o.status !== 'PROCESSING') {
             if (pollRef.current) {
@@ -67,6 +73,11 @@ export default function OrderDetail() {
           </span>
         )}
       </div>
+      {payment && (
+        <p>
+          Payment: <span className={`status status-${payment.status.toLowerCase()}`}>{payment.status}</span>
+        </p>
+      )}
       <p>Placed: {new Date(order.createdAt).toLocaleString()}</p>
       <p>Total: <strong>${Number(order.total).toFixed(2)}</strong></p>
       <h2 style={{ marginTop: 24 }}>Items</h2>

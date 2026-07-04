@@ -70,6 +70,7 @@ export default function Checkout() {
   const [step, setStep] = useState<Step>('review');
   const [error, setError] = useState('');
   const [order, setOrder] = useState<OrderResponse | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = useCallback(() => {
@@ -100,14 +101,13 @@ export default function Checkout() {
       } catch (err: unknown) {
         const isNotFound = err instanceof Error && err.message.includes('404');
         if (isNotFound) {
-          // 404 expected — payment record not yet created by async consumer
           if (Date.now() - startedAt > POLL_TIMEOUT) {
             stopPolling();
             setError('Payment intent not created after timeout');
             setStep('failed');
             return;
           }
-          return; // continue polling
+          return;
         }
         consecutiveErrors++;
         if (consecutiveErrors >= MAX_RETRIES) {
@@ -119,12 +119,16 @@ export default function Checkout() {
     }, POLL_INTERVAL);
   }, [stopPolling]);
 
-  const pollOrderStatus = useCallback((orderId: number, startedAt: number) => {
+  const pollOrderStatus = useCallback((orderId: number) => {
     if (pollRef.current) return;
     pollRef.current = setInterval(async () => {
       try {
-        const updated = await api.getOrder(orderId);
-        if (updated.status !== 'PENDING') {
+        const [updated, payment] = await Promise.all([
+          api.getOrder(orderId),
+          api.getPaymentIntent(orderId),
+        ]);
+        if (payment) setPaymentStatus(payment.status);
+        if (updated && updated.status && updated.status !== 'PENDING') {
           stopPolling();
           setOrder(updated);
           if (updated.status === 'PAID') {
@@ -132,11 +136,9 @@ export default function Checkout() {
           } else {
             setStep('failed');
           }
-        } else if (Date.now() - startedAt > POLL_TIMEOUT) {
-          stopPolling();
-          setStep('done');
         }
-      } catch {
+      } catch (err) {
+        console.error('pollOrderStatus error', err);
         stopPolling();
       }
     }, POLL_INTERVAL);
@@ -161,7 +163,16 @@ export default function Checkout() {
     );
   }
 
-  if (step === 'done' && order) {
+  if (step === 'done') {
+    if (!order) {
+      return (
+        <div className="page">
+          <h1>Order Placed!</h1>
+          <p>Your payment was confirmed. Your order is being processed.</p>
+          <Link to="/orders" className="btn" style={{ marginTop: 16 }}>View Orders</Link>
+        </div>
+      );
+    }
     return (
       <div className="page">
         <h1>Order Placed!</h1>
@@ -175,7 +186,16 @@ export default function Checkout() {
     );
   }
 
-  if (step === 'failed' && order) {
+  if (step === 'failed') {
+    if (!order) {
+      return (
+        <div className="page">
+          <h1>Payment Failed</h1>
+          <p>The payment could not be completed. Please try again or contact support.</p>
+          <Link to="/cart" className="btn" style={{ marginTop: 16 }}>Back to Cart</Link>
+        </div>
+      );
+    }
     return (
       <div className="page">
         <h1>Payment Failed</h1>
@@ -218,12 +238,12 @@ export default function Checkout() {
   const handlePaymentConfirmed = useCallback(async () => {
     if (!order) return;
     setStep('confirming');
-    pollOrderStatus(order.id, Date.now());
     try {
       await api.syncPaymentIntent(order.id);
     } catch (e) {
       console.error('Payment sync failed', e);
     }
+    pollOrderStatus(order.id);
   }, [order, pollOrderStatus]);
 
   return (
@@ -233,10 +253,20 @@ export default function Checkout() {
       {step === 'confirming' && order && (
         <div style={{ textAlign: 'center', padding: '2rem 0' }}>
           <div className="spinner" style={{ margin: '0 auto 1rem' }} />
-          <p>Payment processing…</p>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 8 }}>
-            Order #{order.id} — confirming with Stripe
-          </p>
+          <p>Payment confirmed — finalizing your order…</p>
+          {paymentStatus && (
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 8 }}>
+              Payment: <span className={`status status-${paymentStatus.toLowerCase()}`}>{paymentStatus}</span>
+              &nbsp;— Order: <span className={`status status-${order.status.toLowerCase()}`}>{order.status}</span>
+            </p>
+          )}
+        </div>
+      )}
+
+      {step === 'confirming' && !order && (
+        <div style={{ textAlign: 'center', padding: '2rem 0' }}>
+          <div className="spinner" style={{ margin: '0 auto 1rem' }} />
+          <p>Payment confirmed — finalizing your order…</p>
         </div>
       )}
 

@@ -11,7 +11,7 @@ public interface CustomerOrderRepository extends ReactiveCrudRepository<Customer
     Flux<CustomerOrder> findByUsername(String username);
     Mono<Long> countByUsername(String username);
 
-    @Query("SELECT * FROM customer_order WHERE username = :username ORDER BY id LIMIT :size OFFSET :offset")
+    @Query("SELECT * FROM customer_order WHERE username = :username ORDER BY id DESC LIMIT :size OFFSET :offset")
     Flux<CustomerOrder> findByUsernamePaged(@Param("username") String username,
                                             @Param("size") int size,
                                             @Param("offset") long offset);
