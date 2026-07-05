@@ -147,12 +147,11 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       - MICROSERVICES_GREETINGS_URI=http://greetings:8060
-      - GREETINGS_MICROSERVICE=http://greetings:8060
-      - SHOP_MICROSERVICE=http://shop:8061
-      - PAYMENT_MICROSERVICE=http://payment:8062
+      - MICROSERVICES_SHOP_URI=http://shop:8061
+      - MICROSERVICES_PAYMENT_URI=http://payment:8062
       - MICROSERVICES_PROFILE_URI=http://profile:8064
       - MICROSERVICES_DELIVERY_URI=http://delivery:8063
-      - AUTH_SERVER_MICROSERVICE=http://auth-server:9090
+      - MICROSERVICES_AUTH_SERVER_URI=http://auth-server:9090
     depends_on:
       auth-server:
         condition: service_healthy
