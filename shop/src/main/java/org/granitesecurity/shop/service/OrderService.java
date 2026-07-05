@@ -90,7 +90,11 @@ public class OrderService {
             items.add(new OrderItem(null, line.productId(), line.quantity(), product.getPrice()));
         }
 
-        CustomerOrder order = new CustomerOrder(username, OrderStatus.PENDING.name(), total);
+        PlaceOrderRequest.DeliveryAddress addr = request.address();
+        String addrLine2 = addr.addressLine2() != null ? addr.addressLine2() : "";
+        String state = addr.state() != null ? addr.state() : "";
+        CustomerOrder order = new CustomerOrder(username, OrderStatus.PENDING.name(), total,
+                addr.recipientName(), addr.addressLine1(), addrLine2, addr.city(), state, addr.zipCode(), addr.country());
         return Mono.just(new OrderContext(order, items, productMap));
     }
 
@@ -145,12 +149,22 @@ public class OrderService {
             return m;
         }).toList();
 
+        Map<String, Object> addressMap = new LinkedHashMap<>();
+        addressMap.put("recipientName", order.getRecipientName());
+        addressMap.put("addressLine1", order.getAddressLine1());
+        addressMap.put("addressLine2", order.getAddressLine2());
+        addressMap.put("city", order.getCity());
+        addressMap.put("state", order.getState());
+        addressMap.put("zipCode", order.getZipCode());
+        addressMap.put("country", order.getCountry());
+
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("orderId", order.getId());
         payload.put("username", order.getUsername());
         payload.put("items", itemList);
         payload.put("total", order.getTotal());
         payload.put("orderedAt", Instant.now().toString());
+        payload.put("address", addressMap);
         return payload;
     }
 
@@ -231,7 +245,16 @@ public class OrderService {
                 order.getTotal(),
                 order.getCreatedAt(),
                 items,
-                clientSecret
+                clientSecret,
+                new OrderResponse.DeliveryAddress(
+                        order.getRecipientName(),
+                        order.getAddressLine1(),
+                        order.getAddressLine2(),
+                        order.getCity(),
+                        order.getState(),
+                        order.getZipCode(),
+                        order.getCountry()
+                )
         );
     }
 

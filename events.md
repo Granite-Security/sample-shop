@@ -11,6 +11,7 @@
 | orders | events | `orders.events` |
 | payments | events | `payments.events` |
 | shipments | events | `shipments.events` |
+| delivery | events | `delivery.events` |
 
 ## Event envelope
 
@@ -177,6 +178,50 @@ Every event published to Kafka uses the following envelope stored as Avro in the
 }
 ```
 
+---
+
+### `delivery.events`
+
+| Event | Key | Partitioning | Retention | Payload (Avro) |
+|---|---|---|---|---|
+| `DeliveryDispatched` | orderId (string) | hash(key) → partition | 7 days | [DeliveryDispatched](#deliverydispatched) |
+| `DeliveryDelivered` | orderId (string) | hash(key) → partition | 7 days | [DeliveryDelivered](#deliverydelivered) |
+
+#### DeliveryDispatched
+
+```avro
+{
+  "type": "record",
+  "name": "DeliveryDispatched",
+  "namespace": "com.granitesecurity.event.delivery",
+  "fields": [
+    { "name": "orderId",      "type": "string", "doc": "Order UUID" },
+    { "name": "deliveryId",   "type": "string", "doc": "Delivery tracking UUID" },
+    { "name": "status",       "type": "string", "doc": "DISPATCHED" },
+    { "name": "carrier",      "type": "string", "doc": "Carrier name (e.g. UPS, FedEx)" },
+    { "name": "dispatchedAt", "type": "string", "doc": "ISO-8601 timestamp" }
+  ]
+}
+```
+
+#### DeliveryDelivered
+
+```avro
+{
+  "type": "record",
+  "name": "DeliveryDelivered",
+  "namespace": "com.granitesecurity.event.delivery",
+  "fields": [
+    { "name": "orderId",    "type": "string", "doc": "Order UUID" },
+    { "name": "deliveryId", "type": "string", "doc": "Delivery tracking UUID" },
+    { "name": "status",     "type": "string", "doc": "DELIVERED" },
+    { "name": "deliveredAt","type": "string", "doc": "ISO-8601 timestamp" }
+  ]
+}
+```
+
+---
+
 ## Schema Registry subjects
 
 Subjects follow the TopicNameStrategy by default:
@@ -185,7 +230,7 @@ Subjects follow the TopicNameStrategy by default:
 |---|---|
 | `orders.events-value` | EventEnvelope |
 | `payments.events-value` | EventEnvelope |
-| `shipments.events-value` | EventEnvelope |
+| `delivery.events-value` | EventEnvelope |
 
 Nested `data` payloads are **not** registered independently — they are embedded bytes inside the envelope. Services documenting their wire-format in this file is sufficient until Phase 3.3 (shared events module) decides on registry-vs-codegen.
 

@@ -12,6 +12,7 @@ export default function Header() {
       <nav className="nav">
         <Link to="/catalog">Catalog</Link>
         {isAuthenticated && <Link to="/orders">Orders</Link>}
+        {isAuthenticated && <Link to="/addresses">Addresses</Link>}
         {isAdmin && <Link to="/admin">Admin</Link>}
       </nav>
       <div className="header-actions">

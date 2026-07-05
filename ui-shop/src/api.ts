@@ -39,7 +39,8 @@ async function request<T>(path: string, options: RequestInit & { skipAuth?: bool
 import type {
   Product, Category, OrderResponse, PagedResult,
   CreateProductRequest, CreateCategoryRequest, PlaceOrderRequest,
-  CreatePaymentIntentResponse
+  CreatePaymentIntentResponse, ProfileResponse, UpdateProfileRequest,
+  AddressResponse, AddressRequest
 } from './types';
 
 export const api = {
@@ -87,4 +88,22 @@ export const api = {
 
   syncPaymentIntent: (orderId: number) =>
     request<CreatePaymentIntentResponse>(`/api/payments/intent/${orderId}/sync`, { method: 'POST', skipAuth: true }),
+
+  getProfile: () =>
+    request<ProfileResponse>('/api/profiles/me'),
+
+  updateProfile: (body: UpdateProfileRequest) =>
+    request<ProfileResponse>('/api/profiles/me', { method: 'PUT', body: JSON.stringify(body) }),
+
+  getAddresses: () =>
+    request<AddressResponse[]>('/api/profiles/me/addresses'),
+
+  createAddress: (body: AddressRequest) =>
+    request<AddressResponse>('/api/profiles/me/addresses', { method: 'POST', body: JSON.stringify(body) }),
+
+  updateAddress: (id: number, body: AddressRequest) =>
+    request<AddressResponse>(`/api/profiles/me/addresses/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+
+  deleteAddress: (id: number) =>
+    request<void>(`/api/profiles/me/addresses/${id}`, { method: 'DELETE' }),
 };

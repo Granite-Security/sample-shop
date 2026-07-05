@@ -19,7 +19,7 @@ services:
       - 'POSTGRES_PASSWORD=secret'
       - 'POSTGRES_USER=myuser'
     ports:
-      - ':5433:5432'
+      - '5433:5432'
 
   payment-postgres:
     image: 'postgres:latest'
@@ -29,7 +29,27 @@ services:
       - 'POSTGRES_PASSWORD=secret'
       - 'POSTGRES_USER=myuser'
     ports:
-      - ':5434:5432'
+      - '5434:5432'
+
+  delivery-postgres:
+    image: 'postgres:latest'
+    container_name: 'delivery-postgres'
+    environment:
+      - 'POSTGRES_DB=deliverydb'
+      - 'POSTGRES_PASSWORD=secret'
+      - 'POSTGRES_USER=myuser'
+    ports:
+      - '5435:5432'
+
+  profile-postgres:
+    image: 'postgres:latest'
+    container_name: 'profile-postgres'
+    environment:
+      - 'POSTGRES_DB=profiledb'
+      - 'POSTGRES_PASSWORD=secret'
+      - 'POSTGRES_USER=myuser'
+    ports:
+      - '5436:5432'
 
   kafka:
     image: confluentinc/cp-kafka:latest
@@ -130,6 +150,7 @@ services:
       - GREETINGS_MICROSERVICE=http://greetings:8060
       - SHOP_MICROSERVICE=http://shop:8061
       - PAYMENT_MICROSERVICE=http://payment:8062
+      - MICROSERVICES_PROFILE_URI=http://profile:8064
       - AUTH_SERVER_MICROSERVICE=http://auth-server:9090
     depends_on:
       auth-server:
@@ -203,6 +224,30 @@ services:
       gateway:
         condition: service_started
       payment-postgres:
+        condition: service_started
+    restart: on-failure
+
+  profile:
+    build:
+      context: ./profile
+    container_name: profile
+    ports:
+      - "8064:8064"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - PROFILE_SERVER_PORT=8064
+      - PROFILE_R2DBC_URL=r2dbc:postgresql://profile-postgres:5432/profiledb
+      - PROFILE_R2DBC_USERNAME=myuser
+      - PROFILE_R2DBC_PASSWORD=secret
+      - PROFILE_JDBC_URL=jdbc:postgresql://profile-postgres:5432/profiledb
+      - PROFILE_JDBC_USERNAME=myuser
+      - PROFILE_JDBC_PASSWORD=secret
+      - AUTH_ISSUER_URI=http://gateway:8080/auth
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
+    depends_on:
+      gateway:
+        condition: service_started
+      profile-postgres:
         condition: service_started
     restart: on-failure
 

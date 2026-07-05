@@ -80,6 +80,15 @@ export default function OrderDetail() {
       )}
       <p>Placed: {new Date(order.createdAt).toLocaleString()}</p>
       <p>Total: <strong>${Number(order.total).toFixed(2)}</strong></p>
+      {order.address && (
+        <>
+          <h3 style={{ marginTop: 24 }}>Delivery Address</h3>
+          <p>{order.address.recipientName}</p>
+          <p>{order.address.addressLine1}{order.address.addressLine2 ? `, ${order.address.addressLine2}` : ''}</p>
+          <p>{order.address.city}{order.address.state ? `, ${order.address.state}` : ''} {order.address.zipCode}</p>
+          <p>{order.address.country}</p>
+        </>
+      )}
       <h2 style={{ marginTop: 24 }}>Items</h2>
       <table className="order-items-table">
         <thead>
