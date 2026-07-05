@@ -171,7 +171,9 @@ h3 { font-size: 1.1rem; }
 .status-pending { background: #fef3c7; color: #92400e; }
 .status-paid { background: #dbeafe; color: #1e40af; }
 .status-shipped { background: #e0e7ff; color: #3730a3; }
+.status-dispatched { background: #e0e7ff; color: #3730a3; }
 .status-delivered { background: #d1fae5; color: #065f46; }
+.status-failed { background: #fee2e2; color: #991b1b; }
 .status-cancelled { background: #fee2e2; color: #991b1b; }
 .status-payment_failed { background: #fee2e2; color: #991b1b; }
 .status-returned { background: #f3e8ff; color: #6b21a8; }

@@ -12,6 +12,7 @@ interface AuthContext {
   user: User | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isManager: boolean;
   logout: () => void;
   loading: boolean;
 }
@@ -56,9 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAuthenticated = user !== null;
   const roles = (user?.claims?.roles as string[]) ?? [];
   const isAdmin = roles.some(r => r === 'ROLE_ADMIN' || r === 'ADMIN');
+  const isManager = roles.some(r => r === 'MANAGER');
 
   return (
-    <AuthCtx.Provider value={{ user, isAuthenticated, isAdmin, logout, loading }}>
+    <AuthCtx.Provider value={{ user, isAuthenticated, isAdmin, isManager, logout, loading }}>
       {children}
     </AuthCtx.Provider>
   );

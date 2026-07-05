@@ -172,7 +172,7 @@ public class OrderService {
         long offset = (long) page * size;
         Mono<Long> count = customerOrderRepository.countByUsername(username);
         Flux<OrderResponse> items = customerOrderRepository.findByUsernamePaged(username, size, offset)
-                .flatMap(this::enrichOrder);
+                .flatMapSequential(this::enrichOrder);
         return count.zipWith(items.collectList())
                 .map(tuple -> new PagedResult<>(tuple.getT2(), tuple.getT1(), page, size));
     }

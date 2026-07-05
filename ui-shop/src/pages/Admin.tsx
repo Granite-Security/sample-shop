@@ -1,7 +1,8 @@
 import { useAuth } from '../auth';
+import { Link } from 'react-router';
 
 export default function Admin() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isManager } = useAuth();
 
   if (!isAdmin) {
     return (
@@ -44,6 +45,9 @@ export default function Admin() {
           <span className="status status-paid">Products</span>
           <span className="status status-paid">Categories</span>
           <span className="status status-paid">Orders</span>
+          {(isAdmin || isManager) && (
+            <Link to="/admin/deliveries" className="btn" style={{ textDecoration: 'none' }}>Deliveries</Link>
+          )}
           <span className="status status-pending">Users (coming soon)</span>
         </div>
       </section>

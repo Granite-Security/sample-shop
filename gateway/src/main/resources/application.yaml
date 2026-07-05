@@ -29,5 +29,7 @@ microservices:
     uri: ${AUTH_SERVER_MICROSERVICE:http://localhost:9090}
   profile:
     uri: ${PROFILE_MICROSERVICE:http://localhost:8064}
+  delivery:
+    uri: ${DELIVERY_MICROSERVICE:http://localhost:8063}
   spa:
     uri: ${SPA_MICROSERVICE:http://localhost:5173}

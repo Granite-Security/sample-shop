@@ -1,8 +1,45 @@
+server:
+  port: ${DELIVERY_SERVER_PORT:8063}
+
 spring:
   application:
     name: delivery
+
+  docker:
+    compose:
+      enabled: false
+
+  r2dbc:
+    url: ${DELIVERY_R2DBC_URL:r2dbc:postgresql://localhost:5435/deliverydb}
+    username: ${DELIVERY_R2DBC_USERNAME:myuser}
+    password: ${DELIVERY_R2DBC_PASSWORD:secret}
+
+  liquibase:
+    url: ${DELIVERY_JDBC_URL:jdbc:postgresql://localhost:5435/deliverydb}
+    user: ${DELIVERY_JDBC_USERNAME:myuser}
+    password: ${DELIVERY_JDBC_PASSWORD:secret}
+    change-log: classpath:/db/changelog/db.changelog-master.yaml
+
   security:
     oauth2:
       resourceserver:
         jwt:
           issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:${AUTH_ISSUER_URI:http://localhost:8080/auth}}
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+
+app:
+  outbox:
+    poll-interval: 5000

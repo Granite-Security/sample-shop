@@ -123,3 +123,28 @@ export interface CartItem {
   product: Product;
   quantity: number;
 }
+
+export interface TrackingEvent {
+  status: string;
+  timestamp: string;
+  description: string;
+}
+
+export interface DeliveryResponse {
+  id: string;
+  orderId: number;
+  status: string;
+  paymentStatus: string;
+  items: string | null;
+  recipientName: string;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  state: string | null;
+  zipCode: string;
+  country: string;
+  estimatedDeliveryDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+  events: TrackingEvent[];
+}

@@ -20,6 +20,7 @@ async function request<T>(path: string, options: RequestInit & { skipAuth?: bool
   const res = await fetch(`${BASE}${path}`, {
     ...fetchOpts,
     headers,
+    cache: 'no-store',
   });
 
   if (res.status === 204) return undefined as T;
@@ -40,7 +41,7 @@ import type {
   Product, Category, OrderResponse, PagedResult,
   CreateProductRequest, CreateCategoryRequest, PlaceOrderRequest,
   CreatePaymentIntentResponse, ProfileResponse, UpdateProfileRequest,
-  AddressResponse, AddressRequest
+  AddressResponse, AddressRequest, DeliveryResponse
 } from './types';
 
 export const api = {
@@ -106,4 +107,16 @@ export const api = {
 
   deleteAddress: (id: number) =>
     request<void>(`/api/profiles/me/addresses/${id}`, { method: 'DELETE' }),
+
+  getDelivery: (orderId: number) =>
+    request<DeliveryResponse>(`/api/delivery/${orderId}`).catch(() => null),
+
+  getDeliveries: (params = '') =>
+    request<DeliveryResponse[]>(`/api/delivery${params}`).catch(() => []),
+
+  updateDeliveryStatus: (orderId: number, status: string, description: string) =>
+    request<DeliveryResponse>(`/api/delivery/${orderId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status, description }),
+    }),
 };
