@@ -39,11 +39,6 @@ spec:
                 configMapKeyRef:
                   name: granite-config
                   key: AUTH_SERVER_ISSUER
-            - name: APP_LOGIN_PAGE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: granite-config
-                  key: APP_LOGIN_PAGE_URL
             - name: OIDC_CLIENT_SECRET_ENCODED
               valueFrom:
                 secretKeyRef:

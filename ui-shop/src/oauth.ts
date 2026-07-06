@@ -1,16 +1,18 @@
 import { UserManager } from 'oidc-client-ts';
 
 const origin = window.location.origin;
+const authority = window.__ENV__?.OIDC_AUTHORITY ?? 'http://localhost:8080/auth';
+const clientId = window.__ENV__?.OIDC_CLIENT_ID ?? 'spa-client';
 
 export const userManager = new UserManager({
-  authority: 'http://localhost:8080/auth',
-  client_id: 'spa-client',
+  authority,
+  client_id: clientId,
   redirect_uri: origin + '/callback',
   scope: 'openid profile email',
   response_type: 'code',
   automaticSilentRenew: true,
   metadata: {
-    issuer: 'http://localhost:8080/auth',
+    issuer: authority,
     authorization_endpoint: origin + '/auth/oauth2/authorize',
     token_endpoint: origin + '/auth/oauth2/token',
     jwks_uri: origin + '/auth/oauth2/jwks',
