@@ -52,7 +52,6 @@ data:
   # ── JWT issuer (default — override per environment) ──
   SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "http://gateway:8080/auth"
   AUTH_SERVER_ISSUER: "http://gateway:8080/auth"
-  APP_LOGIN_PAGE_URL: "http://localhost:8080/auth/login"
 
   # ── ui-shop runtime config (SPA reads these via window.__ENV__) ──
   # OIDC_AUTHORITY must equal the issuer above; overlays keep them in lockstep.

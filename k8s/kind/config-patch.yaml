@@ -12,7 +12,6 @@ data:
   # The iss string stays byte-for-byte identical on every side.
   AUTH_SERVER_ISSUER: "http://gateway:8080/auth"
   SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "http://gateway:8080/auth"
-  APP_LOGIN_PAGE_URL: "http://gateway:8080/auth/login"
   # SPA + OIDC redirect targets, aligned to the shared host (Correction 2).
   # SPA sends redirect_uri = window.location.origin + '/callback'.
   # Access via http://gateway:8080 → redirect_uri = http://gateway:8080/callback.
