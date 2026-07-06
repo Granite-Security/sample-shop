@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: granite-config
+data:
+  # ── Auth Server ──────────────────────────────────────
+  AUTH_SERVER_PORT: "9090"
+  OIDC_CLIENT_REDIRECT_URI: "http://localhost:8080/login/oauth2/code/oidc-client"
+  OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI: "http://localhost:8080/"
+  # SPA (public PKCE client) callback — overlays override the host per environment.
+  SPA_CLIENT_REDIRECT_URI: "http://localhost:8080/callback"
+  SPA_CLIENT_POST_LOGOUT_REDIRECT_URI: "http://localhost:8080/"
+
+  # ── Gateway ──────────────────────────────────────────
+  GATEWAY_PORT: "8080"
+  MICROSERVICES_AUTH_SERVER_URI: "http://auth-server:9090"
+  MICROSERVICES_GREETINGS_URI: "http://greetings:8060"
+  MICROSERVICES_SHOP_URI: "http://shop:8061"
+  MICROSERVICES_PAYMENT_URI: "http://payment:8062"
+  MICROSERVICES_PROFILE_URI: "http://profile:8064"
+  MICROSERVICES_DELIVERY_URI: "http://delivery:8063"
+  MICROSERVICES_SPA_URI: "http://ui-shop:80"
+
+  # ── Greetings ────────────────────────────────────────
+  GREETINGS_PORT: "8060"
+
+  # ── Shop ─────────────────────────────────────────────
+  SHOP_PORT: "8061"
+  SHOP_R2DBC_URL: "r2dbc:postgresql://postgres-shop:5432/shopdb"
+  SHOP_JDBC_URL: "jdbc:postgresql://postgres-shop:5432/shopdb"
+  PAYMENT_SERVICE_URI: "http://payment:8062"
+
+  # ── Payment ──────────────────────────────────────────
+  PAYMENT_PORT: "8062"
+  PAYMENT_R2DBC_URL: "r2dbc:postgresql://postgres-payment:5432/paymentdb"
+  PAYMENT_JDBC_URL: "jdbc:postgresql://postgres-payment:5432/paymentdb"
+  STRIPE_CURRENCY: "usd"
+
+  # ── Profile ──────────────────────────────────────────
+  PROFILE_PORT: "8064"
+  PROFILE_R2DBC_URL: "r2dbc:postgresql://postgres-profile:5432/profiledb"
+  PROFILE_JDBC_URL: "jdbc:postgresql://postgres-profile:5432/profiledb"
+
+  # ── Delivery ─────────────────────────────────────────
+  DELIVERY_PORT: "8063"
+  DELIVERY_R2DBC_URL: "r2dbc:postgresql://postgres-delivery:5432/deliverydb"
+  DELIVERY_JDBC_URL: "jdbc:postgresql://postgres-delivery:5432/deliverydb"
+
+  # ── Kafka ────────────────────────────────────────────
+  KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+
+  # ── JWT issuer (default — override per environment) ──
+  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "http://gateway:8080/auth"
+  AUTH_SERVER_ISSUER: "http://gateway:8080/auth"
+  APP_LOGIN_PAGE_URL: "http://localhost:8080/auth/login"
+
+  # ── ui-shop runtime config (SPA reads these via window.__ENV__) ──
+  # OIDC_AUTHORITY must equal the issuer above; overlays keep them in lockstep.
+  OIDC_AUTHORITY: "http://gateway:8080/auth"
+  OIDC_CLIENT_ID: "spa-client"

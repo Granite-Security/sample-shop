@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../auth';
 import { api } from '../api';
-import type { OrderResponse } from '../types';
+import type { OrderResponse, AddressResponse, DeliveryAddress } from '../types';
 import ErrorBoundary from '../components/ErrorBoundary';
 
 type Step = 'review' | 'placing' | 'waiting_payment' | 'payment' | 'confirming' | 'done' | 'failed' | 'error';
@@ -27,6 +27,7 @@ function PaymentForm({
   const stripe = useStripe();
   const elements = useElements();
   const [confirming, setConfirming] = useState(false);
+  const [elementReady, setElementReady] = useState(false);
 
   const handlePay = async () => {
     if (!stripe || !elements) return;
@@ -51,14 +52,14 @@ function PaymentForm({
 
   return (
     <div className="payment-form">
-      <PaymentElement />
+      <PaymentElement onReady={() => setElementReady(true)} />
       <button
         className="btn btn-primary"
         style={{ marginTop: 16, width: '100%' }}
-        disabled={!stripe || confirming}
+        disabled={!stripe || !elementReady || confirming}
         onClick={handlePay}
       >
-        {!stripe ? 'Loading payment form…' : confirming ? 'Processing…' : 'Pay Now'}
+        {!stripe || !elementReady ? 'Loading payment form…' : confirming ? 'Processing…' : 'Pay Now'}
       </button>
     </div>
   );
@@ -72,7 +73,18 @@ function CheckoutInner() {
   const [error, setError] = useState('');
   const [order, setOrder] = useState<OrderResponse | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+  const [addresses, setAddresses] = useState<AddressResponse[]>([]);
+  const [selectedAddress, setSelectedAddress] = useState<DeliveryAddress | null>(null);
+  const [showAddressForm, setShowAddressForm] = useState(false);
+  const [newAddress, setNewAddress] = useState<DeliveryAddress>({
+    recipientName: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '', country: '',
+  });
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const elementsOptions = useMemo(
+    () => order?.clientSecret ? { clientSecret: order.clientSecret } : null,
+    [order?.clientSecret],
+  );
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -149,12 +161,36 @@ function CheckoutInner() {
     return () => stopPolling();
   }, [stopPolling]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    api.getAddresses()
+      .then(addrs => {
+        setAddresses(addrs);
+        const def = addrs.find(a => a.isDefault) ?? addrs[0];
+        if (def) setSelectedAddress({
+          recipientName: def.recipientName,
+          addressLine1: def.addressLine1,
+          addressLine2: def.addressLine2 ?? undefined,
+          city: def.city,
+          state: def.state ?? undefined,
+          zipCode: def.zipCode,
+          country: def.country,
+        });
+      })
+      .catch(() => {});
+  }, [isAuthenticated]);
+
   const handlePlaceOrder = async () => {
+    if (!selectedAddress) {
+      setError('Please select a delivery address');
+      return;
+    }
     setStep('placing');
     setError('');
     try {
       const result = await api.placeOrder({
         items: items.map(i => ({ productId: i.product.id, quantity: i.quantity })),
+        address: selectedAddress,
       });
       setOrder(result);
       clearCart();
@@ -274,11 +310,76 @@ function CheckoutInner() {
                   </div>
                 ))}
               </div>
+              <h2>Delivery Address</h2>
+              {addresses.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                  {addresses.map(addr => (
+                    <label key={addr.id} style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 8, padding: 8,
+                      border: `1px solid ${selectedAddress?.addressLine1 === addr.addressLine1 && selectedAddress?.zipCode === addr.zipCode ? 'var(--primary)' : 'var(--border)'}`,
+                      borderRadius: 6, cursor: 'pointer', background: selectedAddress?.addressLine1 === addr.addressLine1 && selectedAddress?.zipCode === addr.zipCode ? 'var(--surface-hover)' : 'transparent',
+                    }}>
+                      <input
+                        type="radio"
+                        name="address"
+                        checked={selectedAddress?.addressLine1 === addr.addressLine1 && selectedAddress?.zipCode === addr.zipCode}
+                        onChange={() => setSelectedAddress({
+                          recipientName: addr.recipientName,
+                          addressLine1: addr.addressLine1,
+                          addressLine2: addr.addressLine2 ?? undefined,
+                          city: addr.city,
+                          state: addr.state ?? undefined,
+                          zipCode: addr.zipCode,
+                          country: addr.country,
+                        })}
+                        style={{ marginTop: 3 }}
+                      />
+                      <div>
+                        <strong>{addr.recipientName}</strong>
+                        {addr.label && <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 6 }}>({addr.label})</span>}
+                        <p style={{ margin: '2px 0', fontSize: '0.9rem' }}>{addr.addressLine1}</p>
+                        <p style={{ margin: '2px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                          {addr.city}{addr.state ? `, ${addr.state}` : ''} {addr.zipCode}, {addr.country}
+                        </p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {showAddressForm ? (
+                <div style={{ border: '1px solid var(--border)', padding: 12, borderRadius: 6, marginBottom: 12 }}>
+                  <h3 style={{ margin: '0 0 8px' }}>New Address</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <input placeholder="Recipient Name *" value={newAddress.recipientName} onChange={e => setNewAddress({ ...newAddress, recipientName: e.target.value })} />
+                    <input placeholder="Address Line 1 *" value={newAddress.addressLine1} onChange={e => setNewAddress({ ...newAddress, addressLine1: e.target.value })} style={{ gridColumn: '1 / -1' }} />
+                    <input placeholder="Address Line 2" value={newAddress.addressLine2 ?? ''} onChange={e => setNewAddress({ ...newAddress, addressLine2: e.target.value })} style={{ gridColumn: '1 / -1' }} />
+                    <input placeholder="City *" value={newAddress.city} onChange={e => setNewAddress({ ...newAddress, city: e.target.value })} />
+                    <input placeholder="State" value={newAddress.state ?? ''} onChange={e => setNewAddress({ ...newAddress, state: e.target.value })} />
+                    <input placeholder="ZIP Code *" value={newAddress.zipCode} onChange={e => setNewAddress({ ...newAddress, zipCode: e.target.value })} />
+                    <input placeholder="Country *" value={newAddress.country} onChange={e => setNewAddress({ ...newAddress, country: e.target.value })} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button className="btn btn-primary" onClick={() => { setSelectedAddress({ ...newAddress }); setShowAddressForm(false); }}>
+                      Use This Address
+                    </button>
+                    <button className="btn" onClick={() => setShowAddressForm(false)}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button className="btn" style={{ marginBottom: 12 }} onClick={() => setShowAddressForm(true)}>
+                  {addresses.length > 0 ? '+ Use a different address' : '+ Add delivery address'}
+                </button>
+              )}
+              {selectedAddress && (
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 12 }}>
+                  Shipping to: <strong>{selectedAddress.recipientName}</strong>, {selectedAddress.addressLine1}, {selectedAddress.city}, {selectedAddress.country}
+                </p>
+              )}
               <h2>Total: ${total.toFixed(2)}</h2>
               {error && <p className="error">{error}</p>}
               <button
                 className="btn btn-primary"
-                disabled={step === 'placing'}
+                disabled={step === 'placing' || !selectedAddress}
                 onClick={handlePlaceOrder}
               >
                 {step === 'placing' ? 'Placing Order...' : 'Place Order'}
@@ -291,8 +392,9 @@ function CheckoutInner() {
               </p>
               {error && <p className="error">{error}</p>}
               <Elements
+                key={order.id}
                 stripe={stripePromise}
-                options={{ clientSecret: order.clientSecret }}
+                options={elementsOptions}
               >
                 <PaymentForm
                   orderId={order.id}

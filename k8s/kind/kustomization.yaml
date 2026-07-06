@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../base
+
+patches:
+  # ui-shop nginx is the NodePort front door; gateway stays ClusterIP (Correction 3).
+  - path: ui-shop-patch.yaml
+  - path: config-patch.yaml

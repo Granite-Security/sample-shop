@@ -27,7 +27,13 @@ public class RouterConfig {
     @Value("${microservices.auth-server.uri:http://localhost:9090}")
     private String authServerUri;
 
-    @Value("${app.spa-origin:http://localhost:5173}")
+    @Value("${microservices.profile.uri:http://localhost:8064}")
+    private String profileServiceUri;
+
+    @Value("${microservices.delivery.uri:http://localhost:8063}")
+    private String deliveryServiceUri;
+
+    @Value("${microservices.spa.uri:http://localhost:5173}")
     private String spaOrigin;
 
     @Bean
@@ -49,6 +55,12 @@ public class RouterConfig {
                 .route("payment-service", r -> r
                         .path("/api/payments/**")
                         .uri(paymentServiceUri))
+                .route("profile-service", r -> r
+                        .path("/api/profiles/**")
+                        .uri(profileServiceUri))
+                .route("delivery-service", r -> r
+                        .path("/api/delivery/**")
+                        .uri(deliveryServiceUri))
                 .route("auth-server", r -> r
                         .path("/auth/**")
                         .uri(authServerUri))

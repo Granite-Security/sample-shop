@@ -88,6 +88,30 @@ public class EventConsumer {
         }
     }
 
+    @KafkaListener(topics = "delivery.events", groupId = "shop.delivery.events.consumer")
+    void onDeliveryEvent(String message) {
+        try {
+            Map<String, Object> data = MAPPER.readValue(message, Map.class);
+            Long orderId = parseOrderId(data.get("orderId"));
+            if (orderId == null) {
+                log.warn("Delivery event missing orderId: {}", message);
+                return;
+            }
+            String status = data.get("status") != null ? data.get("status").toString() : null;
+            if ("DISPATCHED".equals(status)) {
+                orderService.updateOrderStatus(orderId, OrderStatus.SHIPPED).block();
+                log.info("DeliveryDispatched -> order {} marked SHIPPED", orderId);
+            } else if ("DELIVERED".equals(status)) {
+                orderService.updateOrderStatus(orderId, OrderStatus.DELIVERED).block();
+                log.info("DeliveryDelivered -> order {} marked DELIVERED", orderId);
+            } else {
+                log.debug("Delivery status {} for order {}, no transition", status, orderId);
+            }
+        } catch (JsonProcessingException e) {
+            log.error("Failed to parse delivery event: {}", message, e);
+        }
+    }
+
     private static Long parseOrderId(Object value) {
         if (value instanceof Number n) {
             return n.longValue();

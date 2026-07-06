@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui-shop
+spec:
+  # ui-shop nginx is the single browser front door (Correction 3, Option A).
+  # It serves the SPA and proxies /api, /auth, /oauth2 to gateway:8080.
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30080

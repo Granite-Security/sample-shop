@@ -1,0 +1,77 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: profile
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: profile
+  template:
+    metadata:
+      labels:
+        app: profile
+    spec:
+      # Block startup until the OIDC discovery doc is served through the gateway
+      # (i.e. auth-server is up). Prevents CrashLoopBackOff on eager JWKS fetch (Correction 5).
+      initContainers:
+        - name: wait-for-issuer
+          image: curlimages/curl:latest
+          command:
+            - sh
+            - -c
+            - >
+              until curl -sf http://gateway:8080/auth/.well-known/openid-configuration;
+              do echo "waiting for auth issuer..."; sleep 3; done
+      containers:
+        - name: profile
+          image: granite-profile:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8064
+          env:
+            - name: SERVER_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: PROFILE_PORT
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+            - name: PROFILE_R2DBC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: PROFILE_R2DBC_URL
+            - name: PROFILE_R2DBC_USERNAME
+              value: "myuser"
+            - name: PROFILE_R2DBC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: db-myuser-password
+            - name: PROFILE_JDBC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: PROFILE_JDBC_URL
+            - name: PROFILE_JDBC_USERNAME
+              value: "myuser"
+            - name: PROFILE_JDBC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: db-myuser-password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: profile
+spec:
+  ports:
+    - port: 8064
+  selector:
+    app: profile

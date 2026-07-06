@@ -20,6 +20,7 @@ async function request<T>(path: string, options: RequestInit & { skipAuth?: bool
   const res = await fetch(`${BASE}${path}`, {
     ...fetchOpts,
     headers,
+    cache: 'no-store',
   });
 
   if (res.status === 204) return undefined as T;
@@ -39,7 +40,8 @@ async function request<T>(path: string, options: RequestInit & { skipAuth?: bool
 import type {
   Product, Category, OrderResponse, PagedResult,
   CreateProductRequest, CreateCategoryRequest, PlaceOrderRequest,
-  CreatePaymentIntentResponse
+  CreatePaymentIntentResponse, ProfileResponse, UpdateProfileRequest,
+  AddressResponse, AddressRequest, DeliveryResponse
 } from './types';
 
 export const api = {
@@ -87,4 +89,34 @@ export const api = {
 
   syncPaymentIntent: (orderId: number) =>
     request<CreatePaymentIntentResponse>(`/api/payments/intent/${orderId}/sync`, { method: 'POST', skipAuth: true }),
+
+  getProfile: () =>
+    request<ProfileResponse>('/api/profiles/me'),
+
+  updateProfile: (body: UpdateProfileRequest) =>
+    request<ProfileResponse>('/api/profiles/me', { method: 'PUT', body: JSON.stringify(body) }),
+
+  getAddresses: () =>
+    request<AddressResponse[]>('/api/profiles/me/addresses'),
+
+  createAddress: (body: AddressRequest) =>
+    request<AddressResponse>('/api/profiles/me/addresses', { method: 'POST', body: JSON.stringify(body) }),
+
+  updateAddress: (id: number, body: AddressRequest) =>
+    request<AddressResponse>(`/api/profiles/me/addresses/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+
+  deleteAddress: (id: number) =>
+    request<void>(`/api/profiles/me/addresses/${id}`, { method: 'DELETE' }),
+
+  getDelivery: (orderId: number) =>
+    request<DeliveryResponse>(`/api/delivery/${orderId}`).catch(() => null),
+
+  getDeliveries: (params = '') =>
+    request<DeliveryResponse[]>(`/api/delivery${params}`).catch(() => []),
+
+  updateDeliveryStatus: (orderId: number, status: string, description: string) =>
+    request<DeliveryResponse>(`/api/delivery/${orderId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status, description }),
+    }),
 };

@@ -30,6 +30,7 @@ export interface OrderResponse {
   createdAt: string;
   items: OrderItemResponse[];
   clientSecret?: string;
+  address?: DeliveryAddress;
 }
 
 export interface CreatePaymentIntentResponse {
@@ -64,11 +65,86 @@ export interface CreateCategoryRequest {
   description: string;
 }
 
+export interface ProfileResponse {
+  id: number;
+  username: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+}
+
+export interface UpdateProfileRequest {
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+export interface AddressResponse {
+  id: number;
+  label: string | null;
+  recipientName: string;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  state: string | null;
+  zipCode: string;
+  country: string;
+  isDefault: boolean;
+}
+
+export interface AddressRequest {
+  label?: string;
+  recipientName: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state?: string;
+  zipCode: string;
+  country: string;
+  isDefault?: boolean;
+}
+
+export interface DeliveryAddress {
+  recipientName: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state?: string;
+  zipCode: string;
+  country: string;
+}
+
 export interface PlaceOrderRequest {
   items: { productId: number; quantity: number }[];
+  address: DeliveryAddress;
 }
 
 export interface CartItem {
   product: Product;
   quantity: number;
+}
+
+export interface TrackingEvent {
+  status: string;
+  timestamp: string;
+  description: string;
+}
+
+export interface DeliveryResponse {
+  id: string;
+  orderId: number;
+  status: string;
+  paymentStatus: string;
+  items: string | null;
+  recipientName: string;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  state: string | null;
+  zipCode: string;
+  country: string;
+  estimatedDeliveryDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+  events: TrackingEvent[];
 }

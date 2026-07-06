@@ -43,7 +43,7 @@ public class ShopSec {
                                 "/api/shop/orders/**").authenticated()
                         .pathMatchers(HttpMethod.POST, "/api/shop/orders").authenticated()
                         .pathMatchers(HttpMethod.POST, "/api/shop/products",
-                                "/api/shop/categories").hasRole("ADMIN")
+                                "/api/shop/categories").hasAnyRole("ADMIN", "MANAGER")
                         .pathMatchers(HttpMethod.PUT, "/api/shop/products/**",
                                 "/api/shop/categories/**").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.DELETE, "/api/shop/products/**",

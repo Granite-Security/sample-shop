@@ -5,9 +5,28 @@ Microservices demo platform with OAuth2/OIDC authentication, Spring Cloud Gatewa
 ## Architecture
 
 ```
-Browser → Gateway (8080) ──┬── Auth Server (9090) ── PostgreSQL (5432)
-                            ├── Greetings (8060)
-                            └── Shop (8061) ────────── Shop PostgreSQL (5433)
+                            Stripe
+                              │
+                webhook ──────┤
+                              ▼
+Browser (5173) ── Gateway (8080) ──┬── Auth Server (9090) ── PostgreSQL (5432)
+     ui-shop      (Spring Cloud    │                          authdb
+     (React +      Gateway)        ├── Greetings (8060)
+     Stripe                        │
+     Elements)                     ├── Shop (8061) ────────── PostgreSQL (5433)
+                                   │    (WebFlux + R2DBC)     shopdb
+                                   │       │       ▲
+                                   │       │       │
+                                   │   ┌───▼───────┴────┐
+                                   │   │    Kafka        │
+                                   │   │ (orders.events, │
+                                   │   │  payments.events)│
+                                   │   └───▲───────┬────┘
+                                   │       │       │
+                                   │       │       ▼
+                                   └── Payment (8062) ──── PostgreSQL (5434)
+                                        (WebFlux + R2DBC +  paymentdb
+                                         Stripe API)
 ```
 
 | Service | Port | Stack | Role |
@@ -16,8 +35,11 @@ Browser → Gateway (8080) ──┬── Auth Server (9090) ── PostgreSQL 
 | `auth-server` | 9090 | Spring Authorization Server | OIDC provider, form + Google login |
 | `greetings` | 8060 | Spring WebFlux | Public + secured endpoints (demo) |
 | `shop` | 8061 | Spring WebFlux + R2DBC | E-commerce catalog, orders |
+| `payment` | 8062 | Spring WebFlux + R2DBC + Stripe API | Payment intent creation, Stripe webhooks |
+| `ui-shop` | 5173 | React + Vite + oidc-client-ts | SPA storefront with Stripe Elements |
 | `postgres` | 5432 | PostgreSQL 17 | Auth server database |
 | `shop-postgres` | 5433 | PostgreSQL | Shop database |
+| `payment-postgres` | 5434 | PostgreSQL | Payment database |
 
 ## Prerequisites
 
@@ -79,6 +101,12 @@ cd greetings && ./gradlew bootRun
 
 # Shop (port 8061)
 cd shop && ./gradlew bootRun
+
+# Payment (port 8062) — requires STRIPE_SECRET_KEY
+cd payment && STRIPE_SECRET_KEY=sk_test_... ./gradlew bootRun
+
+# UI shop (port 5173)
+cd ui-shop && npm install && npm run dev
 ```
 
 Swagger UI is proxied through the gateway at [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html) or direct at [http://localhost:8061/swagger-ui/index.html](http://localhost:8061/swagger-ui/index.html).
@@ -93,6 +121,30 @@ cd shop && ./gradlew test
 # Service/core tests use mocks and run without Docker
 ```
 
+## Event-driven flows
+
+```
+Order placed ──► Outbox (shop DB) ──► Kafka (orders.events) ──► Payment service
+                                                                      │
+                                                     ┌────────────────┤
+                                                     ▼                ▼
+                                              Stripe API        emit payment
+                                              (create PI)       event (Kafka)
+                                                                      │
+                                                                      ▼
+                                                              Shop consumes
+                                                              → order PAID
+```
+
+- **Order → Payment:** The shop writes an `OrderPlaced` event to an outbox table, which Kafka relays to the payment service. The payment service creates a Stripe PaymentIntent asynchronously.
+- **Payment → Order:** After Stripe confirms the payment (via webhook or sync endpoint), the payment service emits a `PaymentReceived` event to Kafka. The shop consumes it and transitions the order to `PAID`.
+- **Frontend:** The React SPA polls for the `clientSecret`, then completes payment client-side with Stripe Elements. A sync endpoint (`POST /api/payments/intent/{orderId}/sync`) is used for local development when Stripe webhooks aren't available.
+
+| Kafka topic | Producer | Consumers |
+|-------------|----------|-----------|
+| `orders.events` | Shop (outbox) | Payment |
+| `payments.events` | Payment (outbox) | Shop |
+
 ## API routes
 
 | Path | Auth | Proxied to |
@@ -102,6 +154,8 @@ cd shop && ./gradlew test
 | `/api/shop/products` | GET public, POST/DELETE ADMIN | Shop service |
 | `/api/shop/categories` | GET public, POST/DELETE ADMIN | Shop service |
 | `/api/shop/orders` | JWT required | Shop service (token relayed) |
+| `/api/payments/intent/**` | Public (clientSecret fetch) | Payment service |
+| `/api/payments/webhook` | Public (Stripe signature) | Payment service |
 | `/v3/api-docs/**`, `/swagger-ui/**` | Public | Shop service |
 
 ## Stripe setup (payment service)
@@ -116,12 +170,14 @@ export STRIPE_WEBHOOK_SECRET=whsec_... # from Stripe CLI (see below)
 To get `STRIPE_WEBHOOK_SECRET`, run the Stripe CLI in a terminal:
 
 ```bash
-stripe listen --forward-to localhost:8062/api/payments/webhook
+stripe listen --forward-to localhost:8080/api/payments/webhook
 ```
 
 It prints `Your webhook signing secret is whsec_...` on startup — use that value.
 
 These variables are passed through from the host to Docker in `compose.yaml`.
+
+For local development without webhooks, the frontend calls `POST /api/payments/intent/{orderId}/sync` to synchronously advance payment status after Stripe confirms the payment client-side.
 
 ## Key environment variables
 
@@ -129,8 +185,8 @@ These variables are passed through from the host to Docker in `compose.yaml`.
 |----------|---------|---------|
 | `OIDC_ISSUER_URI` | `http://localhost:9090` | gateway |
 | `OIDC_CLIENT_SECRET` | `secret` | gateway |
-| `GREETINGS_MICROSERVICE` | `http://localhost:8060` | gateway |
-| `SHOP_MICROSERVICE` | `http://localhost:8061` | gateway |
+| `MICROSERVICES_GREETINGS_URI` | `http://localhost:8060` | gateway |
+| `MICROSERVICES_SHOP_URI` | `http://localhost:8061` | gateway |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | — | auth-server |
 | `AUTH_ISSUER_URI` | `http://localhost:9090` | greetings, shop |
 | `SHOP_R2DBC_URL` | `r2dbc:postgresql://localhost:5433/shopdb` | shop |
@@ -145,8 +201,12 @@ granite-security/
 ├── gateway/             — Spring Cloud Gateway
 ├── greetings/           — WebFlux demo microservice
 ├── shop/                — E-commerce shop (WebFlux + R2DBC)
-├── smoke-tests/   — Smoke test scripts
-├── compose.yaml         — Docker Compose orchestration
+├── payment/             — Stripe payment service (WebFlux + R2DBC)
+├── ui-shop/             — React SPA storefront (Vite + oidc-client-ts)
+├── smoke-tests/         — Smoke test scripts
+├── plans/               — Planning documents and change logs
+├── compose.yaml         — Docker Compose orchestration (all services + Kafka)
+├── events.md            — Kafka event schema documentation
 └── Master-Plan.md       — Full development roadmap
 ```
 

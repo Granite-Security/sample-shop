@@ -20,7 +20,7 @@ export default function Header() {
         </Link>
         {isAuthenticated ? (
           <span className="user-info">
-            {user?.name}
+            <Link to="/profile" style={{ fontWeight: 600, color: 'inherit' }}>{user?.name}</Link>
             <button onClick={logout} className="btn-link">Logout</button>
           </span>
         ) : (
