@@ -3,3 +3,4 @@
 .env
 .DS_Store
 k8s/base/secrets.yaml
+k8s/certs

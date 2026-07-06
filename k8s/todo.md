@@ -93,8 +93,18 @@ mechanism actually take effect, and changes nothing about default (no-env-var) b
       defaults; added `ui-shop/src/vite-env.d.ts` for the `window.__ENV__` ambient type.
       `tsc -b --noEmit` shows no new errors from this change (2 pre-existing, unrelated errors in
       `Checkout.tsx`/`Profile.tsx` remain, present on `HEAD` before this edit too).
+- [x] Those 2 pre-existing errors turned out to actually block `docker build` (`npm run build`
+      runs `tsc -b`, unlike `npm run dev`, which never type-checks) — fixed both since they were
+      blocking, not just cosmetic:
+      - `Checkout.tsx`: `elementsOptions` `useMemo` returned `null` in the not-ready case, but
+        `<Elements options={...}>` is typed `StripeElementsOptions | undefined` (doesn't accept
+        `null`). Changed the fallback from `null` to `undefined`.
+      - `Profile.tsx`: destructured `user` from `useAuth()` but never used it anywhere in the
+        file (`noUnusedLocals` catches this) — removed it from the destructure.
+      Verified: `npm run build` and `docker build -t granite-ui-shop:latest ui-shop/` both succeed
+      cleanly now.
 - [ ] Still to do: actually exercise the login flow in kind (§5) to confirm the fix works
-      end-to-end, not just that it type-checks.
+      end-to-end, not just that it type-checks/builds.
 
 ---
 

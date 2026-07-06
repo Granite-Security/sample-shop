@@ -26,6 +26,13 @@ spec:
       labels:
         app: kafka
     spec:
+      # Kubernetes auto-injects Docker-links-style env vars for every Service in the
+      # namespace (KAFKA_PORT, KAFKA_SERVICE_HOST, ...) because this Service is named
+      # "kafka". The Confluent image's configure script treats any KAFKA_PORT var as the
+      # deprecated legacy single-port setting and unconditionally exits 1 if present —
+      # see /etc/confluent/docker/configure in the image. Disable service-link injection
+      # to avoid the collision.
+      enableServiceLinks: false
       containers:
         - name: kafka
           image: confluentinc/cp-kafka:latest
