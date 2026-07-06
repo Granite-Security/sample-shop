@@ -1,0 +1,87 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shop
+  template:
+    metadata:
+      labels:
+        app: shop
+    spec:
+      # Block startup until the OIDC discovery doc is served through the gateway
+      # (i.e. auth-server is up). Prevents CrashLoopBackOff on eager JWKS fetch (Correction 5).
+      initContainers:
+        - name: wait-for-issuer
+          image: curlimages/curl:latest
+          command:
+            - sh
+            - -c
+            - >
+              until curl -sf http://gateway:8080/auth/.well-known/openid-configuration;
+              do echo "waiting for auth issuer..."; sleep 3; done
+      containers:
+        - name: shop
+          image: granite-shop:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8061
+          env:
+            - name: SERVER_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: SHOP_PORT
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+            - name: SHOP_R2DBC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: SHOP_R2DBC_URL
+            - name: SHOP_R2DBC_USERNAME
+              value: "myuser"
+            - name: SHOP_R2DBC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: db-myuser-password
+            - name: SHOP_JDBC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: SHOP_JDBC_URL
+            - name: SHOP_JDBC_USERNAME
+              value: "myuser"
+            - name: SHOP_JDBC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: db-myuser-password
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            - name: PAYMENT_SERVICE_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: PAYMENT_SERVICE_URI
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shop
+spec:
+  ports:
+    - port: 8061
+  selector:
+    app: shop

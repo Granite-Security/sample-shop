@@ -20,16 +20,16 @@ spring:
 
 microservices:
   greetings:
-    uri: ${GREETINGS_MICROSERVICE:http://localhost:8060}
+    uri: ${MICROSERVICES_GREETINGS_URI:http://localhost:8060}
   shop:
-    uri: ${SHOP_MICROSERVICE:http://localhost:8061}
+    uri: ${MICROSERVICES_SHOP_URI:http://localhost:8061}
   payment:
-    uri: ${PAYMENT_MICROSERVICE:http://localhost:8062}
+    uri: ${MICROSERVICES_PAYMENT_URI:http://localhost:8062}
   auth-server:
-    uri: ${AUTH_SERVER_MICROSERVICE:http://localhost:9090}
+    uri: ${MICROSERVICES_AUTH_SERVER_URI:http://localhost:9090}
   profile:
-    uri: ${PROFILE_MICROSERVICE:http://localhost:8064}
+    uri: ${MICROSERVICES_PROFILE_URI:http://localhost:8064}
   delivery:
-    uri: ${DELIVERY_MICROSERVICE:http://localhost:8063}
+    uri: ${MICROSERVICES_DELIVERY_URI:http://localhost:8063}
   spa:
     uri: ${SPA_MICROSERVICE:http://localhost:5173}

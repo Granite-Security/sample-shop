@@ -185,8 +185,8 @@ For local development without webhooks, the frontend calls `POST /api/payments/i
 |----------|---------|---------|
 | `OIDC_ISSUER_URI` | `http://localhost:9090` | gateway |
 | `OIDC_CLIENT_SECRET` | `secret` | gateway |
-| `GREETINGS_MICROSERVICE` | `http://localhost:8060` | gateway |
-| `SHOP_MICROSERVICE` | `http://localhost:8061` | gateway |
+| `MICROSERVICES_GREETINGS_URI` | `http://localhost:8060` | gateway |
+| `MICROSERVICES_SHOP_URI` | `http://localhost:8061` | gateway |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | — | auth-server |
 | `AUTH_ISSUER_URI` | `http://localhost:9090` | greetings, shop |
 | `SHOP_R2DBC_URL` | `r2dbc:postgresql://localhost:5433/shopdb` | shop |

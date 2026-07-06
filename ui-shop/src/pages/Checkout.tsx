@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
@@ -27,6 +27,7 @@ function PaymentForm({
   const stripe = useStripe();
   const elements = useElements();
   const [confirming, setConfirming] = useState(false);
+  const [elementReady, setElementReady] = useState(false);
 
   const handlePay = async () => {
     if (!stripe || !elements) return;
@@ -51,14 +52,14 @@ function PaymentForm({
 
   return (
     <div className="payment-form">
-      <PaymentElement />
+      <PaymentElement onReady={() => setElementReady(true)} />
       <button
         className="btn btn-primary"
         style={{ marginTop: 16, width: '100%' }}
-        disabled={!stripe || confirming}
+        disabled={!stripe || !elementReady || confirming}
         onClick={handlePay}
       >
-        {!stripe ? 'Loading payment form…' : confirming ? 'Processing…' : 'Pay Now'}
+        {!stripe || !elementReady ? 'Loading payment form…' : confirming ? 'Processing…' : 'Pay Now'}
       </button>
     </div>
   );
@@ -79,6 +80,11 @@ function CheckoutInner() {
     recipientName: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '', country: '',
   });
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const elementsOptions = useMemo(
+    () => order?.clientSecret ? { clientSecret: order.clientSecret } : null,
+    [order?.clientSecret],
+  );
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -386,8 +392,9 @@ function CheckoutInner() {
               </p>
               {error && <p className="error">{error}</p>}
               <Elements
+                key={order.id}
                 stripe={stripePromise}
-                options={{ clientSecret: order.clientSecret }}
+                options={elementsOptions}
               >
                 <PaymentForm
                   orderId={order.id}

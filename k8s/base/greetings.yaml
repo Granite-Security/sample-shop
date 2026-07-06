@@ -1,0 +1,53 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: greetings
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: greetings
+  template:
+    metadata:
+      labels:
+        app: greetings
+    spec:
+      # Block startup until the OIDC discovery doc is served through the gateway
+      # (i.e. auth-server is up). Prevents CrashLoopBackOff on eager JWKS fetch (Correction 5).
+      initContainers:
+        - name: wait-for-issuer
+          image: curlimages/curl:latest
+          command:
+            - sh
+            - -c
+            - >
+              until curl -sf http://gateway:8080/auth/.well-known/openid-configuration;
+              do echo "waiting for auth issuer..."; sleep 3; done
+      containers:
+        - name: greetings
+          image: granite-greetings:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8060
+          env:
+            - name: SERVER_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: GREETINGS_PORT
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: greetings
+spec:
+  ports:
+    - port: 8060
+  selector:
+    app: greetings

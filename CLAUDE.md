@@ -65,7 +65,7 @@ Browser → gateway:8080 (OAuth2 client)
 |---|---|---|
 | `OIDC_ISSUER_URI` | `http://localhost:9090` | gateway |
 | `OIDC_CLIENT_SECRET` | `iaka` (docker) / `secret` (local) | gateway |
-| `GREETINGS_MICROSERVICE` | `http://localhost:8060` | gateway |
+| `MICROSERVICES_GREETINGS_URI` | `http://localhost:8060` | gateway |
 | `AUTH_SERVER_ISSUER` | `http://localhost:9090` | auth-server |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | (required for Google login) | auth-server |
 | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/authdb` | auth-server |

@@ -1,0 +1,48 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui-shop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ui-shop
+  template:
+    metadata:
+      labels:
+        app: ui-shop
+    spec:
+      containers:
+        - name: ui-shop
+          image: granite-ui-shop:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          # Runtime config (Correction 4): rendered into /config.js at container start.
+          env:
+            - name: OIDC_AUTHORITY
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: OIDC_AUTHORITY
+            - name: OIDC_CLIENT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: OIDC_CLIENT_ID
+            - name: STRIPE_PUBLISHABLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: stripe-publishable-key
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui-shop
+spec:
+  ports:
+    - port: 80
+  selector:
+    app: ui-shop

@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: granite-config
+data:
+  # One shared, dual-resolvable issuer host (Correction 1): "gateway".
+  # - Browser resolves gateway -> 127.0.0.1 via /etc/hosts (mirrors the compose README),
+  #   and kind maps host :8080 -> the ui-shop NodePort front door.
+  # - Pods resolve gateway -> the gateway Service natively via K8s DNS (no CoreDNS rewrite).
+  # NOTE: a "*.localhost" host CANNOT be used here — curl/musl/browsers special-case it to
+  # 127.0.0.1 (RFC 6761) and bypass DNS, so pods could never reach the issuer.
+  # The iss string stays byte-for-byte identical on every side.
+  AUTH_SERVER_ISSUER: "http://gateway:8080/auth"
+  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "http://gateway:8080/auth"
+  APP_LOGIN_PAGE_URL: "http://gateway:8080/auth/login"
+  # SPA + OIDC redirect targets, aligned to the shared host (Correction 2).
+  # SPA sends redirect_uri = window.location.origin + '/callback'.
+  # Access via http://gateway:8080 → redirect_uri = http://gateway:8080/callback.
+  # Keep all redirect URIs on the same host so the browser and auth-server agree.
+  SPA_CLIENT_REDIRECT_URI: "http://gateway:8080/callback"
+  SPA_CLIENT_POST_LOGOUT_REDIRECT_URI: "http://gateway:8080/"
+  OIDC_CLIENT_REDIRECT_URI: "http://gateway:8080/login/oauth2/code/oidc-client"
+  OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI: "http://gateway:8080/"
+  # Runtime OIDC authority handed to the SPA (Correction 4) — kept in lockstep with the issuer.
+  OIDC_AUTHORITY: "http://gateway:8080/auth"
+  OIDC_CLIENT_ID: "spa-client"

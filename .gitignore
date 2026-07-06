@@ -2,3 +2,4 @@
 .junie
 .env
 .DS_Store
+k8s/base/secrets.yaml

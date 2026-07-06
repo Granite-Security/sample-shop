@@ -1,0 +1,97 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payment
+  template:
+    metadata:
+      labels:
+        app: payment
+    spec:
+      # Block startup until the OIDC discovery doc is served through the gateway
+      # (i.e. auth-server is up). Prevents CrashLoopBackOff on eager JWKS fetch (Correction 5).
+      initContainers:
+        - name: wait-for-issuer
+          image: curlimages/curl:latest
+          command:
+            - sh
+            - -c
+            - >
+              until curl -sf http://gateway:8080/auth/.well-known/openid-configuration;
+              do echo "waiting for auth issuer..."; sleep 3; done
+      containers:
+        - name: payment
+          image: granite-payment:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8062
+          env:
+            - name: SERVER_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: PAYMENT_PORT
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+            - name: PAYMENT_R2DBC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: PAYMENT_R2DBC_URL
+            - name: PAYMENT_R2DBC_USERNAME
+              value: "myuser"
+            - name: PAYMENT_R2DBC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: db-myuser-password
+            - name: PAYMENT_JDBC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: PAYMENT_JDBC_URL
+            - name: PAYMENT_JDBC_USERNAME
+              value: "myuser"
+            - name: PAYMENT_JDBC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: db-myuser-password
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: stripe-secret-key
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: stripe-webhook-secret
+            - name: STRIPE_CURRENCY
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: STRIPE_CURRENCY
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment
+spec:
+  ports:
+    - port: 8062
+  selector:
+    app: payment
