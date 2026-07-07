@@ -99,13 +99,22 @@ kind load docker-image --name granite \
   granite-delivery:latest granite-ui-shop:latest
 ```
 
+
 ---
+6. Before applying the manifest:
+   
+```bash
+stripe login
+stripe listen --forward-to gateway:8080/api/payments/webhook
+```
 
+---
 ## 6. Apply the manifests
-
 ```bash
 kubectl apply -k k8s/kind
 ```
+
+
 
 This creates the `granite` namespace, the `granite-config` ConfigMap, the `granite-secrets`
 Secret (from step 1), and every Deployment/Service/PVC.
