@@ -1,0 +1,16 @@
+# Production overrides for the shared ConfigMap. Same keys as k8s/kind/config-patch.yaml,
+# but pointing at the public domain instead of the in-cluster "gateway" hostname.
+# See hetzner/platform/coredns-custom.yaml for how pods still resolve this internally.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: granite-config
+data:
+  AUTH_SERVER_ISSUER: "https://granite-security.net/auth"
+  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "https://granite-security.net/auth"
+  SPA_CLIENT_REDIRECT_URI: "https://granite-security.net/callback"
+  SPA_CLIENT_POST_LOGOUT_REDIRECT_URI: "https://granite-security.net/"
+  OIDC_CLIENT_REDIRECT_URI: "https://granite-security.net/login/oauth2/code/oidc-client"
+  OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI: "https://granite-security.net/"
+  OIDC_AUTHORITY: "https://granite-security.net/auth"
+  OIDC_CLIENT_ID: "spa-client"

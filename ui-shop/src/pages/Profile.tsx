@@ -5,7 +5,7 @@ import { useAuth } from '../auth';
 import type { ProfileResponse } from '../types';
 
 export default function Profile() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);

@@ -30,5 +30,6 @@ public class OrderItem {
         this.productId = productId;
         this.quantity = quantity;
         this.unitPrice = unitPrice;
+        this.createdAt = Instant.now();
     }
 }

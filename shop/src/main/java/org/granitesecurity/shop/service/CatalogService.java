@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
+
 @Service
 public class CatalogService {
 
@@ -43,6 +45,9 @@ public class CatalogService {
 
     public Mono<CategoryResponse> createCategory(CreateCategoryRequest request) {
         Category category = new Category(request.name(), request.description());
+        Instant now = Instant.now();
+        category.setCreatedAt(now);
+        category.setUpdatedAt(now);
         return categoryRepository.save(category).map(this::toCategoryResponse);
     }
 
@@ -53,6 +58,7 @@ public class CatalogService {
                 .flatMap(existing -> {
                     existing.setName(request.name());
                     existing.setDescription(request.description());
+                    existing.setUpdatedAt(Instant.now());
                     return categoryRepository.save(existing);
                 })
                 .map(this::toCategoryResponse);
@@ -86,6 +92,11 @@ public class CatalogService {
         Product product = new Product(request.name(), request.price(), request.stock(), request.categoryId());
         product.setDescription(request.description());
         product.setImageUrl(request.imageUrl());
+        // created_at/updated_at are NOT NULL; R2DBC includes them in the INSERT,
+        // bypassing the column defaults, so they must be set explicitly.
+        Instant now = Instant.now();
+        product.setCreatedAt(now);
+        product.setUpdatedAt(now);
         return productRepository.save(product).map(this::toProductResponse);
     }
 
@@ -100,6 +111,7 @@ public class CatalogService {
                     existing.setStock(request.stock());
                     existing.setCategoryId(request.categoryId());
                     existing.setImageUrl(request.imageUrl());
+                    existing.setUpdatedAt(Instant.now());
                     return productRepository.save(existing);
                 })
                 .map(this::toProductResponse);

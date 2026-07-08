@@ -112,6 +112,12 @@ public class ShopRoute {
             beanMethod = "getOrders"
         ),
         @RouterOperation(
+            path = "/api/shop/orders/all",
+            method = RequestMethod.GET,
+            beanClass = OrderHandler.class,
+            beanMethod = "getAllOrders"
+        ),
+        @RouterOperation(
             path = "/api/shop/orders/{id}",
             method = RequestMethod.GET,
             beanClass = OrderHandler.class,
@@ -133,6 +139,8 @@ public class ShopRoute {
                 // Orders — authenticated
                 .POST("/api/shop/orders", orderHandler::placeOrder)
                 .GET("/api/shop/orders", orderHandler::getOrders)
+                // "/orders/all" must be registered before "/orders/{id}"
+                .GET("/api/shop/orders/all", orderHandler::getAllOrders)
                 .GET("/api/shop/orders/{id}", orderHandler::getOrder)
 
                 // Admin — products

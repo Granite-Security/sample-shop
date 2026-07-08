@@ -177,6 +177,15 @@ public class OrderService {
                 .map(tuple -> new PagedResult<>(tuple.getT2(), tuple.getT1(), page, size));
     }
 
+    public Mono<PagedResult<OrderResponse>> getAllOrders(int page, int size) {
+        long offset = (long) page * size;
+        Mono<Long> count = customerOrderRepository.count();
+        Flux<OrderResponse> items = customerOrderRepository.findAllPaged(size, offset)
+                .flatMapSequential(this::enrichOrder);
+        return count.zipWith(items.collectList())
+                .map(tuple -> new PagedResult<>(tuple.getT2(), tuple.getT1(), page, size));
+    }
+
     public Mono<OrderResponse> getOrder(Long id, String username) {
         return customerOrderRepository.findById(id)
                 .switchIfEmpty(Mono.error(

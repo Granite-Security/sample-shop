@@ -1,0 +1,44 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: granite
+
+resources:
+  - ../../k8s/base
+  - ingress.yaml
+
+patches:
+  - path: config-patch.yaml
+  - path: ui-shop-patch.yaml
+  - path: production-patches.yaml
+  - path: secrets-patch.yaml
+
+# Bump newTag on every release (recommend the git short SHA) and re-run
+# `kubectl apply -k hetzner/app` — that changes the pod template hash and triggers
+# a rollout. Reusing a floating tag like "latest" with imagePullPolicy: IfNotPresent
+# would NOT re-pull on redeploy, since the node thinks it already has that tag cached.
+images:
+  - name: granite-auth-server
+    newName: ghcr.io/CHANGE_ME/granite-auth-server
+    newTag: latest
+  - name: granite-gateway
+    newName: ghcr.io/CHANGE_ME/granite-gateway
+    newTag: latest
+  - name: granite-greetings
+    newName: ghcr.io/CHANGE_ME/granite-greetings
+    newTag: latest
+  - name: granite-shop
+    newName: ghcr.io/CHANGE_ME/granite-shop
+    newTag: latest
+  - name: granite-payment
+    newName: ghcr.io/CHANGE_ME/granite-payment
+    newTag: latest
+  - name: granite-profile
+    newName: ghcr.io/CHANGE_ME/granite-profile
+    newTag: latest
+  - name: granite-delivery
+    newName: ghcr.io/CHANGE_ME/granite-delivery
+    newTag: latest
+  - name: granite-ui-shop
+    newName: ghcr.io/CHANGE_ME/granite-ui-shop
+    newTag: latest

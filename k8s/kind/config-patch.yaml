@@ -16,8 +16,8 @@ data:
   # SPA sends redirect_uri = window.location.origin + '/callback'.
   # Access via http://gateway:8080 → redirect_uri = http://gateway:8080/callback.
   # Keep all redirect URIs on the same host so the browser and auth-server agree.
-  SPA_CLIENT_REDIRECT_URI: "http://gateway:8080/callback"
-  SPA_CLIENT_POST_LOGOUT_REDIRECT_URI: "http://gateway:8080/"
+  SPA_CLIENT_REDIRECT_URI: "https://gateway:8443/callback"
+  SPA_CLIENT_POST_LOGOUT_REDIRECT_URI: "https://gateway:8443/"
   OIDC_CLIENT_REDIRECT_URI: "http://gateway:8080/login/oauth2/code/oidc-client"
   OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI: "http://gateway:8080/"
   # Runtime OIDC authority handed to the SPA (Correction 4) — kept in lockstep with the issuer.

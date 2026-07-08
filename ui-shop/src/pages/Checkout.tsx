@@ -82,7 +82,7 @@ function CheckoutInner() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const elementsOptions = useMemo(
-    () => order?.clientSecret ? { clientSecret: order.clientSecret } : null,
+    () => order?.clientSecret ? { clientSecret: order.clientSecret } : undefined,
     [order?.clientSecret],
   );
 

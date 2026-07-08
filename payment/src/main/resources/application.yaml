@@ -33,7 +33,8 @@ spring:
 
 stripe:
   secret-key: ${STRIPE_SECRET_KEY:}
-  webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+  # Default matches the local `stripe listen` forwarding session
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:whsec_321e0f4f965220007dec238f31d6ec4706ebdb81e0062631a2fedde90e1c2d70}
   currency: ${STRIPE_CURRENCY:usd}
 
 app:

@@ -54,6 +54,20 @@ public class OrderHandler {
                 .flatMap(result -> ServerResponse.ok().bodyValue(result));
     }
 
+    @Operation(operationId = "getAllOrders", summary = "List all orders", description = "Admin only — returns orders from every user")
+    @SecurityRequirement(name = "bearer-jwt")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Paginated list of all orders"),
+            @ApiResponse(responseCode = "403", description = "Forbidden — requires ADMIN role", content = @Content()),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content())
+    })
+    public Mono<ServerResponse> getAllOrders(ServerRequest request) {
+        int page = Integer.parseInt(request.queryParam("page").orElse("0"));
+        int size = Integer.parseInt(request.queryParam("size").orElse("20"));
+        return orderService.getAllOrders(page, size)
+                .flatMap(result -> ServerResponse.ok().bodyValue(result));
+    }
+
     @Operation(operationId = "getOrder", summary = "Get an order by ID", description = "Returns the order only if it belongs to the authenticated user")
     @SecurityRequirement(name = "bearer-jwt")
     @ApiResponses({
