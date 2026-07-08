@@ -15,4 +15,7 @@ public interface CustomerOrderRepository extends ReactiveCrudRepository<Customer
     Flux<CustomerOrder> findByUsernamePaged(@Param("username") String username,
                                             @Param("size") int size,
                                             @Param("offset") long offset);
+
+    @Query("SELECT * FROM customer_order ORDER BY id DESC LIMIT :size OFFSET :offset")
+    Flux<CustomerOrder> findAllPaged(@Param("size") int size, @Param("offset") long offset);
 }

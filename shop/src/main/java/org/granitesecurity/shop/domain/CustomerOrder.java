@@ -47,5 +47,9 @@ public class CustomerOrder {
         this.state = state;
         this.zipCode = zipCode;
         this.country = country;
+        // created_at/updated_at are NOT NULL; R2DBC includes them in the INSERT,
+        // bypassing the column defaults (same pattern as OutboxEvent).
+        this.createdAt = Instant.now();
+        this.updatedAt = this.createdAt;
     }
 }
