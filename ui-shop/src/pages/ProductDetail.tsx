@@ -12,7 +12,7 @@ export default function ProductDetail() {
 
   useEffect(() => {
     if (!id) return;
-    api.getProduct(Number(id))
+    api.catalog.getProduct(Number(id))
       .then(setProduct)
       .finally(() => setLoading(false));
   }, [id]);

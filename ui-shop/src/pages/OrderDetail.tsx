@@ -20,9 +20,9 @@ export default function OrderDetail() {
     const fetch = () => {
       const orderId = Number(id);
       Promise.all([
-        api.getOrder(orderId),
-        api.getPaymentIntent(orderId).catch(() => null),
-        api.getDelivery(orderId),
+        api.orders.getOrder(orderId),
+        api.payments.getPaymentIntent(orderId).catch(() => null),
+        api.delivery.getDelivery(orderId),
       ])
         .then(([o, p, d]) => {
           if (cancelled) return;

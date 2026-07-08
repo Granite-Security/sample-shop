@@ -23,7 +23,7 @@ export default function DeliveryManagement() {
   const fetchDeliveries = () => {
     setLoading(true);
     setError(null);
-    api.getDeliveries()
+    api.delivery.getDeliveries()
       .then(setDeliveries)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
@@ -72,7 +72,7 @@ export default function DeliveryManagement() {
 
   const updateStatus = (orderId: number, status: string, description: string) => {
     setActionLoading(orderId);
-    api.updateDeliveryStatus(orderId, status, description)
+    api.delivery.updateDeliveryStatus(orderId, status, description)
       .then(() => fetchDeliveries())
       .catch(e => setError(e.message))
       .finally(() => setActionLoading(null));

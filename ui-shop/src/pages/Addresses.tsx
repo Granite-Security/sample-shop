@@ -20,7 +20,7 @@ export default function Addresses() {
   });
 
   const load = () => {
-    api.getAddresses()
+    api.profile.getAddresses()
       .then(setAddresses)
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -36,9 +36,9 @@ export default function Addresses() {
 
   const handleSubmit = async () => {
     if (editing) {
-      await api.updateAddress(editing.id, form);
+      await api.profile.updateAddress(editing.id, form);
     } else {
-      await api.createAddress(form);
+      await api.profile.createAddress(form);
     }
     resetForm();
     load();
@@ -61,7 +61,7 @@ export default function Addresses() {
   };
 
   const handleDelete = async (id: number) => {
-    await api.deleteAddress(id);
+    await api.profile.deleteAddress(id);
     load();
   };
 
