@@ -115,6 +115,13 @@ export function Header() {
               {accountOpen && (
                 <div className="absolute right-0 top-full mt-2 w-44 rounded-md bg-ivory py-2 text-cocoa shadow-xl shadow-espresso/30">
                   <p className="px-4 py-1.5 text-xs text-cocoa/50">Signed in as {user?.name}</p>
+                  <Link
+                    to="/profile"
+                    onClick={() => setAccountOpen(false)}
+                    className="block w-full px-4 py-1.5 text-left text-xs uppercase tracking-[0.14em] transition-colors hover:text-terracotta"
+                  >
+                    My Profile
+                  </Link>
                   {isAdmin && (
                     <Link
                       to="/admin"

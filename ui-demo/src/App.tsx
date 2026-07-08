@@ -9,6 +9,7 @@ import { Home } from './pages/Home';
 import { ProductPage } from './pages/ProductPage';
 import { AdminPage } from './pages/AdminPage';
 import { CheckoutPage } from './pages/CheckoutPage';
+import { ProfilePage } from './pages/ProfilePage';
 
 function Layout() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
               <Route path="products/:id" element={<ProductPage />} />
               <Route path="admin" element={<AdminPage />} />
               <Route path="checkout" element={<CheckoutPage />} />
+              <Route path="profile" element={<ProfilePage />} />
             </Route>
           </Routes>
         </BrowserRouter>

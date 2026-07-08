@@ -82,6 +82,32 @@ export interface AddressResponse {
   isDefault: boolean;
 }
 
+export interface AddressRequest {
+  label?: string;
+  recipientName: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state?: string;
+  zipCode: string;
+  country: string;
+  isDefault?: boolean;
+}
+
+export interface ProfileResponse {
+  id: number;
+  username: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+
+export interface UpdateProfileRequest {
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+
 export interface PagedResult<T> {
   items: T[];
   total: number;

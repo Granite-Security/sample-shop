@@ -7,6 +7,9 @@ import type {
   PlaceOrderRequest,
   CreatePaymentIntentResponse,
   AddressResponse,
+  AddressRequest,
+  ProfileResponse,
+  UpdateProfileRequest,
 } from './types';
 
 // Same-origin calls through the gateway, exactly like ui-shop. Browsing the
@@ -65,7 +68,21 @@ export const api = {
   syncPaymentIntent: (orderId: number) =>
     request<CreatePaymentIntentResponse>(`/api/payments/intent/${orderId}/sync`, { method: 'POST' }),
 
+  getMyProfile: () => request<ProfileResponse>('/api/profiles/me'),
+
+  updateMyProfile: (body: UpdateProfileRequest) =>
+    request<ProfileResponse>('/api/profiles/me', { method: 'PUT', body: JSON.stringify(body) }),
+
   getAddresses: () => request<AddressResponse[]>('/api/profiles/me/addresses'),
+
+  createAddress: (body: AddressRequest) =>
+    request<AddressResponse>('/api/profiles/me/addresses', { method: 'POST', body: JSON.stringify(body) }),
+
+  updateAddress: (id: number, body: AddressRequest) =>
+    request<AddressResponse>(`/api/profiles/me/addresses/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+
+  deleteAddress: (id: number) =>
+    request<void>(`/api/profiles/me/addresses/${id}`, { method: 'DELETE' }),
 
   // Admin-only endpoints — the shop service requires ROLE_ADMIN on the JWT.
   getAllOrders: (page = 0, size = 50) =>
