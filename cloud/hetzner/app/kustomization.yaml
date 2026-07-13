@@ -4,7 +4,7 @@ kind: Kustomization
 namespace: granite
 
 resources:
-  - ../../k8s/base
+  - ../../../k8s/base
   - ingress.yaml
 
 patches:
