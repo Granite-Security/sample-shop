@@ -87,6 +87,46 @@ for s in auth-server gateway greetings shop payment profile delivery; do
 done
 docker build -t granite-ui-shop:latest ui-shop/
 ```
+### 4.1 To push the images:
+```bash
+
+for s in auth-server gateway greetings shop payment profile delivery; do
+  docker tag granite-$s:latest gluonstream/granite-$s:latest
+  docker push gluonstream/granite-$s:latest
+done
+
+docker tag granite-auth-server:latest gluonstream/granite-auth-server:latest
+docker push gluonstream/granite-auth-server:latest
+docker manifest inspect gluonstream/granite-auth-server:latest
+
+docker tag granite-gateway:latest gluonstream/granite-gateway:latest
+docker push gluonstream/granite-gateway:latest
+docker manifest inspect gluonstream/granite-gateway:latest
+
+docker tag granite-greetings:latest gluonstream/granite-greetings:latest
+docker push gluonstream/granite-greetings:latest
+docker manifest inspect gluonstream/granite-greetings:latest
+
+docker tag granite-shop:latest gluonstream/granite-shop:latest
+docker push gluonstream/granite-shop:latest
+docker manifest inspect gluonstream/granite-shop:latest
+
+docker tag granite-payment:latest gluonstream/granite-payment:latest
+docker push gluonstream/granite-payment:latest
+docker manifest inspect gluonstream/granite-payment:latest
+
+docker tag granite-profile:latest gluonstream/granite-profile:latest
+docker push gluonstream/granite-profile:latest
+docker manifest inspect gluonstream/granite-profile:latest
+
+docker tag granite-delivery:latest gluonstream/granite-delivery:latest
+docker push gluonstream/granite-delivery:latest
+docker manifest inspect gluonstream/granite-delivery:latest
+
+
+docker tag granite-ui-shop:latest gluonstream/granite-ui-shop:latest
+docker push gluonstream/granite-ui-shop:latest
+```
 
 ---
 

@@ -6,11 +6,11 @@ kind: ConfigMap
 metadata:
   name: granite-config
 data:
-  AUTH_SERVER_ISSUER: "https://granite-security.net/auth"
-  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "https://granite-security.net/auth"
-  SPA_CLIENT_REDIRECT_URI: "https://granite-security.net/callback"
-  SPA_CLIENT_POST_LOGOUT_REDIRECT_URI: "https://granite-security.net/"
-  OIDC_CLIENT_REDIRECT_URI: "https://granite-security.net/login/oauth2/code/oidc-client"
-  OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI: "https://granite-security.net/"
-  OIDC_AUTHORITY: "https://granite-security.net/auth"
+  AUTH_SERVER_ISSUER: "https://granite-security.org/auth"
+  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "https://granite-security.org/auth"
+  SPA_CLIENT_REDIRECT_URI: "https://granite-security.org/callback"
+  SPA_CLIENT_POST_LOGOUT_REDIRECT_URI: "https://granite-security.org"
+  OIDC_CLIENT_REDIRECT_URI: "https://granite-security.org/login/oauth2/code/oidc-client"
+  OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI: "https://granite-security.org/"
+  OIDC_AUTHORITY: "https://granite-security.org/auth"
   OIDC_CLIENT_ID: "spa-client"
