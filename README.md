@@ -14,19 +14,26 @@ Browser (5173) ── Gateway (8080) ──┬── Auth Server (9090) ── P
      (React +      Gateway)        ├── Greetings (8060)
      Stripe                        │
      Elements)                     ├── Shop (8061) ────────── PostgreSQL (5433)
-                                   │    (WebFlux + R2DBC)     shopdb
-                                   │       │       ▲
-                                   │       │       │
-                                   │   ┌───▼───────┴────┐
-                                   │   │    Kafka        │
-                                   │   │ (orders.events, │
-                                   │   │  payments.events)│
-                                   │   └───▲───────┬────┘
-                                   │       │       │
-                                   │       │       ▼
-                                   └── Payment (8062) ──── PostgreSQL (5434)
-                                        (WebFlux + R2DBC +  paymentdb
-                                         Stripe API)
+                                    │    (WebFlux + R2DBC)     shopdb
+                                    │       │       ▲
+                                    │       │       │
+                                    │   ┌───▼───────┴────┐
+                                    │   │     Kafka        │
+                                    │   │ (orders.events,   │
+                                    │   │  payments.events) │
+                                    │   └─▲──┬──────┬────┘
+                                    │     │  │      │
+                                    │     │  ▼      ▼
+                                    ├── Payment (8062)   Delivery (8063)
+                                    │    (WebFlux + R2DBC  (WebFlux + R2DBC
+                                    │     + Stripe API)     + Kafka consumer)
+                                    │     │                 │
+                                    │     ▼                 ▼
+                                    │  PostgreSQL (5434)  PostgreSQL (5435)
+                                    │  paymentdb          deliverydb
+                                    │
+                                    └── Profile (8064) ──── PostgreSQL (5436)
+                                         (WebFlux + R2DBC)    profiledb
 ```
 
 | Service | Port | Stack | Role |
@@ -36,10 +43,14 @@ Browser (5173) ── Gateway (8080) ──┬── Auth Server (9090) ── P
 | `greetings` | 8060 | Spring WebFlux | Public + secured endpoints (demo) |
 | `shop` | 8061 | Spring WebFlux + R2DBC | E-commerce catalog, orders |
 | `payment` | 8062 | Spring WebFlux + R2DBC + Stripe API | Payment intent creation, Stripe webhooks |
+| `delivery` | 8063 | Spring WebFlux + R2DBC + Kafka | Delivery tracking, consumes `orders.events` |
+| `profile` | 8064 | Spring WebFlux + R2DBC | User profile & delivery address management |
 | `ui-shop` | 5173 | React + Vite + oidc-client-ts | SPA storefront with Stripe Elements |
 | `postgres` | 5432 | PostgreSQL 17 | Auth server database |
 | `shop-postgres` | 5433 | PostgreSQL | Shop database |
 | `payment-postgres` | 5434 | PostgreSQL | Payment database |
+| `delivery-postgres` | 5435 | PostgreSQL | Delivery database |
+| `profile-postgres` | 5436 | PostgreSQL | Profile database |
 
 ## Prerequisites
 
@@ -85,6 +96,18 @@ docker run -d --name auth-postgres -p 5432:5432 \
 docker run -d --name shop-postgres -p 5433:5432 \
   -e POSTGRES_DB=shopdb -e POSTGRES_USER=myuser -e POSTGRES_PASSWORD=secret \
   postgres:latest
+
+docker run -d --name payment-postgres -p 5434:5432 \
+  -e POSTGRES_DB=paymentdb -e POSTGRES_USER=myuser -e POSTGRES_PASSWORD=secret \
+  postgres:latest
+
+docker run -d --name delivery-postgres -p 5435:5432 \
+  -e POSTGRES_DB=deliverydb -e POSTGRES_USER=myuser -e POSTGRES_PASSWORD=secret \
+  postgres:latest
+
+docker run -d --name profile-postgres -p 5436:5432 \
+  -e POSTGRES_DB=profiledb -e POSTGRES_USER=myuser -e POSTGRES_PASSWORD=secret \
+  postgres:latest
 ```
 
 ### 2. Start services (in separate terminals)
@@ -104,6 +127,12 @@ cd shop && ./gradlew bootRun
 
 # Payment (port 8062) — requires STRIPE_SECRET_KEY
 cd payment && STRIPE_SECRET_KEY=sk_test_... ./gradlew bootRun
+
+# Delivery (port 8063)
+cd delivery && ./gradlew bootRun
+
+# Profile (port 8064)
+cd profile && ./gradlew bootRun
 
 # UI shop (port 5173)
 cd ui-shop && npm install && npm run dev
@@ -142,7 +171,7 @@ Order placed ──► Outbox (shop DB) ──► Kafka (orders.events) ──�
 
 | Kafka topic | Producer | Consumers |
 |-------------|----------|-----------|
-| `orders.events` | Shop (outbox) | Payment |
+| `orders.events` | Shop (outbox) | Payment, Delivery |
 | `payments.events` | Payment (outbox) | Shop |
 
 ## API routes
@@ -156,6 +185,8 @@ Order placed ──► Outbox (shop DB) ──► Kafka (orders.events) ──�
 | `/api/shop/orders` | JWT required | Shop service (token relayed) |
 | `/api/payments/intent/**` | Public (clientSecret fetch) | Payment service |
 | `/api/payments/webhook` | Public (Stripe signature) | Payment service |
+| `/api/delivery/**` | JWT required | Delivery service (token relayed) |
+| `/api/profiles/**` | JWT required | Profile service (token relayed) |
 | `/v3/api-docs/**`, `/swagger-ui/**` | Public | Shop service |
 
 ## Stripe setup (payment service)
@@ -192,6 +223,8 @@ For local development without webhooks, the frontend calls `POST /api/payments/i
 | `SHOP_R2DBC_URL` | `r2dbc:postgresql://localhost:5433/shopdb` | shop |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | — | payment |
 | `STRIPE_CURRENCY` | `usd` | payment |
+| `DELIVERY_R2DBC_URL` | `r2dbc:postgresql://localhost:5435/deliverydb` | delivery |
+| `PROFILE_R2DBC_URL` | `r2dbc:postgresql://localhost:5436/profiledb` | profile |
 
 ## Project layout
 
@@ -202,6 +235,8 @@ granite-security/
 ├── greetings/           — WebFlux demo microservice
 ├── shop/                — E-commerce shop (WebFlux + R2DBC)
 ├── payment/             — Stripe payment service (WebFlux + R2DBC)
+├── delivery/            — Delivery tracking service (WebFlux + R2DBC + Kafka)
+├── profile/             — User profile & address service (WebFlux + R2DBC)
 ├── ui-shop/             — React SPA storefront (Vite + oidc-client-ts)
 ├── smoke-tests/         — Smoke test scripts
 ├── plans/               — Planning documents and change logs

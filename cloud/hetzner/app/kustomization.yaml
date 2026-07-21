@@ -4,8 +4,8 @@ kind: Kustomization
 namespace: granite
 
 resources:
-  - ../../k8s/base
-  - ingress.yaml
+  - ../../../k8s/base
+  - gateway.yaml
 
 patches:
   - path: config-patch.yaml
@@ -19,26 +19,26 @@ patches:
 # would NOT re-pull on redeploy, since the node thinks it already has that tag cached.
 images:
   - name: granite-auth-server
-    newName: ghcr.io/CHANGE_ME/granite-auth-server
+    newName: docker.io/gluonstream/granite-auth-server
     newTag: latest
   - name: granite-gateway
-    newName: ghcr.io/CHANGE_ME/granite-gateway
+    newName: docker.io/gluonstream/granite-gateway
     newTag: latest
   - name: granite-greetings
-    newName: ghcr.io/CHANGE_ME/granite-greetings
+    newName: docker.io/gluonstream/granite-greetings
     newTag: latest
   - name: granite-shop
-    newName: ghcr.io/CHANGE_ME/granite-shop
+    newName: docker.io/gluonstream/granite-shop
     newTag: latest
   - name: granite-payment
-    newName: ghcr.io/CHANGE_ME/granite-payment
+    newName: docker.io/gluonstream/granite-payment
     newTag: latest
   - name: granite-profile
-    newName: ghcr.io/CHANGE_ME/granite-profile
+    newName: docker.io/gluonstream/granite-profile
     newTag: latest
   - name: granite-delivery
-    newName: ghcr.io/CHANGE_ME/granite-delivery
+    newName: docker.io/gluonstream/granite-delivery
     newTag: latest
   - name: granite-ui-shop
-    newName: ghcr.io/CHANGE_ME/granite-ui-shop
+    newName: docker.io/gluonstream/granite-ui-shop
     newTag: latest

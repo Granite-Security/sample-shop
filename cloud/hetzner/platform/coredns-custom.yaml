@@ -2,23 +2,24 @@
 # host" trick already used in k8s/kind (see k8s/base/config.yaml comments).
 #
 # Why this is needed: AUTH_SERVER_ISSUER / SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
-# are set to https://granite-security.net/auth (see hetzner/app/config-patch.yaml) so the
+# are set to https://granite-security.org/auth (see hetzner/app/config-patch.yaml) so the
 # `iss` claim matches what the browser and OIDC discovery both see. Backend pods
 # (greetings/shop/payment/profile/delivery/auth-server) fetch
-# https://granite-security.net/auth/.well-known/openid-configuration at startup to
+# https://granite-security.org/auth/.well-known/openid-configuration at startup to
 # validate JWTs. Without this override, that call would leave the cluster, cross the
 # public internet through Cloudflare, and hairpin back to the same node — slow, and
 # not guaranteed to work depending on the network path. This makes it resolve straight
-# to the in-cluster ingress-nginx Service instead, so the TLS handshake and cert are
+# to the in-cluster Traefik Service instead, so the TLS handshake and cert are
 # identical to what the browser sees, just routed internally.
 #
 # kubeadm/kubespray clusters auto-import any ConfigMap named "coredns-custom" in
 # kube-system (the Corefile has `import /etc/coredns/custom/*.override` baked in) —
 # this is the supported customization point, safe across CoreDNS upgrades.
 #
-# Apply, then restart CoreDNS to pick it up:
-#   INGRESS_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.spec.clusterIP}')
-#   sed -i "s/REPLACE_WITH_INGRESS_NGINX_CLUSTER_IP/$INGRESS_IP/" hetzner/platform/coredns-custom.yaml
+# Apply, then restart CoreDNS to pick it up (traefik's Service, not ingress-nginx's —
+# this overlay moved to Traefik as the Gateway API implementation, see cloudify.md §0):
+#   INGRESS_IP=$(kubectl get svc -n traefik traefik -o jsonpath='{.spec.clusterIP}')
+#   sed -i "s/REPLACE_WITH_TRAEFIK_CLUSTER_IP/$INGRESS_IP/" hetzner/platform/coredns-custom.yaml
 #   kubectl apply -f hetzner/platform/coredns-custom.yaml
 #   kubectl rollout restart deployment coredns -n kube-system
 apiVersion: v1
@@ -29,6 +30,6 @@ metadata:
 data:
   granite-security.override: |
     hosts {
-      REPLACE_WITH_INGRESS_NGINX_CLUSTER_IP granite-security.net
+      REPLACE_WITH_TRAEFIK_CLUSTER_IP granite-security.org
       fallthrough
     }

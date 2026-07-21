@@ -1,0 +1,24 @@
+# One-time cluster-scoped resource. Apply after cert-manager is installed with
+# --set config.enableGatewayAPI=true (required for the gatewayHTTPRoute solver below —
+# see cloudify.md §4 for the full install command):
+#   kubectl apply -f hetzner/platform/cluster-issuer.yaml
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: mr.vrabie@gmail.com # change if you want renewal/expiry notices elsewhere
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          # Gateway API equivalent of the old `ingress: {ingressClassName: nginx}`
+          # solver — creates a temporary HTTPRoute attached to the Gateway's :80
+          # listener (see app/gateway.yaml) to answer the ACME HTTP-01 challenge.
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: granite-gateway
+                namespace: granite
+                kind: Gateway

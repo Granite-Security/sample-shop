@@ -57,3 +57,11 @@ data:
   # OIDC_AUTHORITY must equal the issuer above; overlays keep them in lockstep.
   OIDC_AUTHORITY: "http://gateway:8080/auth"
   OIDC_CLIENT_ID: "spa-client"
+
+  # ── CORS (shop/payment/profile — the services the SPA calls directly) ──
+  # Matches each service's own Java default exactly, so this key existing changes
+  # nothing for kind. Overlays MUST override this to the real browser-facing origin
+  # (see cloud/hetzner/app/config-patch.yaml) — otherwise the SPA's own fetch()
+  # calls get rejected with CORS 403s that the UI just shows as a generic error,
+  # even though curl-style requests (no Origin header) succeed and look fine.
+  CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:5173,http://localhost:8080"

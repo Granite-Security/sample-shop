@@ -5,3 +5,4 @@
 k8s/base/secrets.yaml
 k8s/certs
 hetzner/app/secrets-patch.yaml
+cloud/hetzner/app/secrets-patch.yaml

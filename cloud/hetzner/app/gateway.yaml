@@ -1,0 +1,80 @@
+# Gateway API replaces the classic Ingress used previously — the Kubernetes project
+# is retiring the community ingress-nginx controller, so this overlay moved to Traefik
+# as a Gateway API implementation instead (see cloudify.md §0 for the full why).
+#
+# TLS still terminates here (cert-manager + Let's Encrypt via the `cert-manager.io/
+# cluster-issuer` annotation below, which auto-generates the Certificate for the
+# `granite-security.org-tls` Secret named in the https listener), then forwards plain
+# HTTP to ui-shop's nginx, which already knows how to proxy /api, /auth, /oauth2 to the
+# gateway (see k8s/base/ui-shop.yaml and the kind ui-shop-patch.yaml comments).
+#
+# The plain-HTTP listener (port 80) is required, not optional: cert-manager's ACME
+# HTTP-01 solver creates a temporary HTTPRoute for the `/.well-known/acme-challenge/`
+# path and needs an existing Gateway listener on port 80 to attach it to.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: granite-gateway
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - name: https
+      hostname: granite-security.org
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: Same
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: granite-security.org-tls
+    - name: http
+      hostname: granite-security.org
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+# Redirects plain HTTP to HTTPS — the Gateway API equivalent of the old
+# nginx.ingress.kubernetes.io/ssl-redirect: "true" annotation. cert-manager's own
+# challenge HTTPRoute (created dynamically, path-specific) still takes precedence
+# over this catch-all during renewal, per Gateway API's route-specificity rules.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: granite-http-redirect
+spec:
+  parentRefs:
+    - name: granite-gateway
+      sectionName: http
+  hostnames:
+    - granite-security.org
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: granite-route
+spec:
+  parentRefs:
+    - name: granite-gateway
+      sectionName: https
+  hostnames:
+    - granite-security.org
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ui-shop
+          port: 80
