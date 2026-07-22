@@ -30,6 +30,6 @@ metadata:
 data:
   granite-security.override: |
     hosts {
-      10.233.35.75 granite-security.org
+      REPLACE_WITH_TRAEFIK_CLUSTER_IP granite-security.org
       fallthrough
     }
