@@ -1,0 +1,60 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ui-demo
+  template:
+    metadata:
+      labels:
+        app: ui-demo
+    spec:
+      containers:
+        - name: ui-demo
+          image: granite-ui-demo:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+            - containerPort: 443
+          # Runtime config (Correction 4): rendered into /config.js at container start.
+          env:
+            - name: OIDC_AUTHORITY
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: OIDC_AUTHORITY
+            - name: OIDC_CLIENT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: OIDC_CLIENT_ID
+            - name: STRIPE_PUBLISHABLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: stripe-publishable-key
+          volumeMounts:
+            - name: tls-cert
+              mountPath: /etc/nginx/certs
+              readOnly: true
+      volumes:
+        - name: tls-cert
+          secret:
+            secretName: granite-tls-cert
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui-demo
+spec:
+  ports:
+    - port: 80
+      name: http
+    - port: 443
+      name: https
+  selector:
+    app: ui-demo

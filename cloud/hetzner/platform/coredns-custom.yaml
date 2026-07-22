@@ -1,16 +1,23 @@
-# Split-horizon DNS for the production domain, mirroring the "dual-resolvable issuer
+# Split-horizon DNS for the production domain(s), mirroring the "dual-resolvable issuer
 # host" trick already used in k8s/kind (see k8s/base/config.yaml comments).
 #
 # Why this is needed: AUTH_SERVER_ISSUER / SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
-# are set to https://granite-security.org/auth (see hetzner/app/config-patch.yaml) so the
-# `iss` claim matches what the browser and OIDC discovery both see. Backend pods
+# are set to the live domain (see hetzner/app/config-patch.yaml or
+# hetzner/app-chocolate/config-patch.yaml) so the `iss` claim matches what the
+# browser and OIDC discovery both see. Backend pods
 # (greetings/shop/payment/profile/delivery/auth-server) fetch
-# https://granite-security.org/auth/.well-known/openid-configuration at startup to
+# https://<domain>/auth/.well-known/openid-configuration at startup to
 # validate JWTs. Without this override, that call would leave the cluster, cross the
 # public internet through Cloudflare, and hairpin back to the same node — slow, and
 # not guaranteed to work depending on the network path. This makes it resolve straight
 # to the in-cluster Traefik Service instead, so the TLS handshake and cert are
 # identical to what the browser sees, just routed internally.
+#
+# Both granite-security.org (app/) and sichocolate.com (app-chocolate/) get an
+# override here even though only one overlay's pods are live at a time (they're
+# mutually exclusive, see sichocolate.md §0) — the override is just a hosts-file
+# entry, harmless to keep around for whichever domain isn't currently deployed, and
+# one less step to remember when switching overlays.
 #
 # kubeadm/kubespray clusters auto-import any ConfigMap named "coredns-custom" in
 # kube-system (the Corefile has `import /etc/coredns/custom/*.override` baked in) —
@@ -19,7 +26,7 @@
 # Apply, then restart CoreDNS to pick it up (traefik's Service, not ingress-nginx's —
 # this overlay moved to Traefik as the Gateway API implementation, see cloudify.md §0):
 #   INGRESS_IP=$(kubectl get svc -n traefik traefik -o jsonpath='{.spec.clusterIP}')
-#   sed -i "s/10.233.35.75/$INGRESS_IP/" hetzner/platform/coredns-custom.yaml
+#   sed -i "s/10.233.35.75/$INGRESS_IP/g" hetzner/platform/coredns-custom.yaml
 #   kubectl apply -f hetzner/platform/coredns-custom.yaml
 #   kubectl rollout restart deployment coredns -n kube-system
 apiVersion: v1
@@ -31,5 +38,10 @@ data:
   granite-security.override: |
     hosts {
       10.233.35.75 granite-security.org
+      fallthrough
+    }
+  sichocolate.override: |
+    hosts {
+      10.233.35.75 sichocolate.com
       fallthrough
     }

@@ -1,0 +1,251 @@
+# Same as app/production-patches.yaml — identical backend sizing, since it's the
+# same backend. Only the front-end block differs: ui-demo instead of ui-shop (and
+# there's no ui-shop block here at all, since remove-ui-shop.yaml already deletes
+# that Deployment — patching a resource this overlay doesn't have would fail).
+#
+# See app/production-patches.yaml for the full rationale on imagePullPolicy: Always
+# with a floating :latest tag, and on why readinessProbe vs. livenessProbe
+# initialDelaySeconds are tuned so differently.
+
+# ── JVM services ─────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-server
+spec:
+  template:
+    spec:
+      containers:
+        - name: auth-server
+          imagePullPolicy: Always
+          resources:
+            requests: { cpu: 250m, memory: 384Mi }
+            limits: { cpu: "1", memory: 768Mi }
+          readinessProbe:
+            initialDelaySeconds: 30
+          livenessProbe:
+            initialDelaySeconds: 300
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+spec:
+  template:
+    spec:
+      containers:
+        - name: gateway
+          imagePullPolicy: Always
+          resources:
+            requests: { cpu: 250m, memory: 384Mi }
+            limits: { cpu: "1", memory: 768Mi }
+          readinessProbe:
+            initialDelaySeconds: 30
+          livenessProbe:
+            initialDelaySeconds: 300
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: greetings
+spec:
+  template:
+    spec:
+      containers:
+        - name: greetings
+          imagePullPolicy: Always
+          resources:
+            requests: { cpu: 250m, memory: 384Mi }
+            limits: { cpu: 500m, memory: 768Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shop
+spec:
+  template:
+    spec:
+      containers:
+        - name: shop
+          imagePullPolicy: Always
+          resources:
+            requests: { cpu: 250m, memory: 384Mi }
+            limits: { cpu: 500m, memory: 768Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment
+spec:
+  template:
+    spec:
+      containers:
+        - name: payment
+          imagePullPolicy: Always
+          resources:
+            requests: { cpu: 250m, memory: 384Mi }
+            limits: { cpu: "1", memory: 768Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: profile
+spec:
+  template:
+    spec:
+      containers:
+        - name: profile
+          imagePullPolicy: Always
+          resources:
+            requests: { cpu: 250m, memory: 384Mi }
+            limits: { cpu: 500m, memory: 768Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: delivery
+spec:
+  template:
+    spec:
+      containers:
+        - name: delivery
+          imagePullPolicy: Always
+          resources:
+            requests: { cpu: 250m, memory: 384Mi }
+            limits: { cpu: 500m, memory: 768Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui-demo
+spec:
+  template:
+    spec:
+      containers:
+        - name: ui-demo
+          imagePullPolicy: Always
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+
+# ── Kafka ────────────────────────────────────────────────
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+spec:
+  template:
+    spec:
+      containers:
+        - name: kafka
+          resources:
+            requests: { cpu: 300m, memory: 512Mi }
+            limits: { cpu: 700m, memory: 1Gi }
+
+# ── Postgres instances ───────────────────────────────────
+# Also fixes a real correctness gap: k8s/base hardcodes POSTGRES_PASSWORD as a plain
+# literal instead of reading it from granite-secrets, so overriding the secret in
+# secrets-patch.yaml alone would NOT change Postgres's actual password — only what
+# the app clients send. This rewires Postgres itself to read from the same secret
+# keys the app deployments already use (db-postgres-password / db-myuser-password).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-auth
+spec:
+  template:
+    spec:
+      containers:
+        - name: postgres
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 600m, memory: 512Mi }
+          env:
+            - name: POSTGRES_PASSWORD
+              value: null
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: db-postgres-password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-shop
+spec:
+  template:
+    spec:
+      containers:
+        - name: postgres
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 600m, memory: 512Mi }
+          env:
+            - name: POSTGRES_PASSWORD
+              value: null
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: db-myuser-password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-payment
+spec:
+  template:
+    spec:
+      containers:
+        - name: postgres
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 600m, memory: 512Mi }
+          env:
+            - name: POSTGRES_PASSWORD
+              value: null
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: db-myuser-password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-delivery
+spec:
+  template:
+    spec:
+      containers:
+        - name: postgres
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 600m, memory: 512Mi }
+          env:
+            - name: POSTGRES_PASSWORD
+              value: null
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: db-myuser-password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-profile
+spec:
+  template:
+    spec:
+      containers:
+        - name: postgres
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 600m, memory: 512Mi }
+          env:
+            - name: POSTGRES_PASSWORD
+              value: null
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: db-myuser-password

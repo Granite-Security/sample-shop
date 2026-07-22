@@ -175,3 +175,9 @@ export const FALLBACK_PRODUCTS: Product[] = [
     imageUrl: '',
   },
 ];
+
+// The single source of truth for "which live products belong to
+// sichocolate.com" — matched by name against shop's Food & Sweets category in
+// store.tsx, since that category also holds the shared shop's own generic
+// products (see docs/plans/add-chocolates.md).
+export const CURATED_PRODUCT_NAMES = new Set(FALLBACK_PRODUCTS.map((p) => p.name));

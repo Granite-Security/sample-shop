@@ -1,0 +1,41 @@
+server {
+    listen       443 ssl;
+    server_name  gateway;
+
+    ssl_certificate     /etc/nginx/certs/tls.crt;
+    ssl_certificate_key /etc/nginx/certs/tls.key;
+
+    root   /usr/share/nginx/html;
+    index  index.html;
+
+    location /api/ {
+        proxy_pass http://gateway:8080;
+        proxy_set_header Host localhost:8080;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header X-Forwarded-Proto $granite_forwarded_proto;
+        proxy_redirect off;
+    }
+
+    location /auth/ {
+        proxy_pass http://gateway:8080;
+        proxy_set_header Host localhost:8080;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header X-Forwarded-Proto $granite_forwarded_proto;
+        proxy_redirect off;
+    }
+
+    location /oauth2/ {
+        proxy_pass http://gateway:8080;
+        proxy_set_header Host localhost:8080;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header X-Forwarded-Proto $granite_forwarded_proto;
+        proxy_redirect off;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

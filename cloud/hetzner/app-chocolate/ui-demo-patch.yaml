@@ -1,0 +1,38 @@
+# Same as app/ui-shop-patch.yaml, targeting ui-demo instead: in kind, ui-demo's nginx
+# terminates TLS itself using a self-signed cert mounted from the "granite-tls-cert"
+# secret, and is reached via NodePort. In production, Traefik's Gateway terminates TLS
+# (Let's Encrypt cert via cert-manager, see gateway.yaml) and talks plain HTTP to
+# ui-demo, so that volume/port and the NodePort are dropped. Leaving the volume in
+# place would crash-loop the pod anyway, since "granite-tls-cert" is never created here.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui-demo
+spec:
+  template:
+    spec:
+      volumes:
+        - name: tls-cert
+          $patch: delete
+      containers:
+        - name: ui-demo
+          ports:
+            - containerPort: 443
+              $patch: delete
+          volumeMounts:
+            - mountPath: /etc/nginx/certs
+              $patch: delete
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui-demo
+spec:
+  $patch: replace
+  type: ClusterIP
+  selector:
+    app: ui-demo
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
