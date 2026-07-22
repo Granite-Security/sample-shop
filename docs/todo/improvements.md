@@ -2,7 +2,7 @@
 
 ## Stale pooled R2DBC connections (shop, payment, profile)
 
-**Status:** fixed for `delivery` only. Still open for `shop`, `payment`, `profile`.
+**Status:** fixed for `delivery`, `shop`, `payment`, `profile` (2026-07-22) — all four now carry the same `spring.r2dbc.pool` block.
 
 **Symptom:** intermittent 500s on reactive endpoints backed by R2DBC (e.g. was
 observed on `GET /api/delivery`), self-healing shortly after — a refresh or
@@ -44,8 +44,4 @@ spring:
 This makes the pool proactively validate/discard stale connections instead of
 handing them to a live request.
 
-**TODO:** apply the identical block to `shop/src/main/resources/application.yaml`,
-`payment/src/main/resources/application.yaml`, and
-`profile/src/main/resources/application.yaml` — they all share the exact same
-bare R2DBC config and are equally exposed to this failure mode, just not yet
-observed/reported for those three.
+**Applied.**
