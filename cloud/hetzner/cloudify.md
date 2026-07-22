@@ -469,3 +469,12 @@ kubectl -n granite exec deploy/shop -- getent hosts <DOMAIN>
 Note: the substituted IP is Traefik's `ClusterIP`, which is stable as long as
 its Service object isn't deleted/recreated — if that ever happens (e.g.
 `helm uninstall traefik` + reinstall), re-run this section with the new IP.
+
+
+# 15 Redeployment
+
+If you want data to survive a delete -k / apply -k cycle in the future, the fix would be one of:
+- Split the PVCs out of the kustomization scope (e.g. into a separate storage kustomization applied/deleted   
+  independently from app), so kubectl delete -k app never touches them.
+- Or use `kubectl delete deployment -n granite --all` / delete specific resources rather than delete -k, when   
+  you want to tear down workloads but keep data.
