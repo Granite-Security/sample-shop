@@ -24,8 +24,6 @@ spring:
     password: ${PROFILE_JDBC_PASSWORD:secret}
     change-log: classpath:/db/changelog/db.changelog-master.yaml
 
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:${AUTH_ISSUER_URI:http://localhost:8080/auth}}
+jwt:
+  jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:9090/auth/oauth2/jwks}
+  trusted-issuers: ${TRUSTED_JWT_ISSUERS:http://localhost:8080/auth}

@@ -1,0 +1,130 @@
+# One shared Gateway serving both domains at once. Gateway API listeners are
+# single-hostname, so two domains × (https + http) = 4 listeners; each HTTPRoute
+# parentRefs exactly one listener via sectionName and is hostname-scoped to match.
+# cert-manager issues one Certificate per distinct certificateRefs name, so this
+# naturally produces two Certificates (granite-security.org-tls,
+# sichocolate.com-tls) off the one Gateway object — no ClusterIssuer change
+# needed (see platform/cluster-issuer.yaml).
+#
+# Route/redirect object names carry a -shop/-chocolate suffix, unlike app/ and
+# app-chocolate/'s shared "granite-route"/"granite-http-redirect" names — those
+# two overlays reused the same names deliberately because only one was ever live
+# at a time. Here both domains' routes exist concurrently in the same namespace,
+# so the names must be unique.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: granite-gateway
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - name: https-shop
+      hostname: granite-security.org
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: Same
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: granite-security.org-tls
+    - name: http-shop
+      hostname: granite-security.org
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: https-chocolate
+      hostname: sichocolate.com
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: Same
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: sichocolate.com-tls
+    - name: http-chocolate
+      hostname: sichocolate.com
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: granite-http-redirect-shop
+spec:
+  parentRefs:
+    - name: granite-gateway
+      sectionName: http-shop
+  hostnames:
+    - granite-security.org
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: granite-http-redirect-chocolate
+spec:
+  parentRefs:
+    - name: granite-gateway
+      sectionName: http-chocolate
+  hostnames:
+    - sichocolate.com
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: granite-route-shop
+spec:
+  parentRefs:
+    - name: granite-gateway
+      sectionName: https-shop
+  hostnames:
+    - granite-security.org
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ui-shop
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: granite-route-chocolate
+spec:
+  parentRefs:
+    - name: granite-gateway
+      sectionName: https-chocolate
+  hostnames:
+    - sichocolate.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ui-demo
+          port: 80

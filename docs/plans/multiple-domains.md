@@ -1,6 +1,22 @@
 # Running both domains simultaneously (granite-security.org + sichocolate.com)
 
-**Status: proposal, not started.**
+**Status: code + manifests implemented on `feature/hetznerize`, not yet deployed.**
+All of §1–§3 below is done: `auth-server`, `gateway`, and the 5 resource
+servers compile clean; `cloud/hetzner/app-multi/` is a new, fully-merged
+overlay that `kubectl kustomize` renders successfully. `cloud/hetzner/app/`
+and `cloud/hetzner/app-chocolate/` were also updated (not left stale) so they
+remain valid single-domain rollback targets even against the new code —
+verified by rendering all three overlays plus `k8s/kind` and confirming each
+gets internally-consistent config. **Nothing has been deployed to Hetzner** —
+images haven't been built/pushed and `kubectl apply` hasn't been run. See §9
+for the concrete handoff: build/push commands, apply order, and verification
+checks, since the actual deploy was intentionally left for manual execution
+against production. Two deviations from the original design worth noting:
+`OIDC_AUTHORITY`/`OIDC_CLIENT_ID` ended up as literal per-frontend env
+overrides in `ui-shop-patch.yaml`/`ui-demo-patch.yaml` (not new ConfigMaps —
+simpler, one less object), and the "gateway needs `forward-headers-strategy`"
+item turned out to be auth-server-already-has-it / gateway-needed-it-added,
+not both from scratch.
 
 ## 0. What's changing vs. what exists today
 
@@ -397,3 +413,70 @@ image will 500 on tokens from the domain it doesn't recognize:
   Plan above assumes shared, no change needed.
 - Retire vs. keep `app`/`app-chocolate` as fallback overlays (§6 step 5) —
   needs a team decision, not a technical one.
+
+## 9. Deploy runbook (as implemented, for the person running it)
+
+`k8s/base/config.yaml` grew two new keys, `TRUSTED_JWT_ISSUERS` and
+`JWT_JWK_SET_URI`, wired into all 5 resource-server Deployments in place of
+`SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI` (removed — the Java
+code no longer reads `issuer-uri` at all). Because `k8s/base` is shared,
+`cloud/hetzner/app/config-patch.yaml` and `app-chocolate/config-patch.yaml`
+were updated in lockstep (new `TRUSTED_JWT_ISSUERS` override, renamed
+`OIDC_CLIENT_ID`/`SPA_CLIENT_CHOCOLATE_*` keys) so they still work standalone
+as single-domain rollback targets with the new images — confirmed by
+rendering all three overlays plus `k8s/kind` with `kubectl kustomize` and
+diffing the resolved `AUTH_SERVER_ISSUER`/`TRUSTED_JWT_ISSUERS`/
+`OIDC_CLIENT_ID` values.
+
+### Build and push images
+All 7 backend services changed; `ui-shop`/`ui-demo` images did not (only their
+K8s env wiring did):
+```bash
+export TAG=$(git rev-parse --short HEAD)
+export TAG=latest
+for s in auth-server gateway greetings shop payment profile delivery; do
+  (cd $s && ./gradlew build -x test)
+  docker buildx build --platform linux/amd64 -t docker.io/gluonstream/granite-$s:$TAG --push $s/
+done
+sed -i '' "s/newTag: latest/newTag: $TAG/" cloud/hetzner/app-multi/kustomization.yaml
+```
+
+### Apply
+```bash
+cp cloud/hetzner/app-multi/secrets-patch.yaml.example cloud/hetzner/app-multi/secrets-patch.yaml
+# fill in real values (same secrets as app/'s and app-chocolate/'s — see the
+# file's own comments), then:
+kubectl apply -k cloud/hetzner/app-multi
+kubectl -n granite get gateway granite-gateway -o wide
+kubectl -n granite describe gateway granite-gateway   # all 4 listeners Programmed/Accepted
+kubectl -n granite get httproute
+kubectl -n granite rollout status deploy/auth-server deploy/gateway deploy/greetings deploy/shop deploy/payment deploy/profile deploy/delivery deploy/ui-shop deploy/ui-demo
+kubectl -n granite get certificate -w   # both granite-security.org-tls and sichocolate.com-tls Ready
+```
+
+### Verify (the issuer-derivation checkpoint is the one that matters most)
+```bash
+curl -s https://granite-security.org/auth/.well-known/openid-configuration | jq .issuer
+# expect exactly "https://granite-security.org/auth"
+curl -s https://sichocolate.com/auth/.well-known/openid-configuration | jq .issuer
+# expect exactly "https://sichocolate.com/auth"
+curl -sI https://granite-security.org/ | head -1   # 200 from ui-shop
+curl -sI https://sichocolate.com/ | head -1        # 200 from ui-demo
+curl -s https://granite-security.org/config.js     # OIDC_CLIENT_ID: spa-client-shop
+curl -s https://sichocolate.com/config.js          # OIDC_CLIENT_ID: spa-client-chocolate
+```
+Then a full browser login on **both** domains, and confirm a token minted on
+one domain is accepted by `payment`/`shop`/`profile` (that's
+`TRUSTED_JWT_ISSUERS` actually being an allow-list, not just a single value in
+disguise). Watch logs for `invalid_issuer` if anything 401s unexpectedly:
+```bash
+kubectl -n granite logs deploy/payment --since=10m | grep -i invalid_issuer
+```
+
+### Rollback
+`git revert` this work (or `git checkout <previous-good-commit>`) and
+redeploy the previous image tags with `kubectl apply -k cloud/hetzner/app`
+(single-domain granite-security.org) — that overlay was kept independently
+functional specifically for this. `app-multi/`'s Gateway object replaces
+`app/`'s narrower one in-place (same object name), so no orphaned Gateway API
+objects to clean up either way.

@@ -24,6 +24,9 @@ spring:
   security:
     oauth2:
       authorizationserver:
+        # Leave blank in production (app-multi overlay) so the issuer is
+        # derived per-request instead of fixed to one domain. kind/compose set
+        # AUTH_SERVER_ISSUER explicitly since they only ever serve one domain.
         issuer: ${AUTH_SERVER_ISSUER:http://localhost:8080/auth}
 
 app:
@@ -32,8 +35,11 @@ app:
       secret: ${OIDC_CLIENT_SECRET_ENCODED:{noop}secret}
       redirect-uri: ${OIDC_CLIENT_REDIRECT_URI:http://localhost:8080/login/oauth2/code/oidc-client}
       post-logout-redirect-uri: ${OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI:http://localhost:8080/}
-    spa-client:
-      redirect-uri: ${SPA_CLIENT_REDIRECT_URI:http://localhost:5173/callback}
-      post-logout-redirect-uri: ${SPA_CLIENT_POST_LOGOUT_REDIRECT_URI:http://localhost:5173}
+    spa-client-shop:
+      redirect-uri: ${SPA_CLIENT_SHOP_REDIRECT_URI:${SPA_CLIENT_REDIRECT_URI:http://localhost:5173/callback}}
+      post-logout-redirect-uri: ${SPA_CLIENT_SHOP_POST_LOGOUT_REDIRECT_URI:${SPA_CLIENT_POST_LOGOUT_REDIRECT_URI:http://localhost:5173}}
+    spa-client-chocolate:
+      redirect-uri: ${SPA_CLIENT_CHOCOLATE_REDIRECT_URI:http://localhost:5173/callback}
+      post-logout-redirect-uri: ${SPA_CLIENT_CHOCOLATE_POST_LOGOUT_REDIRECT_URI:http://localhost:5173}
     external-client:
       secret: ${EXTERNAL_CLIENT_SECRET:{noop}my-secret}

@@ -33,9 +33,6 @@ public class RouterConfig {
     @Value("${microservices.delivery.uri:http://localhost:8063}")
     private String deliveryServiceUri;
 
-    @Value("${microservices.spa.uri:http://localhost:5173}")
-    private String spaOrigin;
-
     @Bean
     RouteLocator gatewayRouter(RouteLocatorBuilder builder) {
         return builder.routes()
@@ -69,11 +66,15 @@ public class RouterConfig {
 
     @Bean
     RouterFunction<ServerResponse> indexRedirect() {
+        // Previously 302'd to a single-valued spaOrigin — not viable once two
+        // domains/frontends exist behind this one gateway, and a redirect back
+        // to "/" would just loop. nginx never proxies "/" itself to gateway
+        // (only /api, /auth, /oauth2), so this route only fires if something
+        // bypasses nginx and hits gateway directly; a plain 200 is enough to
+        // confirm the gateway is up without guessing which frontend to send
+        // the caller to.
         return RouterFunctions.route()
-                .GET("/", request ->
-                        ServerResponse.status(HttpStatus.FOUND)
-                                .headers(h -> h.setLocation(URI.create(spaOrigin + "/")))
-                                .build())
+                .GET("/", request -> ServerResponse.ok().bodyValue("gateway is up"))
                 .build();
     }
 

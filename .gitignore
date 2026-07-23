@@ -8,3 +8,4 @@ hetzner/app/secrets-patch.yaml
 cloud/hetzner/app/secrets-patch.yaml
 cloud/hetzner/app-chocolate/secrets-patch.yaml
 cloud/hetzner/secrets.info
+cloud/hetzner/app-multi/secrets-patch.yaml

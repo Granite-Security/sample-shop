@@ -19,11 +19,6 @@ spring:
     password: ${SHOP_JDBC_PASSWORD:secret}
     change-log: classpath:/db/changelog/db.changelog-master.yaml
 
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:${AUTH_ISSUER_URI:http://localhost:8080/auth}}
   codec:
     max-in-memory-size: 10MB
 
@@ -35,6 +30,10 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+
+jwt:
+  jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:9090/auth/oauth2/jwks}
+  trusted-issuers: ${TRUSTED_JWT_ISSUERS:http://localhost:8080/auth}
 
 springdoc:
   paths-to-match: /api/shop/**,/api/greetings/**

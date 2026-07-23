@@ -1,0 +1,42 @@
+# Same as ui-shop-patch.yaml, targeting ui-demo instead — see there for the full
+# rationale on both the TLS-volume removal and the OIDC_AUTHORITY/OIDC_CLIENT_ID
+# retarget to literal, domain-scoped values.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui-demo
+spec:
+  template:
+    spec:
+      volumes:
+        - name: tls-cert
+          $patch: delete
+      containers:
+        - name: ui-demo
+          ports:
+            - containerPort: 443
+              $patch: delete
+          volumeMounts:
+            - mountPath: /etc/nginx/certs
+              $patch: delete
+          env:
+            - name: OIDC_AUTHORITY
+              value: "https://sichocolate.com/auth"
+              valueFrom: null
+            - name: OIDC_CLIENT_ID
+              value: "spa-client-chocolate"
+              valueFrom: null
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui-demo
+spec:
+  $patch: replace
+  type: ClusterIP
+  selector:
+    app: ui-demo
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http

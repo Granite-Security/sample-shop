@@ -1,0 +1,42 @@
+# Production overrides for the shared ConfigMap, merging what were previously
+# app/config-patch.yaml and app-chocolate/config-patch.yaml's separate,
+# mutually-exclusive values into one ConfigMap that serves both domains at once.
+# See docs/plans/multiple-domains.md for the full rationale.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: granite-config
+data:
+  # Left UNSET (empty) on purpose: a single fixed issuer can't serve two
+  # domains, so auth-server derives it per-request from X-Forwarded-Host/Proto
+  # instead (see auth-server SecurityConfig — this only activates when
+  # AUTH_SERVER_ISSUER is blank).
+  AUTH_SERVER_ISSUER: ""
+
+  # Resource servers now validate against this allow-list instead of a single
+  # issuer-uri (jwk-set-uri itself stays at its k8s/base default — same signing
+  # key regardless of which domain issued the token, so it doesn't need to vary
+  # here).
+  TRUSTED_JWT_ISSUERS: "https://granite-security.org/auth,https://sichocolate.com/auth"
+
+  # oidc-client (Postman/manual testing) is a dev tool, not a real frontend —
+  # kept pinned to one domain, same as it always has been.
+  OIDC_CLIENT_REDIRECT_URI: "https://granite-security.org/login/oauth2/code/oidc-client"
+  OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI: "https://granite-security.org/"
+
+  # Two SPA clients now (auth-server registers spa-client-shop AND
+  # spa-client-chocolate as separate RegisteredClients) instead of one
+  # SPA_CLIENT_REDIRECT_URI/POST_LOGOUT_REDIRECT_URI pair.
+  SPA_CLIENT_SHOP_REDIRECT_URI: "https://granite-security.org/callback"
+  SPA_CLIENT_SHOP_POST_LOGOUT_REDIRECT_URI: "https://granite-security.org"
+  SPA_CLIENT_CHOCOLATE_REDIRECT_URI: "https://sichocolate.com/callback"
+  SPA_CLIENT_CHOCOLATE_POST_LOGOUT_REDIRECT_URI: "https://sichocolate.com"
+
+  # OIDC_AUTHORITY / OIDC_CLIENT_ID are NOT set here — each frontend needs its
+  # own value (granite-security.org/auth + spa-client-shop for ui-shop,
+  # sichocolate.com/auth + spa-client-chocolate for ui-demo), which a single
+  # shared ConfigMap key can't carry. Set directly as literal env overrides in
+  # ui-shop-patch.yaml / ui-demo-patch.yaml instead.
+
+  # Both domains can now call shop/payment/profile directly from the browser.
+  CORS_ALLOWED_ORIGINS: "https://granite-security.org,https://sichocolate.com"
