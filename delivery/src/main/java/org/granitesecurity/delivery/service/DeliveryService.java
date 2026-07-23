@@ -17,7 +17,6 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 @Service
 public class DeliveryService {
@@ -49,7 +48,7 @@ public class DeliveryService {
 
     public Mono<DeliveryResponse> getDeliveryByOrderId(Long orderId) {
         return deliveryRepository.findByOrderId(orderId)
-                .flatMap(this::toResponse);
+                .map(this::toResponse);
     }
 
     public Flux<DeliveryResponse> getDeliveries(String status, String paymentStatus) {
@@ -63,7 +62,23 @@ public class DeliveryService {
         } else {
             stream = deliveryRepository.findAll();
         }
-        return stream.flatMap(this::toResponse);
+        return stream.map(this::toResponse);
+    }
+
+    public Mono<TrackingDetailResponse> getTrackingDetail(Long orderId) {
+        return deliveryRepository.findByOrderId(orderId)
+                .flatMap(delivery -> trackingRepository.findByDeliveryIdOrderByTimestampDesc(delivery.getId())
+                        .map(t -> new TrackingEvent(t.getStatus(), t.getTimestamp(), t.getDescription()))
+                        .collectList()
+                        .map(events -> new TrackingDetailResponse(
+                                delivery.getId().toString(),
+                                delivery.getOrderId(),
+                                delivery.getStatus(),
+                                delivery.getPaymentStatus(),
+                                delivery.getItems(),
+                                delivery.getEstimatedDeliveryDate(),
+                                events
+                        )));
     }
 
     public Mono<DeliveryResponse> updateStatus(Long orderId, String status, String description) {
@@ -84,7 +99,7 @@ public class DeliveryService {
                 })
                 .flatMap(saved -> emitEvent(saved, "STATUS_UPDATE",
                         Map.of("status", status, "description", description))
-                        .then(toResponse(saved)));
+                        .thenReturn(toResponse(saved)));
     }
 
     public Mono<Delivery> updatePaymentStatus(Long orderId, String paymentStatus) {
@@ -97,32 +112,24 @@ public class DeliveryService {
                 });
     }
 
-    public Mono<DeliveryResponse> toResponse(Delivery delivery) {
-        return trackingRepository.findByDeliveryIdOrderByTimestampDesc(delivery.getId())
-                .map(t -> new TrackingEvent(
-                        t.getStatus(),
-                        t.getTimestamp(),
-                        t.getDescription()
-                ))
-                .collectList()
-                .map(events -> new DeliveryResponse(
-                        delivery.getId().toString(),
-                        delivery.getOrderId(),
-                        delivery.getStatus(),
-                        delivery.getPaymentStatus(),
-                        delivery.getItems(),
-                        delivery.getRecipientName(),
-                        delivery.getAddressLine1(),
-                        delivery.getAddressLine2(),
-                        delivery.getCity(),
-                        delivery.getState(),
-                        delivery.getZipCode(),
-                        delivery.getCountry(),
-                        delivery.getEstimatedDeliveryDate(),
-                        delivery.getCreatedAt(),
-                        delivery.getUpdatedAt(),
-                        events
-                ));
+    private DeliveryResponse toResponse(Delivery delivery) {
+        return new DeliveryResponse(
+                delivery.getId().toString(),
+                delivery.getOrderId(),
+                delivery.getStatus(),
+                delivery.getPaymentStatus(),
+                delivery.getItems(),
+                delivery.getRecipientName(),
+                delivery.getAddressLine1(),
+                delivery.getAddressLine2(),
+                delivery.getCity(),
+                delivery.getState(),
+                delivery.getZipCode(),
+                delivery.getCountry(),
+                delivery.getEstimatedDeliveryDate(),
+                delivery.getCreatedAt(),
+                delivery.getUpdatedAt()
+        );
     }
 
     private boolean isValidTransition(String current, String next) {

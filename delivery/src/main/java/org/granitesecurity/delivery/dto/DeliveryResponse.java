@@ -1,9 +1,6 @@
 package org.granitesecurity.delivery.dto;
 
 import java.time.Instant;
-import java.util.List;
-
-import org.granitesecurity.delivery.dto.TrackingDetailResponse.TrackingEvent;
 
 public record DeliveryResponse(
     String id,
@@ -20,6 +17,5 @@ public record DeliveryResponse(
     String country,
     Instant estimatedDeliveryDate,
     Instant createdAt,
-    Instant updatedAt,
-    List<TrackingEvent> events
+    Instant updatedAt
 ) {}

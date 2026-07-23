@@ -16,6 +16,7 @@ public class DeliveryRoute {
         return route()
                 .GET("/api/delivery", deliveryHandler::list)
                 .GET("/api/delivery/{orderId}", deliveryHandler::getByOrderId)
+                .GET("/api/delivery/{orderId}/tracking", deliveryHandler::getTracking)
                 .PUT("/api/delivery/{orderId}/status", deliveryHandler::updateStatus)
                 .build();
     }

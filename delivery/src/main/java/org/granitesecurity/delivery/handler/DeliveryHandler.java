@@ -34,6 +34,13 @@ public class DeliveryHandler {
                 .switchIfEmpty(ServerResponse.notFound().build());
     }
 
+    public Mono<ServerResponse> getTracking(ServerRequest request) {
+        Long orderId = Long.parseLong(request.pathVariable("orderId"));
+        return deliveryService.getTrackingDetail(orderId)
+                .flatMap(response -> ServerResponse.ok().bodyValue(response))
+                .switchIfEmpty(ServerResponse.notFound().build());
+    }
+
     public Mono<ServerResponse> updateStatus(ServerRequest request) {
         Long orderId = Long.parseLong(request.pathVariable("orderId"));
         return request.bodyToMono(Map.class)

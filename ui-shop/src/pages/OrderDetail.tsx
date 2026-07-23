@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router';
 import { api } from '../api';
-import type { OrderResponse, CreatePaymentIntentResponse, DeliveryResponse } from '../types';
+import type { OrderResponse, CreatePaymentIntentResponse, DeliveryResponse, TrackingDetailResponse } from '../types';
 
 const POLL_INTERVAL = 5000;
 
@@ -10,6 +10,7 @@ export default function OrderDetail() {
   const [order, setOrder] = useState<OrderResponse | null>(null);
   const [payment, setPayment] = useState<CreatePaymentIntentResponse | null>(null);
   const [delivery, setDelivery] = useState<DeliveryResponse | null>(null);
+  const [tracking, setTracking] = useState<TrackingDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -23,12 +24,14 @@ export default function OrderDetail() {
         api.orders.getOrder(orderId),
         api.payments.getPaymentIntent(orderId).catch(() => null),
         api.delivery.getDelivery(orderId),
+        api.delivery.getDeliveryTracking(orderId),
       ])
-        .then(([o, p, d]) => {
+        .then(([o, p, d, t]) => {
           if (cancelled) return;
           setOrder(o);
           setPayment(p);
           setDelivery(d);
+          setTracking(t);
           setLoading(false);
           if (o.status !== 'PENDING' && o.status !== 'PROCESSING') {
             if (pollRef.current) {
@@ -113,11 +116,11 @@ export default function OrderDetail() {
             <p>Estimated delivery: {new Date(delivery.estimatedDeliveryDate).toLocaleDateString()}</p>
           )}
 
-          {delivery.events && delivery.events.length > 0 && (
+          {tracking && tracking.events.length > 0 && (
             <>
               <h4 style={{ marginTop: 16 }}>Tracking Timeline</h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {delivery.events.map((event, i) => (
+                {tracking.events.map((event, i) => (
                   <div key={i} style={{
                     display: 'flex', gap: 12, alignItems: 'flex-start',
                     padding: '8px 12px', background: 'var(--surface)', borderRadius: 8,
