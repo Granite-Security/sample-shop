@@ -64,6 +64,26 @@ spec:
                 configMapKeyRef:
                   name: granite-config
                   key: SPA_CLIENT_POST_LOGOUT_REDIRECT_URI
+            - name: SPA_CLIENT_SHOP_REDIRECT_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: SPA_CLIENT_SHOP_REDIRECT_URI
+            - name: SPA_CLIENT_SHOP_POST_LOGOUT_REDIRECT_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: SPA_CLIENT_SHOP_POST_LOGOUT_REDIRECT_URI
+            - name: SPA_CLIENT_CHOCOLATE_REDIRECT_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: SPA_CLIENT_CHOCOLATE_REDIRECT_URI
+            - name: SPA_CLIENT_CHOCOLATE_POST_LOGOUT_REDIRECT_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: SPA_CLIENT_CHOCOLATE_POST_LOGOUT_REDIRECT_URI
             - name: GOOGLE_CLIENT_ID
               valueFrom:
                 secretKeyRef:

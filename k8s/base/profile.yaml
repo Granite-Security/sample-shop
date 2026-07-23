@@ -36,11 +36,16 @@ spec:
                 configMapKeyRef:
                   name: granite-config
                   key: PROFILE_PORT
-            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+            - name: TRUSTED_JWT_ISSUERS
               valueFrom:
                 configMapKeyRef:
                   name: granite-config
-                  key: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+                  key: TRUSTED_JWT_ISSUERS
+            - name: JWT_JWK_SET_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: JWT_JWK_SET_URI
             - name: PROFILE_R2DBC_URL
               valueFrom:
                 configMapKeyRef:

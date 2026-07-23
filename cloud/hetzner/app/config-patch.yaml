@@ -1,16 +1,28 @@
 # Production overrides for the shared ConfigMap. Same keys as k8s/kind/config-patch.yaml,
 # but pointing at the public domain instead of the in-cluster "gateway" hostname.
 # See hetzner/platform/coredns-custom.yaml for how pods still resolve this internally.
+#
+# Kept in sync with the multi-domain code changes (see docs/plans/multiple-domains.md)
+# so this overlay still works standalone as a single-domain rollback target even
+# after auth-server/gateway/resource-server images are upgraded — TRUSTED_JWT_ISSUERS
+# replaces SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI (resource servers no
+# longer read that property at all), and OIDC_CLIENT_ID follows auth-server's rename
+# of its SPA client from "spa-client" to "spa-client-shop".
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: granite-config
 data:
   AUTH_SERVER_ISSUER: "https://granite-security.org/auth"
-  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "https://granite-security.org/auth"
+  TRUSTED_JWT_ISSUERS: "https://granite-security.org/auth"
   SPA_CLIENT_REDIRECT_URI: "https://granite-security.org/callback"
   SPA_CLIENT_POST_LOGOUT_REDIRECT_URI: "https://granite-security.org"
+  # auth-server's Deployment now wires SPA_CLIENT_SHOP_* explicitly (it takes
+  # precedence over the SPA_CLIENT_* fallback in application.yaml once set),
+  # so this overlay must set it directly rather than relying on the fallback.
+  SPA_CLIENT_SHOP_REDIRECT_URI: "https://granite-security.org/callback"
+  SPA_CLIENT_SHOP_POST_LOGOUT_REDIRECT_URI: "https://granite-security.org"
   OIDC_CLIENT_REDIRECT_URI: "https://granite-security.org/login/oauth2/code/oidc-client"
   OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI: "https://granite-security.org/"
   OIDC_AUTHORITY: "https://granite-security.org/auth"
-  OIDC_CLIENT_ID: "spa-client"
+  OIDC_CLIENT_ID: "spa-client-shop"

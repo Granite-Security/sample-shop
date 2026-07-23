@@ -1,0 +1,54 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: granite
+
+# Both front ends run simultaneously now (unlike app/ and app-chocolate/, which
+# were mutually exclusive) — pulls in ui-shop (already part of k8s/base) AND
+# ui-demo (k8s/base/ui-demo's own mini-kustomization, see its comments for why
+# it isn't just a bare file under k8s/base). No remove-ui-shop.yaml here: both
+# front ends stay.
+resources:
+  - ../../../k8s/base
+  - ../../../k8s/base/ui-demo
+  - gateway.yaml
+
+patches:
+  - path: config-patch.yaml
+  - path: ui-shop-patch.yaml
+  - path: ui-demo-patch.yaml
+  - path: production-patches.yaml
+  - path: secrets-patch.yaml
+
+# Bump newTag on every release (recommend the git short SHA) and re-run
+# `kubectl apply -k hetzner/app-multi` — see app/kustomization.yaml's original
+# comment for why a floating "latest" tag + imagePullPolicy: IfNotPresent would
+# NOT re-pull on redeploy.
+images:
+  - name: granite-auth-server
+    newName: docker.io/gluonstream/granite-auth-server
+    newTag: latest
+  - name: granite-gateway
+    newName: docker.io/gluonstream/granite-gateway
+    newTag: latest
+  - name: granite-greetings
+    newName: docker.io/gluonstream/granite-greetings
+    newTag: latest
+  - name: granite-shop
+    newName: docker.io/gluonstream/granite-shop
+    newTag: latest
+  - name: granite-payment
+    newName: docker.io/gluonstream/granite-payment
+    newTag: latest
+  - name: granite-profile
+    newName: docker.io/gluonstream/granite-profile
+    newTag: latest
+  - name: granite-delivery
+    newName: docker.io/gluonstream/granite-delivery
+    newTag: latest
+  - name: granite-ui-shop
+    newName: docker.io/gluonstream/granite-ui-shop
+    newTag: latest
+  - name: granite-ui-demo
+    newName: docker.io/gluonstream/granite-ui-demo
+    newTag: latest

@@ -2,16 +2,23 @@
 # but pointing at sichocolate.com instead. This is what makes the two overlays
 # mutually exclusive (see sichocolate.md §0): auth-server's spa-client redirect URI
 # and JWT issuer are single-valued, so only one domain can be "the" domain at a time.
+#
+# Kept in sync with the multi-domain code changes (see docs/plans/multiple-domains.md)
+# so this overlay still works standalone as a single-domain rollback target even
+# after auth-server/gateway/resource-server images are upgraded — TRUSTED_JWT_ISSUERS
+# replaces SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI, and
+# SPA_CLIENT_CHOCOLATE_* / OIDC_CLIENT_ID follow auth-server's split of the old
+# single "spa-client" into "spa-client-shop" and "spa-client-chocolate".
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: granite-config
 data:
   AUTH_SERVER_ISSUER: "https://sichocolate.com/auth"
-  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "https://sichocolate.com/auth"
-  SPA_CLIENT_REDIRECT_URI: "https://sichocolate.com/callback"
-  SPA_CLIENT_POST_LOGOUT_REDIRECT_URI: "https://sichocolate.com"
+  TRUSTED_JWT_ISSUERS: "https://sichocolate.com/auth"
+  SPA_CLIENT_CHOCOLATE_REDIRECT_URI: "https://sichocolate.com/callback"
+  SPA_CLIENT_CHOCOLATE_POST_LOGOUT_REDIRECT_URI: "https://sichocolate.com"
   OIDC_CLIENT_REDIRECT_URI: "https://sichocolate.com/login/oauth2/code/oidc-client"
   OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI: "https://sichocolate.com/"
   OIDC_AUTHORITY: "https://sichocolate.com/auth"
-  OIDC_CLIENT_ID: "spa-client"
+  OIDC_CLIENT_ID: "spa-client-chocolate"

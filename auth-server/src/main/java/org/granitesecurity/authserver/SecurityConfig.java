@@ -61,14 +61,26 @@ public class SecurityConfig {
     @Value("${app.oauth2.gateway-client.post-logout-redirect-uri:http://localhost:8080/}")
     private String gatewayClientPostLogoutRedirectUri;
 
-    @Value("${spring.security.oauth2.authorizationserver.issuer:http://localhost:9090}")
+    // Blank/unset on purpose in production (see AUTH_SERVER_ISSUER in
+    // k8s config): Spring Authorization Server derives the issuer per-request
+    // (scheme+host+context-path, honoring X-Forwarded-*) when
+    // AuthorizationServerSettings.issuer is never set, which is what lets one
+    // auth-server instance serve two public domains at once. kind/compose keep
+    // a fixed value here since they only ever have one domain.
+    @Value("${spring.security.oauth2.authorizationserver.issuer:}")
     private String issuer;
 
-    @Value("${app.oauth2.spa-client.redirect-uri:http://localhost:5173/callback}")
-    private String spaClientRedirectUri;
+    @Value("${app.oauth2.spa-client-shop.redirect-uri:${app.oauth2.spa-client.redirect-uri:http://localhost:5173/callback}}")
+    private String spaClientShopRedirectUri;
 
-    @Value("${app.oauth2.spa-client.post-logout-redirect-uri:http://localhost:5173}")
-    private String spaClientPostLogoutRedirectUri;
+    @Value("${app.oauth2.spa-client-shop.post-logout-redirect-uri:${app.oauth2.spa-client.post-logout-redirect-uri:http://localhost:5173}}")
+    private String spaClientShopPostLogoutRedirectUri;
+
+    @Value("${app.oauth2.spa-client-chocolate.redirect-uri:http://localhost:5173/callback}")
+    private String spaClientChocolateRedirectUri;
+
+    @Value("${app.oauth2.spa-client-chocolate.post-logout-redirect-uri:http://localhost:5173}")
+    private String spaClientChocolatePostLogoutRedirectUri;
 
     @Value("${app.oauth2.external-client.secret:{noop}my-secret}")
     private String externalClientSecret;
@@ -110,9 +122,15 @@ public class SecurityConfig {
                 )
                 // Show the login page when not authenticated from the
                 // authorization endpoint so users can choose form or Google login.
+                // Relative path (not an absolute issuer + "/login" URL) since the
+                // issuer itself is now request-derived and single-domain-only would
+                // be wrong for whichever domain didn't originate the request.
+                // Spring's DefaultRedirectStrategy prepends the request's own
+                // context path ("/auth") to a relative target, so this must NOT
+                // include "/auth" itself or the redirect doubles up to "/auth/auth/login".
                 .exceptionHandling((exceptions) -> exceptions
                         .defaultAuthenticationEntryPointFor(
-                                new LoginUrlAuthenticationEntryPoint(issuer + "/login"),
+                                new LoginUrlAuthenticationEntryPoint("/login"),
                                 new MediaTypeRequestMatcher(MediaType.TEXT_HTML)
                         )
                 );
@@ -177,13 +195,33 @@ public class SecurityConfig {
                 .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
                 .build();
 
-        RegisteredClient spaClient = RegisteredClient.withId(UUID.randomUUID().toString())
-                .clientId("spa-client")
+        // Two SPA clients, not one client with two redirect URIs: each domain's
+        // frontend gets its own clientId/redirect scope, so a code obtained for
+        // one domain can't be redeemed against the other's client, and each
+        // frontend's config.js can declare its own OIDC_CLIENT_ID.
+        RegisteredClient spaClientShop = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId("spa-client-shop")
                 .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .redirectUri(spaClientRedirectUri)
-                .postLogoutRedirectUri(spaClientPostLogoutRedirectUri)
+                .redirectUri(spaClientShopRedirectUri)
+                .postLogoutRedirectUri(spaClientShopPostLogoutRedirectUri)
+                .scope(OidcScopes.OPENID)
+                .scope(OidcScopes.PROFILE)
+                .scope(StandardClaimNames.EMAIL)
+                .clientSettings(ClientSettings.builder()
+                        .requireAuthorizationConsent(true)
+                        .requireProofKey(true)
+                        .build())
+                .build();
+
+        RegisteredClient spaClientChocolate = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId("spa-client-chocolate")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+                .redirectUri(spaClientChocolateRedirectUri)
+                .postLogoutRedirectUri(spaClientChocolatePostLogoutRedirectUri)
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
                 .scope(StandardClaimNames.EMAIL)
@@ -201,7 +239,7 @@ public class SecurityConfig {
                 .scope(OidcScopes.OPENID)
                 .build();
 
-        return new InMemoryRegisteredClientRepository(oidcClient, spaClient, externalClient);
+        return new InMemoryRegisteredClientRepository(oidcClient, spaClientShop, spaClientChocolate, externalClient);
     }
 
     @Bean
@@ -272,8 +310,14 @@ public OAuth2TokenCustomizer<JwtEncodingContext> tokenCustomizer() {
 
     @Bean
     public AuthorizationServerSettings authorizationServerSettings() {
-        return AuthorizationServerSettings.builder()
-                .issuer(issuer)
-                .build();
+        AuthorizationServerSettings.Builder settings = AuthorizationServerSettings.builder();
+        if (issuer != null && !issuer.isBlank()) {
+            settings.issuer(issuer);
+        }
+        // else: leave issuer unset so Spring Authorization Server derives it
+        // per-request (scheme+host+context-path, honoring X-Forwarded-* since
+        // server.forward-headers-strategy=framework is set) — required to serve
+        // two public domains from one instance.
+        return settings.build();
     }
 }

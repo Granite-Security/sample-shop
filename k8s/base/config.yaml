@@ -10,6 +10,14 @@ data:
   # SPA (public PKCE client) callback — overlays override the host per environment.
   SPA_CLIENT_REDIRECT_URI: "http://localhost:8080/callback"
   SPA_CLIENT_POST_LOGOUT_REDIRECT_URI: "http://localhost:8080/"
+  # Per-domain SPA clients (spa-client-shop / spa-client-chocolate registered
+  # separately in auth-server's SecurityConfig). Defaults here match the
+  # single-domain SPA_CLIENT_* values above so kind/compose keep working
+  # unchanged; overlays override per real domain.
+  SPA_CLIENT_SHOP_REDIRECT_URI: "http://localhost:8080/callback"
+  SPA_CLIENT_SHOP_POST_LOGOUT_REDIRECT_URI: "http://localhost:8080/"
+  SPA_CLIENT_CHOCOLATE_REDIRECT_URI: "http://localhost:8080/callback"
+  SPA_CLIENT_CHOCOLATE_POST_LOGOUT_REDIRECT_URI: "http://localhost:8080/"
 
   # ── Gateway ──────────────────────────────────────────
   GATEWAY_PORT: "8080"
@@ -50,8 +58,18 @@ data:
   KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
 
   # ── JWT issuer (default — override per environment) ──
-  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "http://gateway:8080/auth"
+  # AUTH_SERVER_ISSUER: fixed here for kind/compose (single domain). The
+  # multi-domain production overlay overrides this to "" so auth-server derives
+  # the issuer per-request instead (see auth-server SecurityConfig).
   AUTH_SERVER_ISSUER: "http://gateway:8080/auth"
+  # Resource servers validate against an allow-list of trusted issuers (plural,
+  # comma-separated) rather than Spring's single issuer-uri, since auth-server
+  # can legitimately mint tokens under more than one iss. jwk-set-uri is fixed/
+  # internal and domain-agnostic — same signing key regardless of which public
+  # domain issued the token. Multi-domain overlays override TRUSTED_JWT_ISSUERS
+  # to a comma-separated list covering every live domain.
+  TRUSTED_JWT_ISSUERS: "http://gateway:8080/auth"
+  JWT_JWK_SET_URI: "http://auth-server:9090/auth/oauth2/jwks"
 
   # ── ui-shop runtime config (SPA reads these via window.__ENV__) ──
   # OIDC_AUTHORITY must equal the issuer above; overlays keep them in lockstep.

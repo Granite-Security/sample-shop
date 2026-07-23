@@ -1,5 +1,16 @@
 server:
   port: 8080
+  # Deliberately NOT set: this enables Spring's ForwardedHeaderTransformer,
+  # which rewrites the exchange's own request URI from X-Forwarded-* and then
+  # strips those headers from it — verified in production that this caused
+  # X-Forwarded-Host from nginx to disappear before Spring Cloud Gateway's own
+  # proxy filters could forward it on to auth-server, so auth-server fell back
+  # to deriving its issuer from gateway's internal upstream URI
+  # (http://auth-server:9090) instead of the real public domain. Gateway
+  # itself doesn't need to resolve its own external URL for anything (no more
+  # absolute-URL construction in RouterConfig), so leaving this off and
+  # letting Spring Cloud Gateway's default proxy behavior pass the header
+  # through untouched is what actually works.
 spring:
   application:
     name: gateway
