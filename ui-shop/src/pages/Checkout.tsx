@@ -98,7 +98,7 @@ function CheckoutInner() {
     let consecutiveErrors = 0;
     pollRef.current = setInterval(async () => {
       try {
-        const payment = await api.getPaymentIntent(orderId);
+        const payment = await api.payments.getPaymentIntent(orderId);
         if (payment.clientSecret) {
           stopPolling();
           setOrder(prev => prev ? { ...prev, clientSecret: payment.clientSecret } : null);
@@ -137,8 +137,8 @@ function CheckoutInner() {
     pollRef.current = setInterval(async () => {
       try {
         const [updated, payment] = await Promise.all([
-          api.getOrder(orderId),
-          api.getPaymentIntent(orderId),
+          api.orders.getOrder(orderId),
+          api.payments.getPaymentIntent(orderId),
         ]);
         if (payment) setPaymentStatus(payment.status);
         if (updated && updated.status && updated.status !== 'PENDING') {
@@ -163,7 +163,7 @@ function CheckoutInner() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    api.getAddresses()
+    api.profile.getAddresses()
       .then(addrs => {
         setAddresses(addrs);
         const def = addrs.find(a => a.isDefault) ?? addrs[0];
@@ -188,7 +188,7 @@ function CheckoutInner() {
     setStep('placing');
     setError('');
     try {
-      const result = await api.placeOrder({
+      const result = await api.orders.placeOrder({
         items: items.map(i => ({ productId: i.product.id, quantity: i.quantity })),
         address: selectedAddress,
       });
@@ -215,7 +215,7 @@ function CheckoutInner() {
     if (!order) return;
     setStep('confirming');
     try {
-      await api.syncPaymentIntent(order.id);
+      await api.payments.syncPaymentIntent(order.id);
     } catch (e) {
       console.error('Payment sync failed', e);
     }

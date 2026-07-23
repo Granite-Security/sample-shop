@@ -16,8 +16,8 @@ export default function Orders() {
       return;
     }
     Promise.all([
-      api.getOrders().then(r => r.items),
-      api.getDeliveries().then(ds => {
+      api.orders.getOrders().then(r => r.items),
+      api.delivery.getDeliveries().then(ds => {
         const map: Record<number, DeliveryResponse> = {};
         ds.forEach(d => { map[d.orderId] = d; });
         return map;

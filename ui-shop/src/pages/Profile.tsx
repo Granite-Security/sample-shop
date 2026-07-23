@@ -19,7 +19,7 @@ export default function Profile() {
       navigate('/login', { replace: true });
       return;
     }
-    api.getProfile()
+    api.profile.getProfile()
       .then(p => {
         setProfile(p);
         setFirstName(p.firstName ?? '');
@@ -31,8 +31,8 @@ export default function Profile() {
   }, [isAuthenticated, navigate]);
 
   const handleSave = async () => {
-    await api.updateProfile({ firstName, lastName, email });
-    const updated = await api.getProfile();
+    await api.profile.updateProfile({ firstName, lastName, email });
+    const updated = await api.profile.getProfile();
     setProfile(updated);
     setEditing(false);
   };

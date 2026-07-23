@@ -6,7 +6,7 @@ export default function Home() {
   const [greeting, setGreeting] = useState('');
 
   useEffect(() => {
-    api.greetings().then(d => setGreeting(d.message)).catch(() => {});
+    api.shop.greetings().then(d => setGreeting(d.message)).catch(() => {});
   }, []);
 
   return (

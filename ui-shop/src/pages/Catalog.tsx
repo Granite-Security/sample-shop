@@ -18,8 +18,8 @@ export default function Catalog() {
 
   useEffect(() => {
     Promise.all([
-      api.getProducts().then(r => setProducts(r.items)),
-      api.getCategories().then(r => setCategories(r.items)),
+      api.catalog.getProducts().then(r => setProducts(r.items)),
+      api.catalog.getCategories().then(r => setCategories(r.items)),
     ]).catch(e => setError(e instanceof Error ? e.message : 'Failed to load catalog'))
       .finally(() => setLoading(false));
   }, []);
