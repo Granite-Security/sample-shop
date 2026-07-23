@@ -62,15 +62,16 @@ Non-buildable directories that should never trigger a build: `docs/`, `k8s/`, `c
 
 **Note on `demo-kot`:** included in the `jvm` matrix (it's a real, independent Gradle project) so it gets compiled like the others. It has no `Dockerfile` and isn't deployed in `k8s/base`, so it will be excluded when Stage 3 (Docker build/push) is implemented — flagging here rather than in open questions since Stage 2 already made the call to build it.
 
-### Stage 3 (later) — Docker build & push to Docker Hub
-- [ ] Add Docker Hub credentials as repo secrets (`DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`) — use an access token, not the account password.
-- [ ] Extend each per-service job (or add a follow-on job that `needs` the build job) to:
-  - Log in to Docker Hub.
-  - Build the image using the service's existing `Dockerfile`.
-  - Tag it — decide the tagging scheme now so it doesn't need rework later: at minimum `latest`, plus something traceable back to source, e.g. the short commit SHA. Since `main`-only triggers mean every build is a "release" candidate, SHA tags give a rollback point without needing a separate release/tag workflow.
-  - Push to Docker Hub under a name matching what the k8s manifests already expect (`granite-<service>`), just with a real registry namespace prefix (currently the manifests use bare `granite-<service>:latest`, implying local/kind images — this will need to change to `<dockerhub-namespace>/granite-<service>:<tag>` once real images are pushed, and the k8s manifests will need a follow-up update to reference the registry).
-- [ ] Reuse the Stage 1 change-detection output so Docker builds are also skipped for unaffected services — no need to re-derive it.
-- [ ] Decide whether to build multi-arch images (relevant if Hetzner nodes and any local dev/CI runners differ in architecture) — flagged here since the branch is `feature/hetznerize`, but out of scope to decide in this doc.
+### Stage 3 — Docker build & push to Docker Hub
+- [x] Docker Hub credentials expected as repo secrets `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` (use an access token, not the account password) — see setup instructions below.
+- [x] `docker-jvm` / `docker-ui` jobs added, each `needs` its corresponding build job and reuses the Stage 1 `detect-changes` output (same matrix, so Docker builds are skipped for unaffected services with no re-derivation).
+  - Logs in to Docker Hub via `docker/login-action`.
+  - Builds with `docker/build-push-action`, context = the service's own directory (existing `Dockerfile` per service).
+  - **`platforms: linux/amd64`** explicitly set — CI runners are `ubuntu-latest` (amd64) but Buildx defaults can vary, and Hetzner target nodes are amd64, so this is pinned rather than left implicit. `docker/setup-qemu-action` + `docker/setup-buildx-action` added to support it.
+  - Tags: `moldovean/granite-<service>:latest` and `moldovean/granite-<service>:<full-commit-sha>` — namespace (`moldovean`) matches what's already referenced in `cloud/hetzner/app-multi/kustomization.yaml`.
+  - `demo-kot` excluded from the `docker-jvm` matrix (`strategy.matrix.exclude`) — no Dockerfile, not deployed.
+- [ ] k8s manifests (`k8s/base/*.yaml`) still reference bare `granite-<service>:latest` (implying local/kind images) — needs a follow-up to point at `moldovean/granite-<service>:<tag>` for non-kind environments; `cloud/hetzner/*/kustomization.yaml` already does this via `newName` overrides.
+- [x] Multi-arch: not needed — pinned to `linux/amd64` only, matching Hetzner nodes; revisit if arm64 runners/nodes are ever introduced.
 
 ### Stage 4 (later, optional) — Tests
 - [ ] Once compile-only builds are stable, add a test task per service (`./gradlew test`, `npm test`), still gated by the same change-detection output.

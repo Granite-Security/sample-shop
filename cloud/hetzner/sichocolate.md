@@ -65,7 +65,7 @@ way (nginx + runtime env substitution + reverse proxy to the gateway):
    ```
 
 4. Push it under the same Docker Hub org the other images use
-   (`docker.io/gluonstream/granite-ui-demo`), same tagging convention as
+   (`docker.io/moldovean/granite-ui-demo`), same tagging convention as
    `app/kustomization.yaml` (`newTag` bumped to the git short SHA on every release —
    see the comment there for why floating `:latest` + `imagePullPolicy: Always` is
    the deliberate choice for this single-node cluster).
@@ -119,28 +119,28 @@ patches:
 
 images:
   - name: granite-auth-server
-    newName: docker.io/gluonstream/granite-auth-server
+    newName: docker.io/moldovean/granite-auth-server
     newTag: latest
   - name: granite-gateway
-    newName: docker.io/gluonstream/granite-gateway
+    newName: docker.io/moldovean/granite-gateway
     newTag: latest
   - name: granite-greetings
-    newName: docker.io/gluonstream/granite-greetings
+    newName: docker.io/moldovean/granite-greetings
     newTag: latest
   - name: granite-shop
-    newName: docker.io/gluonstream/granite-shop
+    newName: docker.io/moldovean/granite-shop
     newTag: latest
   - name: granite-payment
-    newName: docker.io/gluonstream/granite-payment
+    newName: docker.io/moldovean/granite-payment
     newTag: latest
   - name: granite-profile
-    newName: docker.io/gluonstream/granite-profile
+    newName: docker.io/moldovean/granite-profile
     newTag: latest
   - name: granite-delivery
-    newName: docker.io/gluonstream/granite-delivery
+    newName: docker.io/moldovean/granite-delivery
     newTag: latest
   - name: granite-ui-demo
-    newName: docker.io/gluonstream/granite-ui-demo
+    newName: docker.io/moldovean/granite-ui-demo
     newTag: latest
 ```
 

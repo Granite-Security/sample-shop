@@ -267,7 +267,7 @@ want cert expiry/renewal notices sent.
 
 The kind workflow uses `kind load docker-image` for a purely local Docker daemon — that doesn't
 exist on a remote node, so images need a real registry. `app/kustomization.yaml` is already
-pointed at `docker.io/gluonstream/granite-*` (Docker Hub, not GHCR).
+pointed at `docker.io/moldovean/granite-*` (Docker Hub, not GHCR).
 
 **6.1 One-time: authenticate Docker to Docker Hub.** Create an access token at
 [hub.docker.com/settings/security](https://hub.docker.com/settings/security) (Account Settings →
@@ -275,7 +275,7 @@ Security → New Access Token, Read & Write scope) rather than using your accoun
 
 ```bash
 export DOCKERHUB_TOKEN=<paste the token>
-echo $DOCKERHUB_TOKEN | docker login -u gluonstream --password-stdin
+echo $DOCKERHUB_TOKEN | docker login -u moldovean --password-stdin
 ```
 
 **6.2 Build the JARs, then the images, tagged with the git short SHA** (not `latest` — see the
@@ -297,10 +297,10 @@ export TAG=latest
 
 for s in auth-server gateway greetings shop payment profile delivery; do
   (cd $s && ./gradlew build -x test)
-  docker buildx build --platform linux/amd64 -t docker.io/gluonstream/granite-$s:$TAG --push $s/
+  docker buildx build --platform linux/amd64 -t docker.io/moldovean/granite-$s:$TAG --push $s/
 done
 
-docker buildx build --platform linux/amd64 -t docker.io/gluonstream/granite-ui-shop:$TAG --push ui-shop/
+docker buildx build --platform linux/amd64 -t docker.io/moldovean/granite-ui-shop:$TAG --push ui-shop/
 ```
 
 (`--push` in the same `buildx build` invocation, rather than a separate `docker build` + `docker
@@ -322,8 +322,8 @@ resolve, pick one:
 
 | Option | How | Trade-off |
 |---|---|---|
-| **Keep repos public** (recommended for this demo/portfolio app) | Default behavior — just confirm each repo's visibility at `hub.docker.com/r/gluonstream/granite-<svc>/settings` after the first push | Simplest — no secret to create or keep in sync; fine since there's no proprietary code concern here |
-| Private + imagePullSecret | `kubectl -n granite create secret docker-registry dockerhub-pull --docker-server=docker.io --docker-username=gluonstream --docker-password=$DOCKERHUB_TOKEN`, then add `imagePullSecrets: [{name: dockerhub-pull}]` to every Deployment's pod spec in `production-patches.yaml` | More setup, and the secret needs manual rotation whenever the token expires |
+| **Keep repos public** (recommended for this demo/portfolio app) | Default behavior — just confirm each repo's visibility at `hub.docker.com/r/moldovean/granite-<svc>/settings` after the first push | Simplest — no secret to create or keep in sync; fine since there's no proprietary code concern here |
+| Private + imagePullSecret | `kubectl -n granite create secret docker-registry dockerhub-pull --docker-server=docker.io --docker-username=moldovean --docker-password=$DOCKERHUB_TOKEN`, then add `imagePullSecrets: [{name: dockerhub-pull}]` to every Deployment's pod spec in `production-patches.yaml` | More setup, and the secret needs manual rotation whenever the token expires |
 
 This plan defaults to **public repos** given the recommendation above; switch to the
 imagePullSecret route only if you'd rather keep images private.

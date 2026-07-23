@@ -91,41 +91,41 @@ docker build -t granite-ui-shop:latest ui-shop/
 ```bash
 
 for s in auth-server gateway greetings shop payment profile delivery; do
-  docker tag granite-$s:latest gluonstream/granite-$s:latest
-  docker push gluonstream/granite-$s:latest
+  docker tag granite-$s:latest moldovean/granite-$s:latest
+  docker push moldovean/granite-$s:latest
 done
 
-docker tag granite-auth-server:latest gluonstream/granite-auth-server:latest
-docker push gluonstream/granite-auth-server:latest
-docker manifest inspect gluonstream/granite-auth-server:latest
+docker tag granite-auth-server:latest moldovean/granite-auth-server:latest
+docker push moldovean/granite-auth-server:latest
+docker manifest inspect moldovean/granite-auth-server:latest
 
-docker tag granite-gateway:latest gluonstream/granite-gateway:latest
-docker push gluonstream/granite-gateway:latest
-docker manifest inspect gluonstream/granite-gateway:latest
+docker tag granite-gateway:latest moldovean/granite-gateway:latest
+docker push moldovean/granite-gateway:latest
+docker manifest inspect moldovean/granite-gateway:latest
 
-docker tag granite-greetings:latest gluonstream/granite-greetings:latest
-docker push gluonstream/granite-greetings:latest
-docker manifest inspect gluonstream/granite-greetings:latest
+docker tag granite-greetings:latest moldovean/granite-greetings:latest
+docker push moldovean/granite-greetings:latest
+docker manifest inspect moldovean/granite-greetings:latest
 
-docker tag granite-shop:latest gluonstream/granite-shop:latest
-docker push gluonstream/granite-shop:latest
-docker manifest inspect gluonstream/granite-shop:latest
+docker tag granite-shop:latest moldovean/granite-shop:latest
+docker push moldovean/granite-shop:latest
+docker manifest inspect moldovean/granite-shop:latest
 
-docker tag granite-payment:latest gluonstream/granite-payment:latest
-docker push gluonstream/granite-payment:latest
-docker manifest inspect gluonstream/granite-payment:latest
+docker tag granite-payment:latest moldovean/granite-payment:latest
+docker push moldovean/granite-payment:latest
+docker manifest inspect moldovean/granite-payment:latest
 
-docker tag granite-profile:latest gluonstream/granite-profile:latest
-docker push gluonstream/granite-profile:latest
-docker manifest inspect gluonstream/granite-profile:latest
+docker tag granite-profile:latest moldovean/granite-profile:latest
+docker push moldovean/granite-profile:latest
+docker manifest inspect moldovean/granite-profile:latest
 
-docker tag granite-delivery:latest gluonstream/granite-delivery:latest
-docker push gluonstream/granite-delivery:latest
-docker manifest inspect gluonstream/granite-delivery:latest
+docker tag granite-delivery:latest moldovean/granite-delivery:latest
+docker push moldovean/granite-delivery:latest
+docker manifest inspect moldovean/granite-delivery:latest
 
 
-docker tag granite-ui-shop:latest gluonstream/granite-ui-shop:latest
-docker push gluonstream/granite-ui-shop:latest
+docker tag granite-ui-shop:latest moldovean/granite-ui-shop:latest
+docker push moldovean/granite-ui-shop:latest
 ```
 
 ---
