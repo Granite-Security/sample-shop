@@ -18,22 +18,6 @@ tracking. One set of servers. One database per service. One thing to patch when 
 security fix comes out, one thing to scale when traffic grows, one team that needs to
 understand how it works.
 
-Why this matters for the business, not just the tech:
-
-- **More storefronts = more chances to make a sale**, without more backend systems to
-  build or run. A new brand, a partner-labeled version of the product, a regional
-  variant — each one is a new coat of paint, not a new company to build from scratch.
-- **The marginal cost of "one more UI" is small.** The expensive part of an e-commerce
-  system is never the buttons and colors — it's login security, payment correctness,
-  inventory consistency, order tracking. We already paid that cost once. Adding
-  `sichocolate.com` cost us a new frontend deployment and a few config changes. It did
-  **not** cost us a new auth system, a new payment integration, or a new database to
-  keep in sync.
-- **One backend to maintain instead of many.** Every bug fix, every security patch,
-  every performance improvement in `auth-server`, `payment`, `shop`, `profile`, or
-  `delivery` now benefits *every* storefront built on top of it, automatically, on the
-  next deploy. There's no "did we remember to also fix it in the other copy?" problem,
-  because there is no other copy.
 
 The rest of this post is the "how." It turned out to be three separate problems, not
 one, and the tricky part wasn't picking a solution — it was noticing all three problems

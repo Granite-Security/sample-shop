@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  detect-changes:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    outputs:
+      jvm: ${{ steps.detect.outputs.jvm }}
+      ui: ${{ steps.detect.outputs.ui }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - id: detect
+        run: |
+          set -euo pipefail
+
+          # HEAD^ may not exist for the very first commit on the branch history available.
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            CHANGED=$(git diff --name-only HEAD^ HEAD)
+          else
+            CHANGED=$(git diff --name-only "$(git hash-object -t tree /dev/null)" HEAD)
+          fi
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          jvm_services=(auth-server gateway greetings payment profile shop delivery demo-kot)
+          ui_services=(ui-demo ui-shop)
+
+          jvm_arr=()
+          for s in "${jvm_services[@]}"; do
+            if echo "$CHANGED" | grep -q "^$s/"; then
+              jvm_arr+=("\"$s\"")
+            fi
+          done
+
+          ui_arr=()
+          for s in "${ui_services[@]}"; do
+            if echo "$CHANGED" | grep -q "^$s/"; then
+              ui_arr+=("\"$s\"")
+            fi
+          done
+
+          jvm_json="[$(IFS=,; echo "${jvm_arr[*]:-}")]"
+          ui_json="[$(IFS=,; echo "${ui_arr[*]:-}")]"
+
+          echo "jvm services changed: $jvm_json"
+          echo "ui services changed: $ui_json"
+
+          echo "jvm=$jvm_json" >> "$GITHUB_OUTPUT"
+          echo "ui=$ui_json" >> "$GITHUB_OUTPUT"
+
+  build-jvm:
+    name: Build ${{ matrix.service }}
+    needs: detect-changes
+    if: needs.detect-changes.outputs.jvm != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.jvm) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+
+      - name: Build (no tests)
+        working-directory: ${{ matrix.service }}
+        run: ./gradlew build -x test
+
+  build-ui:
+    name: Build ${{ matrix.service }}
+    needs: detect-changes
+    if: needs.detect-changes.outputs.ui != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.ui) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ matrix.service }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.service }}
+        run: npm ci
+
+      - name: Build
+        working-directory: ${{ matrix.service }}
+        run: npm run build
