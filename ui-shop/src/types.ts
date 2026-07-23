@@ -146,5 +146,14 @@ export interface DeliveryResponse {
   estimatedDeliveryDate: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TrackingDetailResponse {
+  deliveryId: string;
+  orderId: number;
+  currentStatus: string;
+  paymentStatus: string;
+  items: string | null;
+  estimatedDelivery: string | null;
   events: TrackingEvent[];
 }
