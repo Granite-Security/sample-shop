@@ -1,0 +1,15 @@
+# k8s/base always creates ui-shop, but this overlay is mutually exclusive with
+# app/ (see sichocolate.md §0 — auth-server's redirect URI/issuer are single-valued,
+# so only one skin's domain can be live at a time). Delete ui-shop here so it
+# doesn't sit around as a stray unused pod while this overlay is applied.
+$patch: delete
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui-shop
+---
+$patch: delete
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui-shop

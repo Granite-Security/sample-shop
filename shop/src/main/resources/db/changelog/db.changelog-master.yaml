@@ -11,3 +11,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/004-add-order-address.sql
       relativeToChangelogFile: false
+  - include:
+      file: db/changelog/005-seed-choco-products.sql
+      relativeToChangelogFile: false

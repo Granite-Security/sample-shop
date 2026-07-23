@@ -433,3 +433,48 @@ Explicitly out of scope for this plan — flag if any of these turn out to matte
 - Backups/disaster recovery automation.
 - CI/CD (image build+push in §6 is manual; wiring GitHub Actions to do it is a natural follow-up
   but not covered here).
+
+---
+
+## 14. Apply the coredns-custom split-horizon override
+
+`platform/coredns-custom.yaml` ships with a literal placeholder
+(`REPLACE_WITH_TRAEFIK_CLUSTER_IP`) and is **not applied automatically** by
+§8's `kubectl apply -k`. Without this, backend pods (`auth-server`,
+`greetings`, `shop`, `payment`, `profile`, `delivery`) resolve
+`https://<DOMAIN>/auth/.well-known/openid-configuration` by leaving the
+cluster through Cloudflare and hairpinning back to the same node — slow, and
+not guaranteed to work depending on the network path. This override makes
+`<DOMAIN>` resolve straight to Traefik's in-cluster `ClusterIP` instead, so the
+call never leaves the node.
+
+```bash
+INGRESS_IP=$(kubectl get svc -n traefik traefik -o jsonpath='{.spec.clusterIP}')
+echo "Traefik ClusterIP: $INGRESS_IP"   # sanity check before substituting
+
+sed -i '' "s/REPLACE_WITH_TRAEFIK_CLUSTER_IP/$INGRESS_IP/" cloud/hetzner/platform/coredns-custom.yaml
+# (drop the '' after -i if running this directly on the VPS/Linux instead of macOS)
+
+kubectl apply -f cloud/hetzner/platform/coredns-custom.yaml
+kubectl rollout restart deployment coredns -n kube-system
+kubectl rollout status deployment coredns -n kube-system
+```
+
+Verify it actually took effect from inside the cluster:
+```bash
+kubectl -n granite exec deploy/shop -- getent hosts <DOMAIN>
+# should print the Traefik ClusterIP above, not a public Cloudflare IP
+```
+
+Note: the substituted IP is Traefik's `ClusterIP`, which is stable as long as
+its Service object isn't deleted/recreated — if that ever happens (e.g.
+`helm uninstall traefik` + reinstall), re-run this section with the new IP.
+
+
+# 15 Redeployment
+
+If you want data to survive a delete -k / apply -k cycle in the future, the fix would be one of:
+- Split the PVCs out of the kustomization scope (e.g. into a separate storage kustomization applied/deleted   
+  independently from app), so kubectl delete -k app never touches them.
+- Or use `kubectl delete deployment -n granite --all` / delete specific resources rather than delete -k, when   
+  you want to tear down workloads but keep data.

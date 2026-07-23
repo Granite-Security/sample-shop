@@ -1,8 +1,5 @@
 # Granite Security — Master Plan
 
-A roadmap that takes the system from "a working shop backend with no tests" to a
-**tested, event-driven, multi-service e-commerce platform** consumable by a web
-front end and a mobile app.
 
 This is a planning document. Each step states a **Goal** (why), **Do** (how /
 what), and **Done when** (the observable exit criteria). Phases are ordered by
@@ -13,27 +10,23 @@ parallel with planning of Phases 3+.
 
 ## Current state (baseline)
 
-| Service | Stack | Port | Status |
-|---|---|---|---|
+| Service       | Stack | Port | Status |
+|---------------|---|---|---|
 | `auth-server` | Spring Authorization Server, JPA, Liquibase, Postgres | 9090 | Working (OIDC, form + Google login, `roles` claim) |
-| `gateway` | Spring Cloud Gateway (reactive), OAuth2 client + TokenRelay | 8080 | Working (routes greetings + shop) |
-| `greetings` | WebFlux, OAuth2 resource server | 8060 | Working |
-| `shop` | WebFlux, R2DBC, Liquibase, OAuth2 resource server | 8061 | **Implemented, but 0 automated tests** |
-| `integration-tests/rest` | curl/bash smoke scripts | — | `greetings_secured.sh`, `shop_secured.sh` |
+| `gateway`     | Spring Cloud Gateway (reactive), OAuth2 client + TokenRelay | 8080 | Working (routes greetings + shop) |
+| `greetings`   | WebFlux, OAuth2 resource server | 8060 | Working |
+| `shop`        | WebFlux, R2DBC, Liquibase, OAuth2 resource server | 8061 | **Implemented, but 0 automated tests** |
+| `payment`     | WebFlux, R2DBC, Liquibase, OAuth2 resource server | 8062 | Not yet implemented |
+| `profile`     | WebFlux, R2DBC, Liquibase, OAuth2 resource server | 8063 | Working (user profile CRUD) |
+| `delivery`    | WebFlux, R2DBC, Liquibase, OAuth2 resource server | 8064 | Working (delivery + tracking CRUD) |
 
-**The most urgent gap is automated test coverage for `shop`.** All test
-dependencies (Testcontainers Postgres + R2DBC, `WebTestClient`, `reactor-test`,
-`spring-security-test`) are already on the classpath and unused.
+
 
 ---
 
 ## Guiding principles
 
-1. **Test with the code.** In-process tests (unit/slice/integration) live in
-   each service's `src/test`. Cross-service end-to-end tests live in
-   `integration-tests/`. Do **not** spin up a separate "testing project" yet —
-   it adds CI/build overhead without payoff until several services exist.
-2. **Reactive end to end.** No `.block()` on request paths. Verify async flows
+1.**Reactive end to end.** No `.block()` on request paths. Verify async flows
    with `StepVerifier` / `WebTestClient`.
 3. **Schema is the source of truth.** Liquibase migrations define tables;
    entities mirror them. R2DBC is not a full ORM (no relationship mapping).
@@ -47,59 +40,9 @@ dependencies (Testcontainers Postgres + R2DBC, `WebTestClient`, `reactor-test`,
 
 ---
 
-# PHASE 1 — Test the shop microservice (highest priority)
+# PHASE 1
 
-Goal of the phase: trustworthy, fast, layered test coverage living inside the
-`shop` module. Target the testing pyramid: many unit tests, fewer slice tests,
-a handful of full integration tests.
-
-### Step 1.1 — Establish the test harness
-- **Goal:** A reusable Testcontainers Postgres that applies the real Liquibase schema.
-- **Do:** Create an abstract base test class that starts a `PostgreSQLContainer`,
-  wires both R2DBC (`spring.r2dbc.*`) and JDBC/Liquibase (`spring.liquibase.*`)
-  dynamic properties via `@DynamicPropertySource`, and lets Liquibase migrate on
-  startup. Reuse the container across the suite (singleton pattern) for speed.
-- **Done when:** A trivial test boots the context against a containerized DB and
-  the schema (Phase-2 migrations) is present.
-
-### Step 1.2 — Repository slice tests (`@DataR2dbcTest`)
-- **Goal:** Verify entity↔column mapping and custom finders.
-- **Do:** For each repository test CRUD + derived queries against the real schema:
-  - `ProductRepository.findByCategoryId`
-  - `CustomerOrderRepository.findByUsername`
-  - `OrderItemRepository.findByOrderId`
-  Assert with `StepVerifier` (counts, ordering, field values, snake_case mapping).
-- **Done when:** Mapping bugs (e.g. `created_at`, `unit_price`) would be caught.
-
-### Step 1.3 — Service unit tests (mocked repositories)
-- **Goal:** Cover business logic in isolation, especially `OrderService.placeOrder`.
-- **Do:** Mock repositories; use `StepVerifier`. Cover:
-  - Empty/null item list → `ShopException`.
-  - Unknown product id → error.
-  - Insufficient stock → error with available/requested detail.
-  - Happy path → correct `total`, `unitPrice` snapshot, stock decrement, persistence order.
-  - `getOrder(id, username)` ownership enforcement (foreign user → not found).
-  - `CatalogService` create/update/get/delete and not-found paths.
-- **Done when:** Each branch in the service layer has a test; coverage of
-  `OrderService` ≈ 100% of branches.
-
-### Step 1.4 — Web layer tests (`WebTestClient` + mocked services)
-- **Goal:** Verify routing, status codes, JSON shapes, and security rules per route.
-- **Do:** Bind the `RouterFunction` with mocked handlers/services. Use
-  `spring-security-test` (`mockJwt()` with/without `roles`) to assert:
-  - Public reads (`GET /api/shop/products`, `/products/{id}`, `/categories`) → 200 anonymously.
-  - `POST /api/shop/orders` → 401 anonymous, 200 with a user JWT.
-  - Admin paths (`POST/PUT/DELETE products|categories`) → 403 for `ROLE_USER`, 200/204 for `ROLE_ADMIN`.
-  - Validation/error mapping (`ShopException` → 400, missing product → 404).
-- **Done when:** Every route's auth rule and happy/error response is asserted.
-
-### Step 1.5 — Full integration test (`@SpringBootTest`)
-- **Goal:** One real end-to-end pass through HTTP → service → R2DBC → DB.
-- **Do:** Boot the whole app against Testcontainers Postgres with a mock-issued
-  JWT. Place an order, assert stock decremented in the DB and the order is
-  retrievable and owner-scoped.
-- **Done when:** Green run proves migrations + wiring + persistence cohere.
-
+Set up Env
 
 ---
 
@@ -126,11 +69,6 @@ clients are built against it.
   error response body (RFC 7807 `application/problem+json`).
 - **Done when:** Large catalogs paginate; all errors share one shape.
 
-### Step 2.4 — Contract tests for the public API
-- **Goal:** Prevent breaking changes for clients.
-- **Do:** Snapshot/contract tests against the OpenAPI spec (or consumer-driven
-  contracts) in `integration-tests/`.
-- **Done when:** A breaking schema change fails a test.
 
 ---
 

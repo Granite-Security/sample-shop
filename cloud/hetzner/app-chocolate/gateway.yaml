@@ -1,0 +1,70 @@
+# See app/gateway.yaml for the full rationale (Gateway API + Traefik, why the plain-HTTP
+# listener exists for ACME HTTP-01, etc.) — identical here, just retargeted at
+# sichocolate.com. Object names (granite-gateway, granite-http-redirect, granite-route)
+# are kept the same as app/gateway.yaml on purpose: the letsencrypt-prod ClusterIssuer's
+# gatewayHTTPRoute solver already has parentRefs pointing at granite-gateway in namespace
+# granite by name (platform/cluster-issuer.yaml), so switching between this overlay and
+# app/ is an in-place retarget of the same objects, not a delete-then-recreate.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: granite-gateway
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - name: https
+      hostname: sichocolate.com
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: Same
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: sichocolate.com-tls
+    - name: http
+      hostname: sichocolate.com
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: granite-http-redirect
+spec:
+  parentRefs:
+    - name: granite-gateway
+      sectionName: http
+  hostnames:
+    - sichocolate.com
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: granite-route
+spec:
+  parentRefs:
+    - name: granite-gateway
+      sectionName: https
+  hostnames:
+    - sichocolate.com
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ui-demo
+          port: 80

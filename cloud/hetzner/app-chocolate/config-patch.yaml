@@ -1,0 +1,17 @@
+# Production overrides for the shared ConfigMap, same keys as app/config-patch.yaml
+# but pointing at sichocolate.com instead. This is what makes the two overlays
+# mutually exclusive (see sichocolate.md §0): auth-server's spa-client redirect URI
+# and JWT issuer are single-valued, so only one domain can be "the" domain at a time.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: granite-config
+data:
+  AUTH_SERVER_ISSUER: "https://sichocolate.com/auth"
+  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "https://sichocolate.com/auth"
+  SPA_CLIENT_REDIRECT_URI: "https://sichocolate.com/callback"
+  SPA_CLIENT_POST_LOGOUT_REDIRECT_URI: "https://sichocolate.com"
+  OIDC_CLIENT_REDIRECT_URI: "https://sichocolate.com/login/oauth2/code/oidc-client"
+  OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI: "https://sichocolate.com/"
+  OIDC_AUTHORITY: "https://sichocolate.com/auth"
+  OIDC_CLIENT_ID: "spa-client"

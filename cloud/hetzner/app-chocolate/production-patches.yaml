@@ -1,38 +1,11 @@
-# Two things every workload needs for a real VPS that k8s/base doesn't set (base is
-# tuned for an unconstrained kind node): resource requests/limits, so no single pod
-# can starve the others on a one-node cluster, and imagePullPolicy: Always.
+# Same as app/production-patches.yaml — identical backend sizing, since it's the
+# same backend. Only the front-end block differs: ui-demo instead of ui-shop (and
+# there's no ui-shop block here at all, since remove-ui-shop.yaml already deletes
+# that Deployment — patching a resource this overlay doesn't have would fail).
 #
-# Always, not IfNotPresent: this overlay tags every granite-* image `:latest` (see
-# app/kustomization.yaml) rather than a per-build SHA, precisely so redeploys don't
-# require editing the tag each time. But IfNotPresent + a floating tag is a trap —
-# the node caches whatever it pulled under that tag and never checks the registry
-# again, so pushing a new image to the same `:latest` tag silently has no effect on
-# already-scheduled pods (hit this for real: a cross-arch rebuild pushed a fixed
-# amd64 image to `:latest`, but crash-looping pods kept running the stale cached
-# arm64 one — `exec format error` — until this was set to Always). The cost is every
-# pod (re)start hits Docker Hub, which is fine at this scale.
-#
-# Numbers below are a starting point for an 8-16GB VPS, not a tuned recommendation —
-# watch `kubectl top pods -n granite` after launch and adjust.
-#
-# livenessProbe.initialDelaySeconds bumped to 300s (5 min) for auth-server and
-# gateway — the only two services in k8s/base that define probes at all
-# (greetings/shop/payment/profile/delivery have none, so there's nothing to patch
-# there; a probe patch with no httpGet/exec/tcpSocket handler would be rejected as
-# invalid by the API). This is a wide safety margin against a genuinely slow/stuck
-# boot; it only delays how fast a truly hung container gets killed, so being generous
-# here is cheap. Originally needed because auth-server took ~96-113s to start under
-# a 500m CPU limit — since bumped to `cpu: "1"` (see below), which dropped real
-# startup to ~15-20s, but the probe delay is left generous regardless.
-#
-# readinessProbe.initialDelaySeconds is a DIFFERENT knob and must NOT be set this
-# high: it controls when the pod is added to the Service's endpoint list at all, so
-# 300s means the Service has ZERO backends for 5 minutes after every restart —
-# gateway then gets "Connection refused" (no endpoint to route to) and surfaces it to
-# the browser as a 500, until the delay elapses and the pod finally joins rotation.
-# Hit this for real: after bumping auth-server's CPU and restarting it, the
-# login/authorize flow 500'd intermittently for the next 5 minutes even though the
-# app itself was healthy within ~20s. Kept close to actual boot time instead.
+# See app/production-patches.yaml for the full rationale on imagePullPolicy: Always
+# with a floating :latest tag, and on why readinessProbe vs. livenessProbe
+# initialDelaySeconds are tuned so differently.
 
 # ── JVM services ─────────────────────────────────────────
 apiVersion: apps/v1
@@ -144,12 +117,12 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ui-shop
+  name: ui-demo
 spec:
   template:
     spec:
       containers:
-        - name: ui-shop
+        - name: ui-demo
           imagePullPolicy: Always
           resources:
             requests: { cpu: 50m, memory: 32Mi }

@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api, FALLBACK_PRODUCTS } from './api';
+import { api, CURATED_PRODUCT_NAMES, FALLBACK_PRODUCTS } from './api';
 import type { Category, Product } from './types';
 
 export interface CartLine {
@@ -51,19 +51,26 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const [cartOpen, setCartOpen] = useState(false);
   const [wishlist, setWishlist] = useState<Set<number>>(new Set());
 
-  // The shared shop catalog is a general store; SI Chocolate only sells the
-  // chocolate category. Resolve it by name, filter, and top the grid up with
-  // the editorial fallback pieces so the storefront always feels complete.
+  // The shared shop catalog is a general store; SI Chocolate only sells its
+  // own curated pieces, not the shop's other Food & Sweets products (a
+  // general-store category can hold both — see docs/plans/add-chocolates.md).
+  // Resolve the category by name, filter to our curated names, and top the
+  // grid up with the editorial fallback pieces for any not yet seeded so the
+  // storefront always feels complete.
   const refresh = useCallback(async () => {
     try {
       const [productPage, categoryPage] = await Promise.all([api.getProducts(), api.getCategories()]);
       const chocolateCategory = categoryPage.items.find((c) =>
         /choco|sweet|confection|food/i.test(`${c.name} ${c.description}`),
       );
-      const chocolate = chocolateCategory
+      const inCategory = chocolateCategory
         ? productPage.items.filter((p) => p.categoryId === chocolateCategory.id)
         : productPage.items;
-      const topUp = FALLBACK_PRODUCTS.slice(0, Math.max(0, 8 - chocolate.length));
+      const chocolate = inCategory.filter((p) => CURATED_PRODUCT_NAMES.has(p.name));
+      const topUp = FALLBACK_PRODUCTS.filter((p) => !chocolate.some((c) => c.name === p.name)).slice(
+        0,
+        Math.max(0, 8 - chocolate.length),
+      );
       setCategories(categoryPage.items);
       setChocolateCategoryId(chocolateCategory?.id ?? null);
       setProducts(chocolate.length > 0 ? [...chocolate, ...topUp] : FALLBACK_PRODUCTS);

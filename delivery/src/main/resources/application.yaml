@@ -13,6 +13,10 @@ spring:
     url: ${DELIVERY_R2DBC_URL:r2dbc:postgresql://localhost:5435/deliverydb}
     username: ${DELIVERY_R2DBC_USERNAME:myuser}
     password: ${DELIVERY_R2DBC_PASSWORD:secret}
+    pool:
+      enabled: true
+      validation-query: SELECT 1
+      max-idle-time: 5m
 
   liquibase:
     url: ${DELIVERY_JDBC_URL:jdbc:postgresql://localhost:5435/deliverydb}
