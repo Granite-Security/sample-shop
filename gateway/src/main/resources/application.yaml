@@ -16,6 +16,16 @@ spring:
     name: gateway
   cloud:
     gateway:
+      httpclient:
+        pool:
+          # Backend services (profile/delivery/payment) close idle Netty
+          # connections on their own default timeout; without this the
+          # gateway's pooled client reuses a connection the backend already
+          # closed, surfacing as recvAddress(-104) "Connection reset by peer"
+          # on the next request. Evicting below the backend default keeps the
+          # pool from ever holding a connection past that point.
+          max-idle-time: 20s
+          eviction-interval: 30s
       globalcors:
         cors-configurations:
           '[/**]':
