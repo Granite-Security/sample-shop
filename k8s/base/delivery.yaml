@@ -5,6 +5,7 @@ metadata:
   name: delivery
 spec:
   replicas: 1
+  revisionHistoryLimit: 2
   selector:
     matchLabels:
       app: delivery

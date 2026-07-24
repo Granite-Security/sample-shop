@@ -27,25 +27,25 @@ patches:
 images:
   - name: granite-auth-server
     newName: docker.io/moldovean/granite-auth-server
-    newTag: otel-agent
+    newTag: latest
   - name: granite-gateway
     newName: docker.io/moldovean/granite-gateway
-    newTag: otel-agent
+    newTag: latest
   - name: granite-greetings
     newName: docker.io/moldovean/granite-greetings
-    newTag: otel-agent
+    newTag: latest
   - name: granite-shop
     newName: docker.io/moldovean/granite-shop
-    newTag: otel-agent
+    newTag: latest
   - name: granite-payment
     newName: docker.io/moldovean/granite-payment
-    newTag: otel-agent
+    newTag: latest
   - name: granite-profile
     newName: docker.io/moldovean/granite-profile
-    newTag: otel-agent
+    newTag: latest
   - name: granite-delivery
     newName: docker.io/moldovean/granite-delivery
-    newTag: otel-agent
+    newTag: latest
   - name: granite-ui-shop
     newName: docker.io/moldovean/granite-ui-shop
     newTag: latest

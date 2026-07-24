@@ -17,6 +17,7 @@ metadata:
   name: postgres-auth
 spec:
   replicas: 1
+  revisionHistoryLimit: 2
   selector:
     matchLabels:
       app: postgres-auth
@@ -73,6 +74,7 @@ metadata:
   name: postgres-shop
 spec:
   replicas: 1
+  revisionHistoryLimit: 2
   selector:
     matchLabels:
       app: postgres-shop
@@ -129,6 +131,7 @@ metadata:
   name: postgres-payment
 spec:
   replicas: 1
+  revisionHistoryLimit: 2
   selector:
     matchLabels:
       app: postgres-payment
@@ -185,6 +188,7 @@ metadata:
   name: postgres-delivery
 spec:
   replicas: 1
+  revisionHistoryLimit: 2
   selector:
     matchLabels:
       app: postgres-delivery
@@ -241,6 +245,7 @@ metadata:
   name: postgres-profile
 spec:
   replicas: 1
+  revisionHistoryLimit: 2
   selector:
     matchLabels:
       app: postgres-profile
