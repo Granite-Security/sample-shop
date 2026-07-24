@@ -10,7 +10,7 @@ import ErrorBoundary from '../components/ErrorBoundary';
 
 type Step = 'review' | 'placing' | 'waiting_payment' | 'payment' | 'confirming' | 'done' | 'failed' | 'error';
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+const stripePromise = loadStripe(window.__ENV__?.STRIPE_PUBLISHABLE_KEY ?? '');
 const POLL_INTERVAL = 1000;
 const POLL_TIMEOUT = 30000;
 const MAX_RETRIES = 25;

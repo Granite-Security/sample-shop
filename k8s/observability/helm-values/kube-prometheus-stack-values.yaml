@@ -1,0 +1,43 @@
+# Grafana is installed separately (grafana/grafana chart) with our own
+# datasource wiring for Loki/Tempo/Prometheus correlation — disable the
+# bundled one here to avoid running two Grafanas.
+grafana:
+  enabled: false
+
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+
+# Traefik already binds hostPort 9100 for its own metrics on this node —
+# move node-exporter off the collision.
+prometheus-node-exporter:
+  service:
+    port: 9101
+    targetPort: 9101
+
+prometheus:
+  prometheusSpec:
+    retention: 3d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+    # Let Prometheus discover ServiceMonitors/PodMonitors from any namespace
+    # (Loki/Tempo/OTel Collector all live in granite-observability, app
+    # services in granite) instead of only ones matching the release's labels.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    # Same reasoning: pick up PrometheusRule (alert rule) resources from any
+    # namespace, not just ones labeled with this Helm release's selector.
+    ruleSelectorNilUsesHelmValues: false

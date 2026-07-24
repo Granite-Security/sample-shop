@@ -1,0 +1,94 @@
+# Single-tenant, single-binary Loki — appropriate for this project's log volume
+# (a handful of Spring Boot services, 3-day retention). Avoids the
+# SimpleScalable/Distributed modes, which are for much higher ingest rates.
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+
+  commonConfig:
+    replication_factor: 1
+
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+  storage:
+    type: filesystem
+
+  limits_config:
+    retention_period: 72h
+    reject_old_samples: true
+    reject_old_samples_max_age: 168h
+    max_cache_freshness_per_query: 10m
+    split_queries_by_interval: 15m
+    query_timeout: 300s
+    volume_enabled: true
+
+  compactor:
+    retention_enabled: true
+    delete_request_store: filesystem
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: local-path
+
+# SimpleScalable/Distributed-mode components aren't used in SingleBinary
+# deploymentMode, but keep replicas at 0 explicitly for clarity.
+write:
+  replicas: 0
+read:
+  replicas: 0
+backend:
+  replicas: 0
+ingester:
+  replicas: 0
+distributor:
+  replicas: 0
+querier:
+  replicas: 0
+queryFrontend:
+  replicas: 0
+queryScheduler:
+  replicas: 0
+indexGateway:
+  replicas: 0
+compactor:
+  replicas: 0
+ruler:
+  replicas: 0
+
+gateway:
+  enabled: false
+
+# Memcached caching layers are unnecessary at this project's scale (single
+# node, low log volume, 3-day retention) — skip them to save resources.
+resultsCache:
+  enabled: false
+chunksCache:
+  enabled: false
+
+test:
+  enabled: false
+
+lokiCanary:
+  enabled: false
+
+monitoring:
+  selfMonitoring:
+    enabled: false
+  lokiCanary:
+    enabled: false
+  serviceMonitor:
+    enabled: true
+    # Uses the label the kube-prometheus-stack Prometheus is configured (via
+    # serviceMonitorSelectorNilUsesHelmValues: false) to pick up from any namespace.

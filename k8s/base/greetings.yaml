@@ -31,6 +31,10 @@ spec:
           ports:
             - containerPort: 8060
           env:
+            - name: OTEL_SERVICE_NAME
+              value: "greetings"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector-opentelemetry-collector.granite-observability.svc.cluster.local:4318"
             - name: SERVER_PORT
               valueFrom:
                 configMapKeyRef:

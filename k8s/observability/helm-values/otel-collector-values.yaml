@@ -1,0 +1,80 @@
+# Single shared Collector (Deployment, not DaemonSet/sidecar) — every
+# service talks to this one endpoint via OTEL_EXPORTER_OTLP_ENDPOINT.
+mode: deployment
+replicaCount: 1
+
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# Only OTLP in — nothing sends Jaeger/Zipkin format, so skip those receivers
+# and ports (fewer host-facing listeners, and this cluster already had one
+# port collision with Traefik, so avoid claiming ports we don't need).
+ports:
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+  otlp:
+    hostPort: null
+  otlp-http:
+    hostPort: null
+  prom-export:
+    enabled: true
+    containerPort: 8889
+    servicePort: 8889
+    protocol: TCP
+
+config:
+  receivers:
+    jaeger: null
+    zipkin: null
+    prometheus: null
+    otlp:
+      protocols:
+        grpc:
+          endpoint: ${env:MY_POD_IP}:4317
+        http:
+          endpoint: ${env:MY_POD_IP}:4318
+
+  exporters:
+    debug: {}
+    otlphttp/loki:
+      endpoint: http://loki.granite-observability.svc.cluster.local:3100/otlp
+    otlp/tempo:
+      endpoint: tempo.granite-observability.svc.cluster.local:4317
+      tls:
+        insecure: true
+    prometheus:
+      endpoint: ${env:MY_POD_IP}:8889
+
+  service:
+    pipelines:
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlphttp/loki]
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlp/tempo]
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [prometheus]
+
+serviceMonitor:
+  enabled: true
+  metricsEndpoints:
+    - port: prom-export

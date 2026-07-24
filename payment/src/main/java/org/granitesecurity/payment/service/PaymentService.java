@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -71,6 +72,7 @@ public class PaymentService {
                         return Mono.error(new RuntimeException("No Stripe PaymentIntent for order " + orderId));
                     }
                     return Mono.fromCallable(() -> PaymentIntent.retrieve(stripePiId))
+                            .subscribeOn(Schedulers.boundedElastic())
                             .flatMap(intent -> updateFromStripeStatus(payment, intent.getStatus()));
                 });
     }
@@ -148,6 +150,7 @@ public class PaymentService {
                 .build();
 
         return Mono.fromCallable(() -> PaymentIntent.create(params, options))
+                .subscribeOn(Schedulers.boundedElastic())
                 .onErrorResume(IdempotencyException.class, e -> {
                     log.warn("Idempotency key collision for order {}, searching for existing PaymentIntent", orderId);
                     return Mono.fromCallable(() -> {
@@ -158,7 +161,7 @@ public class PaymentService {
                         return PaymentIntent.search(searchParams).getData().stream()
                                 .findFirst()
                                 .orElseThrow(() -> e);
-                    });
+                    }).subscribeOn(Schedulers.boundedElastic());
                 })
                 .flatMap(intent -> {
                     Payment payment = new Payment(orderId, total, cur.toUpperCase(), "stripe");

@@ -56,6 +56,34 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
+    # Grafana lives in granite-observability, not granite, so this listener's
+    # allowedRoutes is "All" (not "Same" like the others above) — the
+    # HTTPRoute for it is defined in k8s/observability/grafana-gateway.yaml.
+    # No ReferenceGrant needed: that HTTPRoute's backendRef (the grafana
+    # Service) lives in the same namespace as the route itself: only the
+    # parentRef crosses into granite, which allowedRoutes: All permits directly.
+    #
+    # Hostname is grafana-granite (not plain grafana) — this server is shared
+    # with another team's stack (infra-global-observability, ArgoCD-managed),
+    # which already claims grafana.granite-security.org for its own Grafana.
+    - name: https-grafana
+      hostname: grafana-granite.granite-security.org
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: All
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: grafana-granite.granite-security.org-tls
+    - name: http-grafana
+      hostname: grafana-granite.granite-security.org
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: All
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

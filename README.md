@@ -226,6 +226,45 @@ For local development without webhooks, the frontend calls `POST /api/payments/i
 | `DELIVERY_R2DBC_URL` | `r2dbc:postgresql://localhost:5435/deliverydb` | delivery |
 | `PROFILE_R2DBC_URL` | `r2dbc:postgresql://localhost:5436/profiledb` | profile |
 
+## Deploying to Kubernetes (Hetzner)
+
+This assumes `kubectl` is already configured with a context pointing at the cluster, and
+the CI/CD pipeline (`.github/workflows/ci.yml`) has already built and pushed images to
+Docker Hub as `docker.io/moldovean/granite-<service>:latest`.
+
+```bash
+# 1. Point kubectl at the right cluster (don't skip this on a multi-context kubeconfig)
+kubectl config use-context <your-hetzner-context>
+kubectl config current-context   # confirm before applying
+
+# 2. Apply the manifests
+kubectl apply -k cloud/hetzner/app-multi
+
+# 3. Pods with imagePullPolicy: Always won't restart on their own just because a new
+#    :latest was pushed — the pod template hash hasn't changed. Force a re-pull + rollout:
+kubectl -n granite rollout restart deployment <service>
+# ...or restart every deployment in the namespace at once:
+kubectl -n granite get deployments -o name | xargs -n1 kubectl -n granite rollout restart
+
+# 4. Watch it come up
+kubectl -n granite get pods -w
+kubectl -n granite rollout status deployment/gateway
+```
+
+`cloud/hetzner/` has three overlays, mutually exclusive on domain (each cluster only
+trusts one OAuth2 redirect/issuer host at a time — see `sichocolate.md`):
+
+| Overlay | Front end(s) | Domain |
+|---|---|---|
+| `app` | `ui-shop` only | `granite-security.org` |
+| `app-chocolate` | `ui-demo` only | `sichocolate.com` |
+| `app-multi` | both `ui-shop` and `ui-demo` | current default, runs both simultaneously |
+
+One-time cluster bootstrap — StorageClass, Traefik/Gateway API, cert-manager, the CoreDNS
+split-horizon override, and populating `secrets-patch.yaml` — is already covered end to
+end in `cloud/hetzner/cloudify.md`; the steps above are just the repeatable redeploy loop
+once that's done.
+
 ## Project layout
 
 ```
@@ -238,6 +277,8 @@ granite-security/
 ├── delivery/            — Delivery tracking service (WebFlux + R2DBC + Kafka)
 ├── profile/             — User profile & address service (WebFlux + R2DBC)
 ├── ui-shop/             — React SPA storefront (Vite + oidc-client-ts)
+├── k8s/                 — Kubernetes manifests (base + kind overlay for local clusters)
+├── cloud/hetzner/       — Kustomize overlays + runbooks for the Hetzner VPS deployment
 ├── smoke-tests/         — Smoke test scripts
 ├── plans/               — Planning documents and change logs
 ├── compose.yaml         — Docker Compose orchestration (all services + Kafka)
@@ -248,3 +289,13 @@ granite-security/
 ## OpenAPI documentation
 
 Swagger UI is available at `/swagger-ui/index.html` on both the shop (8061) and proxied through the gateway (8080). The OpenAPI spec is at `/v3/api-docs`.
+
+export TAG=latest
+
+for s in auth-server gateway greetings shop payment profile delivery; do
+(cd $s && ./gradlew build -x test)
+docker buildx build --platform linux/amd64 -t docker.io/moldovean/granite-$s:$TAG --push $s/
+done
+
+docker buildx build --platform linux/amd64 -t docker.io/moldovean/granite-ui-shop:$TAG --push ui-shop/
+docker buildx build --platform linux/amd64 -t docker.io/moldovean/granite-ui-demo:$TAG --push ui-demo/

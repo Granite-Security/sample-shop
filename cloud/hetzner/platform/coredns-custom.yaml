@@ -45,3 +45,8 @@ data:
       10.233.35.75 sichocolate.com
       fallthrough
     }
+  grafana-granite.override: |
+    hosts {
+      10.233.35.75 grafana-granite.granite-security.org
+      fallthrough
+    }
