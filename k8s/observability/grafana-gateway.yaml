@@ -1,0 +1,48 @@
+# Attaches to the existing granite-gateway (namespace granite, see
+# cloud/hetzner/app-multi/gateway.yaml) rather than defining a separate
+# Gateway object — the letsencrypt-prod ClusterIssuer's ACME HTTP-01 solver
+# only has parentRefs configured for granite-gateway, so a standalone Gateway
+# here would have no way to get a certificate issued.
+#
+# No ReferenceGrant needed: this HTTPRoute lives in granite-observability,
+# same namespace as its backendRef (the grafana Service) — only the
+# parentRef crosses into the granite namespace, which Gateway API allows
+# directly since the https-grafana/http-grafana listeners set
+# allowedRoutes.namespaces.from: All.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grafana-http-redirect
+spec:
+  parentRefs:
+    - name: granite-gateway
+      namespace: granite
+      sectionName: http-grafana
+  hostnames:
+    - grafana-granite.granite-security.org
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grafana-route
+spec:
+  parentRefs:
+    - name: granite-gateway
+      namespace: granite
+      sectionName: https-grafana
+  hostnames:
+    - grafana-granite.granite-security.org
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: grafana
+          port: 80

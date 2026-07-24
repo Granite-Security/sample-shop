@@ -1,0 +1,153 @@
+@startuml microservices
+
+title Granite Security Shop — Microservices Architecture
+
+skinparam componentStyle rectangle
+skinparam wrapWidth 200
+skinparam linetype ortho
+skinparam shadowing false
+skinparam roundCorner 12
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 13
+skinparam ArrowColor #566573
+skinparam ArrowFontColor #566573
+skinparam ArrowFontSize 11
+
+skinparam component {
+  BackgroundColor #EAF2FB
+  BorderColor #4A7FB5
+  FontColor #1B2631
+}
+skinparam database {
+  BackgroundColor #FCEFDC
+  BorderColor #C8843C
+  FontColor #1B2631
+}
+skinparam queue {
+  BackgroundColor #EDE7F6
+  BorderColor #7E57C2
+  FontColor #1B2631
+}
+skinparam package {
+  BackgroundColor #F7F9FA
+  BorderColor #AAB2B8
+  FontColor #1B2631
+}
+skinparam actor {
+  BackgroundColor #FCEFDC
+  BorderColor #C8843C
+}
+skinparam cloud {
+  BackgroundColor #E8F6EF
+  BorderColor #3FA372
+  FontColor #1B2631
+}
+skinparam note {
+  BackgroundColor #FFFDE7
+  BorderColor #D4B106
+}
+
+actor "Browser" as browser
+
+package "Frontends" {
+  [ui-shop] as uishop
+  [ui-demo] as uidemo
+}
+
+component "gateway\n(Spring Cloud Gateway)" as gateway
+
+package "Backend services" {
+  component "auth-server\n(OIDC provider)" as auth
+  component "greetings" as greetings
+  component "shop\n(catalog, cart, orders)" as shop
+  component "payment" as payment
+  component "profile" as profile
+  component "delivery" as delivery
+}
+
+auth -[hidden]right- greetings
+greetings -[hidden]right- shop
+shop -[hidden]right- payment
+payment -[hidden]right- profile
+profile -[hidden]right- delivery
+
+queue "Kafka" as kafka
+
+cloud "Stripe" as stripe
+
+database "postgres-auth" as dbauth
+database "postgres-shop" as dbshop
+database "postgres-payment" as dbpayment
+database "postgres-profile" as dbprofile
+database "postgres-delivery" as dbdelivery
+
+browser --> uishop
+browser --> uidemo
+browser ..> stripe : Stripe.js / Elements\n(card details, direct)
+
+uishop --> gateway : /api, /auth, /oauth2
+uidemo --> gateway : /api, /auth, /oauth2
+
+gateway --> auth : OIDC login,\nJWKS
+gateway --> greetings : /api/greetings/**\n(public)
+gateway --> shop : /api/shop/**\n(JWT relay)
+gateway --> payment : /api/payments/**\n(JWT relay)
+gateway --> profile : /api/profiles/**\n(JWT relay)
+gateway --> delivery : /api/delivery/**\n(JWT relay)
+
+greetings ..> auth : validate JWT\n(JWKS)
+shop ..> auth : validate JWT\n(JWKS)
+payment ..> auth : validate JWT\n(JWKS)
+profile ..> auth : validate JWT\n(JWKS)
+delivery ..> auth : validate JWT\n(JWKS)
+
+shop --> payment : create/sync\npayment intent (REST)
+
+payment --> stripe : create PaymentIntent,\nretrieve status (/sync)
+stripe ..> payment : webhook\npayment_intent.*\n(not yet registered\nin production)
+
+auth --> dbauth
+shop --> dbshop
+payment --> dbpayment
+profile --> dbprofile
+delivery --> dbdelivery
+
+dbauth -[hidden]right- dbshop
+dbshop -[hidden]right- dbpayment
+dbpayment -[hidden]right- dbprofile
+dbprofile -[hidden]right- dbdelivery
+
+shop --> kafka : produce\norders.events
+payment --> kafka : produce\npayments.events
+delivery --> kafka : produce\ndelivery.events
+
+kafka --> payment : consume\norders.events
+kafka --> delivery : consume\norders.events
+kafka --> delivery : consume\npayments.events
+kafka --> shop : consume\npayments.events
+kafka --> shop : consume\ndelivery.events
+
+note right of kafka
+  Each producer uses the
+  outbox pattern (OutboxRelay)
+  to publish events reliably.
+end note
+
+note bottom of delivery
+  Two independent consumer
+  groups: order creation and
+  payment-status updates are
+  processed separately.
+end note
+
+note bottom of stripe
+  Confirmation today relies on
+  the browser calling /sync after
+  stripe.confirmPayment resolves.
+  The webhook exists but isn't
+  registered against
+  granite-security.org yet —
+  see docs/stripe-integration.md.
+end note
+
+@enduml

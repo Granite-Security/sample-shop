@@ -1,5 +1,6 @@
 server:
     port: 8061
+
 spring:
   application:
     name: shop
