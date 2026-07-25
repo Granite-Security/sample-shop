@@ -1,8 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 namespace: granite
-
 # Both front ends run simultaneously now (unlike app/ and app-chocolate/, which
 # were mutually exclusive) — pulls in ui-shop (already part of k8s/base) AND
 # ui-demo (k8s/base/ui-demo's own mini-kustomization, see its comments for why
@@ -12,16 +10,15 @@ resources:
   - ../../../k8s/base
   - ../../../k8s/base/ui-demo
   - gateway.yaml
-
 patches:
   - path: config-patch.yaml
   - path: ui-shop-patch.yaml
   - path: ui-demo-patch.yaml
   - path: production-patches.yaml
-  # secrets-patch.yaml is gitignored, applied by hand once per cluster (see
-  # secrets-patch.yaml.example) — not listed here so a clean clone still
-  # renders, which ArgoCD requires. Same reasoning as k8s/base/kustomization.yaml
-  # dropping secrets.yaml.
+# secrets-patch.yaml is gitignored, applied by hand once per cluster (see
+# secrets-patch.yaml.example) — not listed here so a clean clone still
+# renders, which ArgoCD requires. Same reasoning as k8s/base/kustomization.yaml
+# dropping secrets.yaml.
 
 # newTag is bumped automatically by the `update-gitops` job in
 # .github/workflows/ci.yml (sets it to the full git SHA of the commit whose
@@ -52,13 +49,13 @@ images:
     newTag: e4fb2ad3818cbaa39a427a5c4975e054ef7fe3f4
   - name: granite-profile
     newName: docker.io/moldovean/granite-profile
-    newTag: 9b0a131a0e29b4ccba5c895994a4db48ff4e1ee1
+    newTag: b7a52aa6e601e7d2c98bacb715d733c45ff1d558
   - name: granite-delivery
     newName: docker.io/moldovean/granite-delivery
     newTag: e4fb2ad3818cbaa39a427a5c4975e054ef7fe3f4
   - name: granite-ui-shop
     newName: docker.io/moldovean/granite-ui-shop
-    newTag: latest
+    newTag: b7a52aa6e601e7d2c98bacb715d733c45ff1d558
   - name: granite-ui-demo
     newName: docker.io/moldovean/granite-ui-demo
-    newTag: latest
+    newTag: b7a52aa6e601e7d2c98bacb715d733c45ff1d558
