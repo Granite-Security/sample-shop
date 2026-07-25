@@ -26,32 +26,36 @@ patches:
 # newTag is bumped automatically by the `update-gitops` job in
 # .github/workflows/ci.yml (sets it to the full git SHA of the commit whose
 # CI build pushed the image) and committed straight to main with
-# `[skip ci]`. ArgoCD (app "granite", automated + selfHeal) then picks up
-# that commit and rolls the changed deployment(s). Don't hand-edit newTag
-# for a released service — CI will just overwrite it on the next push. Only
-# edit by hand when bootstrapping a brand-new image entry.
+# `[skip ci]`. ArgoCD (app "granite", automated sync; selfHeal is off as of
+# 2026-07-25) then picks up that commit and rolls the changed deployment(s).
+# Don't hand-edit newTag for a released service — CI will just overwrite it
+# on the next push. Only edit by hand when bootstrapping a brand-new image
+# entry, or recovering from a stale pin like the otel-agent one fixed
+# 2026-07-25 (update-gitops didn't exist yet when several of these services
+# last rebuilt, so their tags were stuck on a manual placeholder from the
+# OTel instrumentation work — see docs/todo or git blame on this file).
 images:
   - name: granite-auth-server
     newName: docker.io/moldovean/granite-auth-server
-    newTag: otel-agent
+    newTag: 9b0a131a0e29b4ccba5c895994a4db48ff4e1ee1
   - name: granite-gateway
     newName: docker.io/moldovean/granite-gateway
-    newTag: otel-agent
+    newTag: cb61842027fa22197418e0f2fd0120bee5103bdd
   - name: granite-greetings
     newName: docker.io/moldovean/granite-greetings
-    newTag: otel-agent
+    newTag: 9b0a131a0e29b4ccba5c895994a4db48ff4e1ee1
   - name: granite-shop
     newName: docker.io/moldovean/granite-shop
-    newTag: otel-agent
+    newTag: 9b0a131a0e29b4ccba5c895994a4db48ff4e1ee1
   - name: granite-payment
     newName: docker.io/moldovean/granite-payment
-    newTag: otel-agent
+    newTag: e4fb2ad3818cbaa39a427a5c4975e054ef7fe3f4
   - name: granite-profile
     newName: docker.io/moldovean/granite-profile
-    newTag: otel-agent
+    newTag: 9b0a131a0e29b4ccba5c895994a4db48ff4e1ee1
   - name: granite-delivery
     newName: docker.io/moldovean/granite-delivery
-    newTag: otel-agent
+    newTag: e4fb2ad3818cbaa39a427a5c4975e054ef7fe3f4
   - name: granite-ui-shop
     newName: docker.io/moldovean/granite-ui-shop
     newTag: latest
