@@ -38,7 +38,10 @@ spec:
         - /status
   syncPolicy:
     automated:
-      selfHeal: true
+      selfHeal: false
+      # selfHeal off: out-of-band changes (manual kubectl apply/edit) are no
+      # longer auto-reverted — the app just shows OutOfSync until the next
+      # git-triggered sync. New commits to main still auto-deploy either way.
       # no automated prune: granite carries hand-managed objects (gateway
       # listeners, cert secrets); prune stays a deliberate manual action.
     syncOptions:
