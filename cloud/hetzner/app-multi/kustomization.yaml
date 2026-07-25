@@ -23,10 +23,13 @@ patches:
   # renders, which ArgoCD requires. Same reasoning as k8s/base/kustomization.yaml
   # dropping secrets.yaml.
 
-# Bump newTag on every release (recommend the git short SHA) and re-run
-# `kubectl apply -k hetzner/app-multi` — see app/kustomization.yaml's original
-# comment for why a floating "latest" tag + imagePullPolicy: IfNotPresent would
-# NOT re-pull on redeploy.
+# newTag is bumped automatically by the `update-gitops` job in
+# .github/workflows/ci.yml (sets it to the full git SHA of the commit whose
+# CI build pushed the image) and committed straight to main with
+# `[skip ci]`. ArgoCD (app "granite", automated + selfHeal) then picks up
+# that commit and rolls the changed deployment(s). Don't hand-edit newTag
+# for a released service — CI will just overwrite it on the next push. Only
+# edit by hand when bootstrapping a brand-new image entry.
 images:
   - name: granite-auth-server
     newName: docker.io/moldovean/granite-auth-server
