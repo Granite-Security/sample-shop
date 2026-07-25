@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { loadStripe } from '@stripe/stripe-js';
-import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { Elements } from '@stripe/react-stripe-js';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../auth';
 import { api } from '../api';
 import type { OrderResponse, AddressResponse, DeliveryAddress } from '../types';
 import ErrorBoundary from '../components/ErrorBoundary';
+import PaymentForm from '../components/PaymentForm';
 
 type Step = 'review' | 'placing' | 'waiting_payment' | 'payment' | 'confirming' | 'done' | 'failed' | 'error';
 
@@ -14,56 +15,6 @@ const stripePromise = loadStripe(window.__ENV__?.STRIPE_PUBLISHABLE_KEY ?? '');
 const POLL_INTERVAL = 1000;
 const POLL_TIMEOUT = 30000;
 const MAX_RETRIES = 25;
-
-function PaymentForm({
-  orderId,
-  onPaymentConfirmed,
-  onError,
-}: {
-  orderId: number;
-  onPaymentConfirmed: () => void;
-  onError: (msg: string) => void;
-}) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [confirming, setConfirming] = useState(false);
-  const [elementReady, setElementReady] = useState(false);
-
-  const handlePay = async () => {
-    if (!stripe || !elements) return;
-    setConfirming(true);
-    try {
-      const { error } = await stripe.confirmPayment({
-        elements,
-        confirmParams: { return_url: window.location.origin + `/orders/${orderId}` },
-        redirect: 'if_required',
-      });
-      if (error) {
-        onError(error.message ?? 'Payment failed');
-        setConfirming(false);
-      } else {
-        onPaymentConfirmed();
-      }
-    } catch (e) {
-      onError(e instanceof Error ? e.message : 'Payment failed');
-      setConfirming(false);
-    }
-  };
-
-  return (
-    <div className="payment-form">
-      <PaymentElement onReady={() => setElementReady(true)} />
-      <button
-        className="btn btn-primary"
-        style={{ marginTop: 16, width: '100%' }}
-        disabled={!stripe || !elementReady || confirming}
-        onClick={handlePay}
-      >
-        {!stripe || !elementReady ? 'Loading payment form…' : confirming ? 'Processing…' : 'Pay Now'}
-      </button>
-    </div>
-  );
-}
 
 function CheckoutInner() {
   const { items, total, clearCart } = useCart();

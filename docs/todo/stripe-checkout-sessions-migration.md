@@ -10,6 +10,11 @@
 
 **Status:** not started. This is a plan, not a patch — no code changed yet.
 
+**Scope note (2026-07-25):** this app does not use Stripe webhooks in
+production; order status confirmation runs entirely through the `/sync` poll.
+That's an intentional constraint for this migration, not a gap to close —
+webhook registration/repair is explicitly out of scope here (see §4).
+
 ---
 
 ## Why bother
@@ -157,18 +162,19 @@ PaymentIntent-status-based sync unchanged for now (retrieve the PI via
 `session.payment_intent`) — smaller diff, `mapStripeStatus` (line 91) stays
 as-is.
 
-### 4. Webhook: add `checkout.session.*` events
+### 4. Webhook: out of scope for this migration
 
-`WebhookHandler.isStatusChangeEvent` (`WebhookHandler.java:203-206`) only
-matches `payment_intent.*`. Per the guide, add handling for
-`checkout.session.completed`, `.async_payment_succeeded`,
-`.async_payment_failed`, `.expired`. Given the webhook is currently
-non-functional in production anyway (registered against the wrong domain,
-disabled — see this session's earlier investigation), this is a good moment
-to fix that registration too: point it at
-`https://granite-security.org/api/payments/webhook` and enable the new event
-types, closing the gap `docs/stripe-integration.md` already flags (browser
-tab closing before `/sync` fires leaves orders stuck PENDING forever).
+This app doesn't use Stripe webhooks in production today — order status is
+driven entirely by the `/sync` poll (`PaymentService.syncPaymentStatus`,
+documented in `docs/stripe-integration.md`). That stays true after this
+migration: `WebhookHandler` keeps matching `payment_intent.*` only, unchanged.
+`checkout.session.*` event handling is **not** part of this migration —
+Session creation still surfaces a PaymentIntent under the hood
+(`session.payment_intent`), and `/sync` keeps polling that PI's status
+exactly as it does now (see §3). Registering/fixing the webhook endpoint in
+the Stripe Dashboard is a separate concern (tracked in
+`docs/stripe-integration.md`'s "gap" section) and should not be bundled into
+this migration.
 
 ### 5. Frontend: swap Elements provider + confirm call
 
@@ -245,6 +251,6 @@ tab closing before `/sync` fires leaves orders stuck PENDING forever).
 2. Decide the email story (gotcha #1) — this gates the API shape more than anything else in the guide.
 3. Backend: `Session.create` swap in `PaymentService.doCreatePaymentIntent`, new `stripe_checkout_session_id` column, idempotency-search parity check.
 4. Frontend: `CheckoutElementsProvider` swap in `Checkout.tsx`.
-5. Webhook: add `checkout.session.*` handling in `WebhookHandler`, and — separately but same trip — actually register/enable the webhook endpoint for `granite-security.org` in the Stripe Dashboard (currently pointed at an unrelated, disabled `helloworlds.space` endpoint).
+5. ~~Webhook: add `checkout.session.*` handling~~ — out of scope, see §4. Webhook registration/repair for `granite-security.org` remains a separate, untracked-here concern.
 6. Test end-to-end against Stripe test mode (card `4242...`, and at least one 3DS/`requires_action` case) before touching the live keys in `secrets-patch.yaml`.
 7. Optional stretch: real per-product line items instead of one synthetic "Order #N" line, using `OrderPlaced`'s existing `items` array.

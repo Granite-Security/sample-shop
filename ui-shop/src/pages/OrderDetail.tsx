@@ -166,7 +166,14 @@ export default function OrderDetail() {
           ))}
         </tbody>
       </table>
-      <Link to="/orders" className="btn" style={{ marginTop: 16 }}>Back to Orders</Link>
+      <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+        <Link to="/orders" className="btn">Back to Orders</Link>
+        {payment && payment.status !== 'SUCCEEDED' && !TERMINAL_ORDER_STATUSES.includes(order.status) && (
+          <Link to={`/orders/${order.id}/pay`} className="btn">Retry Payment</Link>
+        )}
+      </div>
     </div>
   );
 }
+
+const TERMINAL_ORDER_STATUSES = ['SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED', 'REIMBURSED'];

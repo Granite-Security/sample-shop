@@ -31,8 +31,22 @@ public class PaymentEventConsumer {
                 log.warn("Payment event missing orderId: {}", message);
                 return;
             }
+            if (status == null) {
+                log.debug("Ignoring payment event without status for order {}: {}", orderId, message);
+                return;
+            }
 
-            String paymentStatus = "SUCCEEDED".equals(status) ? "PAID" : "REFUNDED";
+            String paymentStatus = switch (status) {
+                case "SUCCEEDED" -> "PAID";
+                case "FAILED" -> "FAILED";
+                case "CANCELED" -> "CANCELED";
+                default -> null;
+            };
+            if (paymentStatus == null) {
+                log.warn("Unhandled payment status {} for order {}", status, orderId);
+                return;
+            }
+
             deliveryService.updatePaymentStatus(orderId, paymentStatus)
                     .subscribe(d -> log.info("Updated payment status to {} for order {}", paymentStatus, orderId),
                             err -> log.error("Failed to update payment status for order {}: {}", orderId, err.getMessage()));

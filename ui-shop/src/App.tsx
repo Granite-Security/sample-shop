@@ -7,6 +7,7 @@ import Cart from './pages/Cart'
 import Checkout from './pages/Checkout'
 import Orders from './pages/Orders'
 import OrderDetail from './pages/OrderDetail'
+import RetryPayment from './pages/RetryPayment'
 import Admin from './pages/Admin'
 import DeliveryManagement from './pages/DeliveryManagement'
 import Login from './pages/Login'
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="checkout" element={<Checkout />} />
         <Route path="orders" element={<Orders />} />
         <Route path="orders/:id" element={<OrderDetail />} />
+        <Route path="orders/:id/pay" element={<RetryPayment />} />
         <Route path="profile" element={<Profile />} />
         <Route path="addresses" element={<Addresses />} />
         <Route path="admin" element={<Admin />} />

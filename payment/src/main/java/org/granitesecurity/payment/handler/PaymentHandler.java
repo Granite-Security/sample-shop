@@ -60,6 +60,26 @@ public class PaymentHandler {
                 .switchIfEmpty(ServerResponse.notFound().build());
     }
 
+    public Mono<ServerResponse> retryPaymentIntent(ServerRequest request) {
+        Long orderId = Long.valueOf(request.pathVariable("orderId"));
+        return paymentService.retryPaymentIntent(orderId)
+                .flatMap(payment -> ServerResponse.ok().bodyValue(
+                        new CreatePaymentIntentResponse(
+                                payment.getId(),
+                                payment.getOrderId(),
+                                payment.getStripePaymentIntentId(),
+                                payment.getClientSecret(),
+                                payment.getStatus(),
+                                payment.getAmount(),
+                                payment.getCurrency(),
+                                payment.getCreatedAt()
+                        )))
+                .onErrorResume(e -> {
+                    log.error("Failed to retry payment for order {}: {}", orderId, e.getMessage());
+                    return ServerResponse.badRequest().bodyValue(Map.of("error", e.getMessage()));
+                });
+    }
+
     public Mono<ServerResponse> syncPaymentStatus(ServerRequest request) {
         Long orderId = Long.valueOf(request.pathVariable("orderId"));
         return paymentService.syncPaymentStatus(orderId)

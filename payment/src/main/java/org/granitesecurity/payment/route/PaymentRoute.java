@@ -23,6 +23,7 @@ public class PaymentRoute {
                 .POST("/api/payments/intent", paymentHandler::createPaymentIntent)
                 .GET("/api/payments/intent/{orderId}", paymentHandler::getPaymentByOrderId)
                 .POST("/api/payments/intent/{orderId}/sync", paymentHandler::syncPaymentStatus)
+                .POST("/api/payments/intent/{orderId}/retry", paymentHandler::retryPaymentIntent)
                 .POST("/api/payments/webhook", webhookHandler::handleWebhook)
                 .build();
     }

@@ -22,6 +22,7 @@ import reactor.core.scheduler.Schedulers;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 @Component
 public class PaymentService {
@@ -61,6 +62,51 @@ public class PaymentService {
 
     public Mono<Payment> createPaymentIntent(Long orderId, BigDecimal total, String username) {
         return createPaymentIntent(orderId, total, currency, username);
+    }
+
+    public Mono<Payment> retryPaymentIntent(Long orderId) {
+        return paymentRepository.findByOrderId(orderId)
+                .switchIfEmpty(Mono.error(new RuntimeException("Payment not found for order " + orderId)))
+                .flatMap(existing -> {
+                    if (PaymentStatus.SUCCEEDED.name().equals(existing.getStatus())) {
+                        return Mono.error(new RuntimeException("Payment already completed for order " + orderId));
+                    }
+
+                    long amountCents = existing.getAmount().multiply(BigDecimal.valueOf(100)).longValue();
+                    var params = PaymentIntentCreateParams.builder()
+                            .setAmount(amountCents)
+                            .setCurrency(existing.getCurrency().toLowerCase())
+                            .setAutomaticPaymentMethods(
+                                    PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
+                                            .setEnabled(true)
+                                            .build()
+                            )
+                            .putMetadata("order_id", orderId.toString())
+                            .build();
+
+                    var options = RequestOptions.builder()
+                            .setIdempotencyKey("payment-retry-" + orderId + "-" + UUID.randomUUID())
+                            .build();
+
+                    return Mono.fromCallable(() -> PaymentIntent.create(params, options))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .flatMap(intent -> {
+                                existing.setStripePaymentIntentId(intent.getId());
+                                existing.setClientSecret(intent.getClientSecret());
+                                existing.setStatus(PaymentStatus.CREATED.name());
+                                existing.setUpdatedAt(Instant.now());
+                                existing.markNotNew();
+                                return paymentRepository.save(existing);
+                            })
+                            .flatMap(saved -> publishIntentCreatedEvent(saved).thenReturn(saved))
+                            .doOnSuccess(saved -> log.info("Retried Stripe PaymentIntent {} for order {}",
+                                    saved.getStripePaymentIntentId(), orderId))
+                            .onErrorResume(StripeException.class, e -> {
+                                log.error("Stripe API error retrying PaymentIntent for order {}: {}",
+                                        orderId, e.getMessage(), e);
+                                return Mono.error(e);
+                            });
+                });
     }
 
     public Mono<Payment> syncPaymentStatus(Long orderId) {
@@ -129,6 +175,30 @@ public class PaymentService {
         }
     }
 
+    private Mono<Void> publishIntentCreatedEvent(Payment saved) {
+        Map<String, Object> eventPayload = Map.of(
+                "orderId", saved.getOrderId(),
+                "stripePaymentIntentId", saved.getStripePaymentIntentId(),
+                "clientSecret", saved.getClientSecret(),
+                "amount", saved.getAmount(),
+                "currency", saved.getCurrency()
+        );
+        try {
+            String json = MAPPER.writeValueAsString(eventPayload);
+            OutboxEvent outboxEvent = new OutboxEvent(
+                    "payment",
+                    String.valueOf(saved.getOrderId()),
+                    "PaymentIntentCreated",
+                    json,
+                    "PENDING"
+            );
+            return outboxRepository.save(outboxEvent).then();
+        } catch (Exception e) {
+            log.error("Failed to serialize PaymentIntentCreated payload", e);
+            return Mono.error(e);
+        }
+    }
+
     private Mono<Payment> doCreatePaymentIntent(Long orderId, BigDecimal total, String currencyOverride, String username, String idempotencyPrefix) {
         long amountCents = total.multiply(BigDecimal.valueOf(100)).longValue();
         String cur = currencyOverride != null ? currencyOverride : currency;
@@ -172,29 +242,7 @@ public class PaymentService {
                     payment.setUpdatedAt(Instant.now());
 
                     return paymentRepository.save(payment)
-                            .flatMap(saved -> {
-                                Map<String, Object> eventPayload = Map.of(
-                                        "orderId", saved.getOrderId(),
-                                        "stripePaymentIntentId", saved.getStripePaymentIntentId(),
-                                        "clientSecret", saved.getClientSecret(),
-                                        "amount", saved.getAmount(),
-                                        "currency", saved.getCurrency()
-                                );
-                                try {
-                                    String json = MAPPER.writeValueAsString(eventPayload);
-                                    OutboxEvent outboxEvent = new OutboxEvent(
-                                            "payment",
-                                            String.valueOf(saved.getOrderId()),
-                                            "PaymentIntentCreated",
-                                            json,
-                                            "PENDING"
-                                    );
-                                    return outboxRepository.save(outboxEvent).thenReturn(saved);
-                                } catch (Exception e) {
-                                    log.error("Failed to serialize PaymentIntentCreated payload", e);
-                                    return Mono.error(e);
-                                }
-                            })
+                            .flatMap(saved -> publishIntentCreatedEvent(saved).thenReturn(saved))
                             .doOnSuccess(saved -> log.info("Created Stripe PaymentIntent {} for order {}",
                                     saved.getStripePaymentIntentId(), orderId));
                 })
