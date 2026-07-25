@@ -164,3 +164,50 @@ jobs:
           tags: |
             moldovean/granite-${{ matrix.service }}:latest
             moldovean/granite-${{ matrix.service }}:${{ github.sha }}
+
+  update-gitops:
+    name: Bump image tags in app-multi
+    needs: [detect-changes, docker-jvm, docker-ui]
+    if: |
+      always() &&
+      (needs.detect-changes.outputs.jvm != '[]' || needs.detect-changes.outputs.ui != '[]') &&
+      needs.docker-jvm.result != 'failure' &&
+      needs.docker-ui.result != 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bump newTag for changed services
+        env:
+          JVM_SERVICES: ${{ needs.detect-changes.outputs.jvm }}
+          UI_SERVICES: ${{ needs.detect-changes.outputs.ui }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          FILE=cloud/hetzner/app-multi/kustomization.yaml
+
+          for svc in $(echo "$JVM_SERVICES" | jq -r '.[]'); do
+            [ "$svc" = "demo-kot" ] && continue # not dockerized/deployed
+            yq -i "(.images[] | select(.name == \"granite-$svc\")).newTag = \"$SHA\"" "$FILE"
+          done
+
+          for svc in $(echo "$UI_SERVICES" | jq -r '.[]'); do
+            yq -i "(.images[] | select(.name == \"granite-$svc\")).newTag = \"$SHA\"" "$FILE"
+          done
+
+      - name: Commit and push
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cloud/hetzner/app-multi/kustomization.yaml
+          if git diff --cached --quiet; then
+            echo "No image tag changes to commit"
+            exit 0
+          fi
+          git commit -m "chore(gitops): bump image tags to ${SHA} [skip ci]"
+          git push
