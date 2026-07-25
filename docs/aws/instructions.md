@@ -6,7 +6,7 @@ the "Task for the LLM" section below into a fresh session, or hand it the whole 
 
 The goal of that plan is to get from "runs in `kind` on my laptop" (see `k8s/kind/kind.md`) to
 "runs on a real AWS-hosted Kubernetes cluster, reachable over a real domain with TLS", the same
-way `cloud/hetzner/` already does for Hetzner. Nothing should be applied yet — the plan is
+way `k8s/hetzner/` already does for Hetzner. Nothing should be applied yet — the plan is
 reviewed by the user first.
 
 ---
@@ -16,11 +16,11 @@ reviewed by the user first.
 - App: `granite-security`, a multi-service demo (auth-server, gateway, greetings, shop, payment,
   delivery, profile, ui-shop, kafka, 5x postgres). All k8s-facing manifests already exist and are
   environment-agnostic in `k8s/base/` (Kustomize base). Two overlays already exist:
-  `k8s/kind/` (local, NodePort) and `cloud/hetzner/` (a previous cloud target, Ingress-based —
-  read `cloud/hetzner/app/kustomization.yaml`, `cloud/hetzner/platform/*.yaml` as the reference
+  `k8s/kind/` (local, NodePort) and `k8s/hetzner/` (a previous cloud target, Ingress-based —
+  read `k8s/hetzner/app/kustomization.yaml`, `k8s/hetzner/platform/*.yaml` as the reference
   pattern for what "cloud overlay" means in this repo).
 - Nothing in `k8s/base/` should need to change for a new cloud target — only a new overlay
-  (`cloud/aws/app/`, `cloud/aws/platform/`) plus whatever AWS-specific infra (VPC, cluster,
+  (`k8s/aws/app/`, `k8s/aws/platform/`) plus whatever AWS-specific infra (VPC, cluster,
   DNS, cert-issuer, node groups) the overlay depends on.
 - `k8s/base/secrets.yaml` is git-ignored and must never be committed with real values — same
   constraint applies to any AWS secrets material (`secrets-patch.yaml`, IAM keys, etc.). Follow
@@ -32,7 +32,7 @@ reviewed by the user first.
 
 ## Task for the LLM producing the plan
 
-Write a plan (as markdown, saved to `cloud/aws/plan.md`) that a human can review before any
+Write a plan (as markdown, saved to `k8s/aws/plan.md`) that a human can review before any
 `terraform apply` / `eksctl` / `kubectl apply` is run. The plan must cover:
 
 1. **Target shape** — which AWS Kubernetes option (EKS is the default assumption; call out if a
@@ -44,14 +44,14 @@ Write a plan (as markdown, saved to `cloud/aws/plan.md`) that a human can review
 3. **Infra inventory**, each as a named, separately-applyable unit: VPC/subnets, EKS cluster +
    node group(s), IAM roles (cluster, nodes, any IRSA needed for cert-manager/external-dns),
    ECR repositories (one per service image, mirroring the `ghcr.io/CHANGE_ME/granite-*` pattern in
-   `cloud/hetzner/app/kustomization.yaml`), Route53 hosted zone / records, ACM or cert-manager +
+   `k8s/hetzner/app/kustomization.yaml`), Route53 hosted zone / records, ACM or cert-manager +
    Let's Encrypt for TLS, an ingress controller (aws-load-balancer-controller vs ingress-nginx —
    decide and justify).
-4. **Kustomize overlay design** for `cloud/aws/`, mirroring the existing `cloud/hetzner/`
+4. **Kustomize overlay design** for `k8s/aws/`, mirroring the existing `k8s/hetzner/`
    structure (`app/` for the workload overlay, `platform/` for cluster-level add-ons). List the
    specific patch files it will need (image registry rewrite, ingress host/TLS, any config
    overrides for issuer URLs the way `k8s/kind/config-patch.yaml` and
-   `cloud/hetzner/app/config-patch.yaml` do) — don't write the YAML yet, just name each file and
+   `k8s/hetzner/app/config-patch.yaml` do) — don't write the YAML yet, just name each file and
    its one-sentence purpose.
 5. **Stateful data decision** — explicit recommendation for Postgres x5 and Kafka: keep
    in-cluster (note the EBS StorageClass / PVC implications) or move to RDS/MSK (note the extra

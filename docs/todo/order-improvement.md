@@ -42,7 +42,7 @@ making the retry button's visibility trustworthy, so it's in scope.
   hand the UI a dead end.
 - **This deployment does not have a live Stripe webhook wired up** — the
   `WebhookHandler`/`POST /api/payments/webhook` code exists, but per
-  `cloud/hetzner/sichocolate.md` ("the Stripe webhook is intentionally
+  `k8s/hetzner/sichocolate.md` ("the Stripe webhook is intentionally
   [not registered]") and `k8s/todo.md` ("payment sync endpoint if no Stripe
   webhook listener"), nothing in the current environment is configured to
   call it. So `POST /api/payments/intent/{orderId}/sync` (`syncPaymentStatus`)

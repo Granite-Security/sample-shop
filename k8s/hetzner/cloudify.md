@@ -1,12 +1,12 @@
 # Cloudify: kind → Hetzner VPS (88.99.149.31)
 
 Step-by-step migration of the locally-tested `k8s/kind` deployment onto the Hetzner VPS at
-`88.99.149.31`. The Kustomize overlay for this target already exists at `cloud/hetzner/` — this
+`88.99.149.31`. The Kustomize overlay for this target already exists at `k8s/hetzner/` — this
 file is the runbook for turning it on, not a redesign of it. Read `k8s/kind/kind.md` first if
 you haven't; every env var and route this plan touches is documented there.
 
 Nothing in `k8s/base/` changes. Everything below is either a one-time VPS/cluster setup step, or
-`kubectl apply -k cloud/hetzner/app`.
+`kubectl apply -k k8s/hetzner/app`.
 
 ---
 
@@ -189,7 +189,7 @@ helm repo add traefik https://traefik.github.io/charts
 helm repo update
 helm install traefik traefik/traefik \
   -n traefik --create-namespace \
-  -f cloud/hetzner/platform/traefik-values.yaml
+  -f k8s/hetzner/platform/traefik-values.yaml
 
 kubectl get gatewayclass          # expect ACCEPTED: True for GatewayClass "traefik"
 kubectl get pods -n traefik       # expect 1/1 Running
@@ -237,7 +237,7 @@ helm install cert-manager jetstack/cert-manager \
   --set crds.enabled=true \
   --set config.enableGatewayAPI=true
 
-kubectl apply -f cloud/hetzner/platform/cluster-issuer.yaml
+kubectl apply -f k8s/hetzner/platform/cluster-issuer.yaml
 ```
 
 **4.3 coredns-custom** (split-horizon so in-cluster pods resolve `<DOMAIN>/auth` to the in-cluster
@@ -247,7 +247,7 @@ for the full why):
 ```bash
 TRAEFIK_IP=$(kubectl get svc -n traefik traefik -o jsonpath='{.spec.clusterIP}')
 sed "s/REPLACE_WITH_TRAEFIK_CLUSTER_IP/$TRAEFIK_IP/" \
-  cloud/hetzner/platform/coredns-custom.yaml | kubectl apply -f -
+  k8s/hetzner/platform/coredns-custom.yaml | kubectl apply -f -
 kubectl rollout restart deployment coredns -n kube-system
 ```
 
@@ -310,7 +310,7 @@ straight from the build is the only option when cross-compiling like this.)
 **6.3 Point the overlay at this tag:**
 
 ```bash
-sed -i '' "s/newTag: latest/newTag: $TAG/" cloud/hetzner/app/kustomization.yaml
+sed -i '' "s/newTag: latest/newTag: $TAG/" k8s/hetzner/app/kustomization.yaml
 ```
 
 **6.4 Repository visibility — decision needed.** Docker Hub free personal accounts auto-create a
@@ -333,7 +333,7 @@ imagePullSecret route only if you'd rather keep images private.
 ## 7. Secrets
 
 ```bash
-cp cloud/hetzner/app/secrets-patch.yaml.example cloud/hetzner/app/secrets-patch.yaml
+cp k8s/hetzner/app/secrets-patch.yaml.example k8s/hetzner/app/secrets-patch.yaml
 ```
 
 Fill in real values per the comments already in that file (strong DB passwords via
@@ -348,7 +348,7 @@ kind-only `{noop}` plaintext, live or test Stripe keys, Google OAuth redirect UR
 
 ```bash
 kubectl config current-context   # must read davide-hetzner-admin, per step 1
-kubectl apply -k cloud/hetzner/app
+kubectl apply -k k8s/hetzner/app
 kubectl -n granite get pods -w
 ```
 
@@ -373,7 +373,6 @@ kubectl -n granite describe certificate granite-security.org-tls
 
 ```bash
 curl -sI https://granite-security.org/            # 200 from ui-shop through the Gateway + TLS
-curl -s https://granite-security.org/api/greetings/public | jq .
 ```
 
 Then in a browser: full login flow (`user`/`user`), same seed accounts as kind. Confirm the JWT
@@ -402,9 +401,9 @@ Not needed now — `granite-security.org` is live (§0, §3) — but kept as a r
 domain ever changes again:
 
 1. Create the Cloudflare `A` record (DNS-only) for the new domain.
-2. `grep -rl 'granite-security.org' cloud/hetzner/app cloud/hetzner/platform | xargs sed -i '' "s/granite-security.org/<NEW_DOMAIN>/g"`.
+2. `grep -rl 'granite-security.org' k8s/hetzner/app k8s/hetzner/platform | xargs sed -i '' "s/granite-security.org/<NEW_DOMAIN>/g"`.
 3. Re-run step 4.4 (coredns-custom) with the new domain.
-4. `kubectl apply -k cloud/hetzner/app` — cert-manager will request a fresh cert for the new host
+4. `kubectl apply -k k8s/hetzner/app` — cert-manager will request a fresh cert for the new host
    automatically (the `cert-manager.io/cluster-issuer` annotation on `app/gateway.yaml`'s Gateway
    re-triggers Certificate generation whenever the listener `hostname` changes).
 5. Update the Google OAuth redirect URI and Stripe webhook URL to the new domain before switching
@@ -416,7 +415,7 @@ domain ever changes again:
 
 | Task | Command |
 |---|---|
-| Roll out a new image | Bump `newTag` in `app/kustomization.yaml` to the new short SHA → `kubectl apply -k cloud/hetzner/app` |
+| Roll out a new image | Bump `newTag` in `app/kustomization.yaml` to the new short SHA → `kubectl apply -k k8s/hetzner/app` |
 | Tail logs | `kubectl -n granite logs -f deploy/<service>` |
 | Resource pressure check | `kubectl top pods -n granite` (tune `production-patches.yaml` limits from here) |
 | Full teardown | `kubectl delete namespace granite` (leaves Traefik/cert-manager/the cluster itself intact) |
@@ -452,10 +451,10 @@ call never leaves the node.
 INGRESS_IP=$(kubectl get svc -n traefik traefik -o jsonpath='{.spec.clusterIP}')
 echo "Traefik ClusterIP: $INGRESS_IP"   # sanity check before substituting
 
-sed -i '' "s/REPLACE_WITH_TRAEFIK_CLUSTER_IP/$INGRESS_IP/" cloud/hetzner/platform/coredns-custom.yaml
+sed -i '' "s/REPLACE_WITH_TRAEFIK_CLUSTER_IP/$INGRESS_IP/" k8s/hetzner/platform/coredns-custom.yaml
 # (drop the '' after -i if running this directly on the VPS/Linux instead of macOS)
 
-kubectl apply -f cloud/hetzner/platform/coredns-custom.yaml
+kubectl apply -f k8s/hetzner/platform/coredns-custom.yaml
 kubectl rollout restart deployment coredns -n kube-system
 kubectl rollout status deployment coredns -n kube-system
 ```

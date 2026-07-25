@@ -1,14 +1,14 @@
-# ArgoCD Application that continuously deploys cloud/hetzner/app-multi from main.
+# ArgoCD Application that continuously deploys k8s/hetzner/app-multi from main.
 #
 # Applied ONCE by hand on the node (not part of the kustomization it points
 # at, to avoid the app managing itself):
-#   kubectl apply -f cloud/hetzner/argocd/argocd-application.yaml
+#   kubectl apply -f k8s/hetzner/argocd/argocd-application.yaml
 #
 # Repo is PUBLIC — plain https, no deploy key needed.
 # Prerequisite (already true on node1): the granite-secrets Secret is applied
 # by hand from k8s/base/secrets.yaml.example — it is gitignored and never
 # synced; ArgoCD prune cannot touch it (no tracking label). Same goes for
-# cloud/hetzner/app-multi/secrets-patch.yaml. Secret changes are always a
+# k8s/hetzner/app-multi/secrets-patch.yaml. Secret changes are always a
 # manual kubectl apply on the node — ArgoCD never manages them.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -20,7 +20,7 @@ spec:
   source:
     repoURL: https://github.com/Granite-Security/sample-shop.git
     targetRevision: main
-    path: cloud/hetzner/app-multi
+    path: k8s/hetzner/app-multi
   destination:
     server: https://kubernetes.default.svc
   # Gateway/HTTPRoute .status is continuously rewritten by Traefik (conditions,

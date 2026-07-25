@@ -238,7 +238,7 @@ kubectl config use-context <your-hetzner-context>
 kubectl config current-context   # confirm before applying
 
 # 2. Apply the manifests
-kubectl apply -k cloud/hetzner/app-multi
+kubectl apply -k k8s/hetzner/app-multi
 
 # 3. Pods with imagePullPolicy: Always won't restart on their own just because a new
 #    :latest was pushed — the pod template hash hasn't changed. Force a re-pull + rollout:
@@ -251,7 +251,7 @@ kubectl -n granite get pods -w
 kubectl -n granite rollout status deployment/gateway
 ```
 
-`cloud/hetzner/` has three overlays, mutually exclusive on domain (each cluster only
+`k8s/hetzner/` has three overlays, mutually exclusive on domain (each cluster only
 trusts one OAuth2 redirect/issuer host at a time — see `sichocolate.md`):
 
 | Overlay | Front end(s) | Domain |
@@ -262,7 +262,7 @@ trusts one OAuth2 redirect/issuer host at a time — see `sichocolate.md`):
 
 One-time cluster bootstrap — StorageClass, Traefik/Gateway API, cert-manager, the CoreDNS
 split-horizon override, and populating `secrets-patch.yaml` — is already covered end to
-end in `cloud/hetzner/cloudify.md`; the steps above are just the repeatable redeploy loop
+end in `k8s/hetzner/cloudify.md`; the steps above are just the repeatable redeploy loop
 once that's done.
 
 ## Project layout
@@ -278,7 +278,7 @@ granite-security/
 ├── profile/             — User profile & address service (WebFlux + R2DBC)
 ├── ui-shop/             — React SPA storefront (Vite + oidc-client-ts)
 ├── k8s/                 — Kubernetes manifests (base + kind overlay for local clusters)
-├── cloud/hetzner/       — Kustomize overlays + runbooks for the Hetzner VPS deployment
+├── k8s/hetzner/         — Kustomize overlays + runbooks for the Hetzner VPS deployment
 ├── smoke-tests/         — Smoke test scripts
 ├── plans/               — Planning documents and change logs
 ├── compose.yaml         — Docker Compose orchestration (all services + Kafka)
