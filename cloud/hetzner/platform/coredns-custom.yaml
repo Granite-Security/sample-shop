@@ -47,6 +47,6 @@ data:
     }
   grafana-granite.override: |
     hosts {
-      10.233.35.75 grafana-granite.granite-security.org
+      10.233.35.75 grafana.granite-security.org
       fallthrough
     }
