@@ -6,7 +6,9 @@ resources:
   - postgres.yaml
   - kafka.yaml
   - config.yaml
-  - secrets.yaml
+  # secrets.yaml is deliberately NOT listed: it is gitignored (see
+  # secrets.yaml.example) and applied by hand once per cluster — the rendered
+  # kustomization must build from a clean clone so ArgoCD can deploy it.
   - auth-server.yaml
   - gateway.yaml
   - greetings.yaml

@@ -1,0 +1,40 @@
+# Hetzner node1 overlay: the base manifests use bare local image names (the
+# kind overlay side-loads them); this overlay maps every service image to the
+# public Docker Hub repos that CI pushes (docker.io/moldovean/granite-*).
+# Deployed continuously by the "granite" ArgoCD Application (argocd-application.yaml).
+#
+# NOTE on :latest — ArgoCD only syncs on MANIFEST changes, so a new image push
+# alone does not redeploy. imagePullPolicy defaults to Always for :latest, so a
+# pod restart picks up the newest image. Move to immutable tags (CI commits a
+# newTag bump, like the vera repo) when granite needs deterministic deploys.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../base
+
+images:
+  - name: granite-auth-server
+    newName: docker.io/moldovean/granite-auth-server
+    newTag: latest
+  - name: granite-gateway
+    newName: docker.io/moldovean/granite-gateway
+    newTag: latest
+  - name: granite-greetings
+    newName: docker.io/moldovean/granite-greetings
+    newTag: latest
+  - name: granite-shop
+    newName: docker.io/moldovean/granite-shop
+    newTag: latest
+  - name: granite-payment
+    newName: docker.io/moldovean/granite-payment
+    newTag: latest
+  - name: granite-profile
+    newName: docker.io/moldovean/granite-profile
+    newTag: latest
+  - name: granite-delivery
+    newName: docker.io/moldovean/granite-delivery
+    newTag: latest
+  - name: granite-ui-shop
+    newName: docker.io/moldovean/granite-ui-shop
+    newTag: latest
