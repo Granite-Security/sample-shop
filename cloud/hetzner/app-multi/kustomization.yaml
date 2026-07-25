@@ -18,7 +18,10 @@ patches:
   - path: ui-shop-patch.yaml
   - path: ui-demo-patch.yaml
   - path: production-patches.yaml
-  - path: secrets-patch.yaml
+  # secrets-patch.yaml is gitignored, applied by hand once per cluster (see
+  # secrets-patch.yaml.example) — not listed here so a clean clone still
+  # renders, which ArgoCD requires. Same reasoning as k8s/base/kustomization.yaml
+  # dropping secrets.yaml.
 
 # Bump newTag on every release (recommend the git short SHA) and re-run
 # `kubectl apply -k hetzner/app-multi` — see app/kustomization.yaml's original
