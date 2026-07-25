@@ -3,6 +3,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: shop
+  labels:
+    tier: backend
 spec:
   replicas: 1
   selector:
@@ -12,6 +14,7 @@ spec:
     metadata:
       labels:
         app: shop
+        tier: backend
     spec:
       # Block startup until the OIDC discovery doc is served through the gateway
       # (i.e. auth-server is up). Prevents CrashLoopBackOff on eager JWKS fetch (Correction 5).
