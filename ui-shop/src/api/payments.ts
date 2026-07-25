@@ -10,4 +10,10 @@ export const paymentsApi = {
       method: 'POST',
       skipAuth: true,
     }),
+
+  retryPaymentIntent: (orderId: number) =>
+    request<CreatePaymentIntentResponse>(`/api/payments/intent/${orderId}/retry`, {
+      method: 'POST',
+      skipAuth: true,
+    }),
 };
