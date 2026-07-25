@@ -23,6 +23,19 @@ spec:
     path: cloud/hetzner/app-multi
   destination:
     server: https://kubernetes.default.svc
+  # Gateway/HTTPRoute .status is continuously rewritten by Traefik (conditions,
+  # lastTransitionTime, attachedRoutes) — not something git or ArgoCD manages.
+  # Without this, the app never settles: Traefik updates status -> ArgoCD sees
+  # a diff -> selfHeal re-syncs (no-op on spec) -> Traefik updates status again.
+  ignoreDifferences:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      jsonPointers:
+        - /status
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      jsonPointers:
+        - /status
   syncPolicy:
     automated:
       selfHeal: true
