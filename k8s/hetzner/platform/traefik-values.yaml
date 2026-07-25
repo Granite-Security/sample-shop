@@ -97,7 +97,7 @@ providers:
   kubernetesGateway:
     enabled: true
 gateway:
-  # Disables the chart's own sample Gateway object — cloud/hetzner/app/gateway.yaml
+  # Disables the chart's own sample Gateway object — k8s/hetzner/app/gateway.yaml
   # defines ours explicitly (custom hostname, TLS listener, cert-manager annotation).
   # The GatewayClass named "traefik" is still created by providers.kubernetesGateway
   # above; verify with `kubectl get gatewayclass` after install (see cloudify.md).

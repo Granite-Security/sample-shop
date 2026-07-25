@@ -15,7 +15,7 @@ envsubst '${OIDC_AUTHORITY} ${OIDC_CLIENT_ID} ${STRIPE_PUBLISHABLE_KEY}' \
 # The :443 server block needs a real cert to even start (nginx refuses to boot at all
 # otherwise, not just skip that block — "cannot load certificate ... no such file").
 # In kind, ui-shop terminates TLS itself using a self-signed cert mounted at
-# /etc/nginx/certs (see k8s/kind/*). In production (cloud/hetzner), Traefik's Gateway
+# /etc/nginx/certs (see k8s/kind/*). In production (k8s/hetzner), Traefik's Gateway
 # terminates TLS instead and nothing mounts a cert here — so only enable the :443
 # block when the cert files actually exist at runtime.
 if [ -f /etc/nginx/certs/tls.crt ] && [ -f /etc/nginx/certs/tls.key ]; then

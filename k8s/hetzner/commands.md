@@ -7,7 +7,7 @@ Quick reference for manual deploys/rollouts against the `granite` namespace.
 
 
 ```bash
-kubectl apply -k cloud/hetzner/app-multi/
+kubectl apply -k k8s/hetzner/app-multi/
 ```
 
 If it fails with `metadata.resourceVersion: ... must be specified for an update`
@@ -17,7 +17,7 @@ Fix by dropping the annotation so apply can rebuild it cleanly, then re-apply:
 
 ```bash
 kubectl annotate <kind> <name> -n granite kubectl.kubernetes.io/last-applied-configuration-
-kubectl apply -k cloud/hetzner/app-multi/
+kubectl apply -k k8s/hetzner/app-multi/
 ```
 
 
@@ -66,7 +66,7 @@ kubectl logs -f deployment/<name> -n granite
 ## ArgoCD
 
 The `granite` namespace is currently deployed by hand (`kubectl apply -k`
-above), not managed by ArgoCD — `cloud/hetzner/argocd/argocd-application.yaml`
+above), not managed by ArgoCD — `k8s/hetzner/argocd/argocd-application.yaml`
 exists in-repo but has not been applied to the cluster. Check with:
 
 ```bash

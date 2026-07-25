@@ -19,8 +19,7 @@ granite-security/
 ├── ui-demo/                — Static/nginx-served demo frontend, alternate deployment target
 ├── demo-kot/               — Kotlin learning/demo service; excluded from Docker builds & deploys
 ├── k8s/                    — Kubernetes manifests: base + kind overlay for local clusters
-├── cloud/hetzner/          — Kustomize overlays + runbooks for the Hetzner VPS deployment (incl. ArgoCD)
-├── cloud/aws/               — AWS deployment notes
+├── k8s/hetzner/            — Kustomize overlays + runbooks for the Hetzner VPS deployment (incl. ArgoCD)
 ├── compose.yaml             — Docker Compose orchestration (all services + Postgres + Kafka)
 └── README.md                 — Full quick-start, ports, env vars, event flows, deploy steps
 ```
@@ -91,7 +90,7 @@ Downstream services (greetings, shop, payment, delivery, profile) are OAuth2 res
 ## Deploying (Kubernetes / Hetzner)
 
 - `k8s/` holds base manifests + a `kind` overlay for local cluster testing.
-- `cloud/hetzner/` holds three mutually-exclusive-by-domain Kustomize overlays (`app`: ui-shop only, `app-chocolate`: ui-demo only, `app-multi`: both — current default) plus an ArgoCD Application manifest (`cloud/hetzner/argocd/`).
+- `k8s/hetzner/` holds three mutually-exclusive-by-domain Kustomize overlays (`app`: ui-shop only, `app-chocolate`: ui-demo only, `app-multi`: both — current default) plus an ArgoCD Application manifest (`k8s/hetzner/argocd/`).
 - Images must already be pushed by CI before applying manifests. Pods with `imagePullPolicy: Always` do **not** auto-restart on a new `:latest` push — force it with `kubectl -n granite rollout restart deployment <service>`.
-- One-time cluster bootstrap (StorageClass, Traefik/Gateway API, cert-manager, CoreDNS split-horizon) is documented end-to-end in `cloud/hetzner/cloudify.md`; day-2 redeploy steps are in `README.md`.
+- One-time cluster bootstrap (StorageClass, Traefik/Gateway API, cert-manager, CoreDNS split-horizon) is documented end-to-end in `k8s/hetzner/cloudify.md`; day-2 redeploy steps are in `README.md`.
 - Always confirm `kubectl config current-context` before applying — this is a multi-context kubeconfig setup.

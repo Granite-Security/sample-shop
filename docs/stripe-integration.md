@@ -75,4 +75,4 @@ CLI tunnel) — it just isn't registered against `granite-security.org` in the
 Stripe Dashboard yet. Registering
 `https://granite-security.org/api/payments/webhook` there (note: **not**
 `/api/secured/payment/webhook`, which is an incorrect path that appears in
-`cloud/hetzner/app/secrets-patch.yaml.example`) would close this gap.
+`k8s/hetzner/app/secrets-patch.yaml.example`) would close this gap.

@@ -3,9 +3,9 @@ kind: Kustomization
 
 # Kept as its own kustomization dir (not just a bare file, and not added to
 # k8s/base/kustomization.yaml's resources) so it can be referenced by relative path
-# from cloud/hetzner/app-chocolate without tripping kustomize's default load
+# from k8s/hetzner/app-chocolate without tripping kustomize's default load
 # restriction (bare files must live under the referencing kustomization's own root;
 # nested kustomization directories are exempt). Neither k8s/kind nor
-# cloud/hetzner/app reference this — they don't need a second idle front-end pod.
+# k8s/hetzner/app reference this — they don't need a second idle front-end pod.
 resources:
   - ui-demo.yaml

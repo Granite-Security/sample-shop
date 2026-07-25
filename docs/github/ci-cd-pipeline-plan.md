@@ -25,7 +25,7 @@ Status: planning only — no workflow files exist yet.
 
 Each service is a self-contained Gradle (or npm) project — there's no root `settings.gradle.kts` tying them together, so each already builds independently. That's actually convenient for change-detection: a change under `payment/**` can only affect the `payment` build.
 
-Non-buildable directories that should never trigger a build: `docs/`, `k8s/`, `cloud/`,  `Master-Plan.md`, `README.md`, `.claude/`, `.junie/`.
+Non-buildable directories that should never trigger a build: `docs/`, `k8s/`, `Master-Plan.md`, `README.md`, `.claude/`, `.junie/`.
 
 ## High-level design
 
@@ -68,9 +68,9 @@ Non-buildable directories that should never trigger a build: `docs/`, `k8s/`, `c
   - Logs in to Docker Hub via `docker/login-action`.
   - Builds with `docker/build-push-action`, context = the service's own directory (existing `Dockerfile` per service).
   - **`platforms: linux/amd64`** explicitly set — CI runners are `ubuntu-latest` (amd64) but Buildx defaults can vary, and Hetzner target nodes are amd64, so this is pinned rather than left implicit. `docker/setup-qemu-action` + `docker/setup-buildx-action` added to support it.
-  - Tags: `moldovean/granite-<service>:latest` and `moldovean/granite-<service>:<full-commit-sha>` — namespace (`moldovean`) matches what's already referenced in `cloud/hetzner/app-multi/kustomization.yaml`.
+  - Tags: `moldovean/granite-<service>:latest` and `moldovean/granite-<service>:<full-commit-sha>` — namespace (`moldovean`) matches what's already referenced in `k8s/hetzner/app-multi/kustomization.yaml`.
   - `demo-kot` excluded from the `docker-jvm` matrix (`strategy.matrix.exclude`) — no Dockerfile, not deployed.
-- [ ] k8s manifests (`k8s/base/*.yaml`) still reference bare `granite-<service>:latest` (implying local/kind images) — needs a follow-up to point at `moldovean/granite-<service>:<tag>` for non-kind environments; `cloud/hetzner/*/kustomization.yaml` already does this via `newName` overrides.
+- [ ] k8s manifests (`k8s/base/*.yaml`) still reference bare `granite-<service>:latest` (implying local/kind images) — needs a follow-up to point at `moldovean/granite-<service>:<tag>` for non-kind environments; `k8s/hetzner/*/kustomization.yaml` already does this via `newName` overrides.
 - [x] Multi-arch: not needed — pinned to `linux/amd64` only, matching Hetzner nodes; revisit if arm64 runners/nodes are ever introduced.
 
 ### Stage 4 (later, optional) — Tests
@@ -78,7 +78,7 @@ Non-buildable directories that should never trigger a build: `docs/`, `k8s/`, `c
 - [ ] Decide whether tests block the Docker push (recommended: yes, once this stage exists) or run in parallel/informational only.
 
 ### Stage 5 (later, optional) — Deploy
-- [ ] Not asked for yet, but the natural next step once images land in Docker Hub is updating the Hetzner k8s manifests (`k8s/base/*.yaml`, `cloud/hetzner/app*/kustomization.yaml`) to reference the new tag and triggering a rollout. Left out of scope here — call out separately when ready to plan it.
+- [ ] Not asked for yet, but the natural next step once images land in Docker Hub is updating the Hetzner k8s manifests (`k8s/base/*.yaml`, `k8s/hetzner/app*/kustomization.yaml`) to reference the new tag and triggering a rollout. Left out of scope here — call out separately when ready to plan it.
 
 ## Open questions to resolve before writing the workflow
 

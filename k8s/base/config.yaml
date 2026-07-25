@@ -79,7 +79,7 @@ data:
   # ── CORS (shop/payment/profile — the services the SPA calls directly) ──
   # Matches each service's own Java default exactly, so this key existing changes
   # nothing for kind. Overlays MUST override this to the real browser-facing origin
-  # (see cloud/hetzner/app/config-patch.yaml) — otherwise the SPA's own fetch()
+  # (see k8s/hetzner/app/config-patch.yaml) — otherwise the SPA's own fetch()
   # calls get rejected with CORS 403s that the UI just shows as a generic error,
   # even though curl-style requests (no Origin header) succeed and look fine.
   CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:5173,http://localhost:8080"

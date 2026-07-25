@@ -11,7 +11,7 @@ skipped since it isn't used.
 Goal: run the exact same backend (auth-server, gateway, greetings, shop, payment,
 profile, delivery, kafka, postgres) behind a **second domain**, `sichocolate.com`,
 serving the `ui-demo` front end instead of `ui-shop`. This mirrors
-`cloud/hetzner/app` in a new `cloud/hetzner/app-chocolate` overlay.
+`k8s/hetzner/app` in a new `k8s/hetzner/app-chocolate` overlay.
 
 **Mutually exclusive, on purpose, not by accident.** `auth-server`'s `spa-client`
 OAuth2 client has exactly one `redirectUri`/`postLogoutRedirectUri`, driven by the
@@ -89,13 +89,13 @@ itself already is. Since `app-chocolate` needs to add this resource without goin
 through `k8s/base/kustomization.yaml`, it has to be a directory, not a file.
 
 **Do not** add it to `k8s/base/kustomization.yaml`'s `resources:` list. Both
-`k8s/kind` and `cloud/hetzner/app` build directly on `k8s/base` and don't need a
+`k8s/kind` and `k8s/hetzner/app` build directly on `k8s/base` and don't need a
 second idle front-end pod — only `app-chocolate` references
 `../../../k8s/base/ui-demo` directly.
 
-## 3. `cloud/hetzner/app-chocolate/`
+## 3. `k8s/hetzner/app-chocolate/`
 
-Create this folder alongside `cloud/hetzner/app/`, with the following files.
+Create this folder alongside `k8s/hetzner/app/`, with the following files.
 
 ### `kustomization.yaml`
 
@@ -324,7 +324,7 @@ data:
 change between overlays since Traefik itself isn't being redeployed.)
 
 ```
-kubectl apply -f cloud/hetzner/platform/coredns-custom.yaml
+kubectl apply -f k8s/hetzner/platform/coredns-custom.yaml
 kubectl rollout restart deployment coredns -n kube-system
 ```
 
@@ -353,12 +353,12 @@ manual delete of the other skin's Deployment/Service, every time:
 
 ```
 # From ui-shop/granite-security.org to ui-demo/sichocolate.com:
-kubectl apply -k cloud/hetzner/app-chocolate
+kubectl apply -k k8s/hetzner/app-chocolate
 kubectl -n granite delete deployment ui-shop
 kubectl -n granite delete service ui-shop
 
 # Back the other way:
-kubectl apply -k cloud/hetzner/app
+kubectl apply -k k8s/hetzner/app
 kubectl -n granite delete deployment ui-demo
 kubectl -n granite delete service ui-demo
 ```
@@ -407,6 +407,3 @@ kubectl -n granite get pods                  # confirm the old skin's pod is gon
 curl -sI https://sichocolate.com/            # 200 from ui-demo through the Gateway + TLS
 curl -s https://sichocolate.com/api/greetings | jq .
 ```
-
-(Note: the greetings public route is `/api/greetings`, not `/api/greetings/public`
-— `cloudify.md` §10's smoke-test command has the wrong path.)
