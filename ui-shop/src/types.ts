@@ -81,6 +81,16 @@ export interface ProfileResponse {
   lastName: string | null;
 }
 
+export interface AdminUserProfile {
+  id: number;
+  username: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface UpdateProfileRequest {
   email?: string;
   firstName?: string;

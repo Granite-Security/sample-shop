@@ -48,7 +48,7 @@ export default function Admin() {
           {(isAdmin || isManager) && (
             <Link to="/admin/deliveries" className="btn" style={{ textDecoration: 'none' }}>Deliveries</Link>
           )}
-          <span className="status status-pending">Users (coming soon)</span>
+          <Link to="/admin/users" className="btn" style={{ textDecoration: 'none' }}>Users</Link>
         </div>
       </section>
     </div>

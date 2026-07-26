@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.core.GrantedAuthority;
@@ -52,6 +53,7 @@ public class ProfileSec {
                 .cors(Customizer.withDefaults())
                 .authorizeExchange(exchange -> exchange
                         .pathMatchers("/api/profiles/internal/**").hasAuthority("SCOPE_internal")
+                        .pathMatchers(HttpMethod.GET, "/api/profiles", "/api/profiles/{username}").hasRole("ADMIN")
                         .pathMatchers("/api/profiles/**").authenticated()
                         .anyExchange().permitAll()
                 )

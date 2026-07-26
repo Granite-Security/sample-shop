@@ -23,6 +23,10 @@ public class ProfileRoute {
                 .PUT("/api/profiles/me/addresses/{id}", addressHandler::updateAddress)
                 .DELETE("/api/profiles/me/addresses/{id}", addressHandler::deleteAddress)
                 .GET("/api/profiles/internal/{username}/addresses/{id}", addressHandler::getAddressById)
+                // Admin endpoints — registered after the explicit /api/profiles/me*
+                // routes so {username} never shadows "me".
+                .GET("/api/profiles", profileHandler::listAll)
+                .GET("/api/profiles/{username}", profileHandler::getByUsername)
                 .build();
     }
 }

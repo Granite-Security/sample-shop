@@ -4,7 +4,10 @@ import org.granitesecurity.profile.domain.UserProfile;
 import org.granitesecurity.profile.dto.ProfileResponse;
 import org.granitesecurity.profile.dto.UpdateProfileRequest;
 import org.granitesecurity.profile.repository.UserProfileRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -16,6 +19,18 @@ public class ProfileService {
 
     public ProfileService(UserProfileRepository userProfileRepository) {
         this.userProfileRepository = userProfileRepository;
+    }
+
+    public Flux<ProfileResponse> listAll() {
+        return userProfileRepository.findAll()
+                .map(this::toResponse);
+    }
+
+    public Mono<ProfileResponse> getByUsername(String username) {
+        return userProfileRepository.findByUsername(username)
+                .switchIfEmpty(Mono.error(
+                        new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found: " + username)))
+                .map(this::toResponse);
     }
 
     public Mono<ProfileResponse> getProfile(String username) {
@@ -50,7 +65,9 @@ public class ProfileService {
                 profile.getUsername(),
                 profile.getEmail(),
                 profile.getFirstName(),
-                profile.getLastName()
+                profile.getLastName(),
+                profile.getCreatedAt(),
+                profile.getUpdatedAt()
         );
     }
 }
