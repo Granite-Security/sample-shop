@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { PresignResponse } from '../types';
+import type { MediaItem, PresignResponse } from '../types';
 
 export const storageApi = {
   presignUpload: (fileName: string, contentType: string, scope = 'products') =>
@@ -8,7 +8,7 @@ export const storageApi = {
       body: JSON.stringify({ fileName, contentType, scope }),
     }),
 
-  uploadFile: async (file: File, scope = 'products') => {
+  uploadFile: async (file: File, scope = 'products'): Promise<MediaItem> => {
     const presigned = await storageApi.presignUpload(file.name, file.type, scope);
     const putResponse = await fetch(presigned.uploadUrl, {
       method: 'PUT',
@@ -18,7 +18,9 @@ export const storageApi = {
     if (!putResponse.ok) {
       throw new Error(`Upload failed: ${putResponse.status} ${putResponse.statusText}`);
     }
-    return { key: presigned.key, url: presigned.publicUrl, contentType: file.type };
+    // Never auto-default a freshly uploaded image — the admin must pick one
+    // explicitly, so the storefront thumbnail never changes as a surprise.
+    return { key: presigned.key, url: presigned.publicUrl, contentType: file.type, isDefault: false };
   },
 
   deleteObject: (key: string) =>

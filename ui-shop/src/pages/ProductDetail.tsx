@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router';
 import { api } from '../api';
 import type { Product } from '../types';
 import { useCart } from '../contexts/CartContext';
+import { getDefaultMedia } from '../utils/media';
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -16,7 +17,8 @@ export default function ProductDetail() {
     api.catalog.getProduct(Number(id))
       .then(p => {
         setProduct(p);
-        setActiveImage(p.imageUrl || p.media[0]?.url || null);
+        const def = getDefaultMedia(p.media);
+        setActiveImage(def?.url || p.imageUrl || p.media[0]?.url || null);
       })
       .finally(() => setLoading(false));
   }, [id]);

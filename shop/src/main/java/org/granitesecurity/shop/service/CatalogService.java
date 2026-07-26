@@ -19,6 +19,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -99,7 +100,7 @@ public class CatalogService {
         Product product = new Product(request.name(), request.price(), request.stock(), request.categoryId());
         product.setDescription(request.description());
         product.setImageUrl(request.imageUrl());
-        product.setMedia(serializeMedia(request.media()));
+        product.setMedia(serializeMedia(normalizeDefault(request.media())));
         // created_at/updated_at are NOT NULL; R2DBC includes them in the INSERT,
         // bypassing the column defaults, so they must be set explicitly.
         Instant now = Instant.now();
@@ -119,7 +120,7 @@ public class CatalogService {
                     existing.setStock(request.stock());
                     existing.setCategoryId(request.categoryId());
                     existing.setImageUrl(request.imageUrl());
-                    existing.setMedia(serializeMedia(request.media()));
+                    existing.setMedia(serializeMedia(normalizeDefault(request.media())));
                     existing.setUpdatedAt(Instant.now());
                     return productRepository.save(existing);
                 })
@@ -145,6 +146,27 @@ public class CatalogService {
                 product.getImageUrl(),
                 deserializeMedia(product.getMedia())
         );
+    }
+
+    // Guards the "at most one default" invariant server-side regardless of what
+    // the client sends — keeps the first isDefault=true entry, clears the rest.
+    private List<MediaItem> normalizeDefault(List<MediaItem> media) {
+        if (media == null || media.isEmpty()) {
+            return media;
+        }
+        boolean seenDefault = false;
+        List<MediaItem> normalized = new ArrayList<>(media.size());
+        for (MediaItem item : media) {
+            if (item.isDefault() && seenDefault) {
+                normalized.add(new MediaItem(item.key(), item.url(), item.contentType(), false));
+            } else {
+                if (item.isDefault()) {
+                    seenDefault = true;
+                }
+                normalized.add(item);
+            }
+        }
+        return normalized;
     }
 
     private String serializeMedia(List<MediaItem> media) {

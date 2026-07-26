@@ -2,6 +2,7 @@ export interface MediaItem {
   key: string;
   url: string;
   contentType: string;
+  isDefault: boolean;
 }
 
 export interface Product {

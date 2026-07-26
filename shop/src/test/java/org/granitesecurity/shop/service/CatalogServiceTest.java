@@ -232,7 +232,7 @@ class CatalogServiceTest {
     @Test
     void shouldCreateProductWithMedia() {
         var media = List.of(new MediaItem("products/abc/hero.jpg",
-                "http://product-media.localhost:3902/products/abc/hero.jpg", "image/jpeg"));
+                "http://product-media.localhost:3902/products/abc/hero.jpg", "image/jpeg", false));
         var request = new CreateProductRequest(
                 "NewItem", "New desc", BigDecimal.valueOf(15), 100, 1L, "img.jpg", media);
 

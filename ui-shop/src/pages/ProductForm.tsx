@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router';
 import { useAuth } from '../auth';
 import { api } from '../api';
 import type { Category, CreateProductRequest, MediaItem } from '../types';
+import { getDefaultMedia } from '../utils/media';
 
 const emptyForm: CreateProductRequest = {
   name: '',
@@ -105,10 +106,22 @@ export default function ProductForm() {
     setError(null);
     try {
       await api.storage.deleteObject(item.key);
+      // Filtering the item out already clears its isDefault flag with it — no
+      // other image gets silently promoted; the UI falls back to imageUrl or
+      // the single-remaining-image auto-select (see getDefaultMedia).
       await persistMedia(form.media.filter(m => m.key !== item.key));
     } catch (err) {
       setError((err as Error).message);
     }
+  };
+
+  // Local-only until Save Changes — no storage side effect, so it doesn't need
+  // to persist immediately like upload/remove do.
+  const handleSetDefault = (item: MediaItem) => {
+    setForm({
+      ...form,
+      media: form.media.map(m => ({ ...m, isDefault: m.key === item.key })),
+    });
   };
 
   if (loading) return <div className="page"><div className="spinner" style={{ margin: '0 auto' }} /></div>;
@@ -148,20 +161,40 @@ export default function ProductForm() {
           <h2>Media</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
             Uploaded images are stored separately from the fallback image URL above.
+            The default image is used as the catalog thumbnail — click "Save Changes" above to persist your selection.
           </p>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 12 }}>
-            {form.media.map(item => (
-              <div key={item.key} style={{ width: 120 }}>
-                <div style={{ width: 120, height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-secondary)', borderRadius: 6 }}>
-                  <img src={item.url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+            {form.media.map(item => {
+              const isDefault = getDefaultMedia(form.media)?.key === item.key;
+              return (
+                <div key={item.key} style={{ width: 120 }}>
+                  <div style={{
+                    width: 120, height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'var(--bg-secondary)', borderRadius: 6, position: 'relative',
+                    border: isDefault ? '2px solid var(--primary)' : '2px solid transparent',
+                  }}>
+                    {isDefault && (
+                      <span style={{
+                        position: 'absolute', top: 4, left: 4, fontSize: '0.7rem',
+                        background: 'var(--primary)', color: '#fff', padding: '2px 6px', borderRadius: 4,
+                      }}>
+                        Default
+                      </span>
+                    )}
+                    <img src={item.url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                  </div>
+                  <button className="btn" style={{ width: '100%', marginTop: 4 }}
+                    disabled={isDefault} onClick={() => handleSetDefault(item)}>
+                    {isDefault ? 'Default' : 'Set as default'}
+                  </button>
+                  <button className="btn" style={{ width: '100%', marginTop: 4, color: 'var(--danger)' }}
+                    onClick={() => handleRemoveMedia(item)}>
+                    Remove
+                  </button>
                 </div>
-                <button className="btn" style={{ width: '100%', marginTop: 4, color: 'var(--danger)' }}
-                  onClick={() => handleRemoveMedia(item)}>
-                  Remove
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div style={{ marginTop: 16 }}>

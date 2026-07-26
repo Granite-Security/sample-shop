@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import type { Product } from '../types';
 import { useCart } from '../contexts/CartContext';
+import { getDefaultMedia } from '../utils/media';
 
 interface Props {
   product: Product;
@@ -8,12 +9,13 @@ interface Props {
 
 export default function ProductCard({ product }: Props) {
   const { addItem } = useCart();
+  const thumbnail = getDefaultMedia(product.media)?.url ?? product.imageUrl;
 
   return (
     <div className="product-card">
       <div className="product-card-img">
-        {product.imageUrl
-          ? <img src={product.imageUrl} alt={product.name} />
+        {thumbnail
+          ? <img src={thumbnail} alt={product.name} />
           : <div className="img-placeholder">No Image</div>}
       </div>
       <div className="product-card-body">
