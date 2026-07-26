@@ -59,9 +59,13 @@ Defined in `route/ProfileRoute.java`:
 - `PUT/DELETE /api/profiles/me/addresses/{id}` — update/delete own address
 - `GET /api/profiles/internal/{username}/addresses/{id}` — service-to-service
   lookup, requires the `SCOPE_internal` authority
+- `GET /api/profiles` and `GET /api/profiles/{username}` — admin-only listings
+  (`hasRole("ADMIN")`) for the admin Users page; the second returns 404 when
+  the username has no profile
 
 Authorization rules (in `ProfileSec`): `/api/profiles/internal/**` requires
-`SCOPE_internal`, other `/api/profiles/**` require any authenticated JWT,
+`SCOPE_internal`, GETs on `/api/profiles` and `/api/profiles/{username}`
+require `ROLE_ADMIN`, other `/api/profiles/**` require any authenticated JWT,
 everything else is permitted. CSRF is disabled (stateless JWT API). The JWT
 subject (`sub` claim) is used as the `username` throughout.
 
@@ -109,7 +113,10 @@ auth service.
   annotated with `@Table`/`@Column`. Package is `org.granitesecurity.profile`.
 - **Data ownership**: every query for user data is scoped by `username` (e.g.
   `findByIdAndUsername`, `deleteByIdAndUsername`) — preserve this when adding
-  repository methods so users can only touch their own rows.
+  repository methods so users can only touch their own rows. The one exception
+  is the admin Users page: `GET /api/profiles` (list all) and
+  `GET /api/profiles/{username}` deliberately bypass username scoping; both are
+  restricted in `ProfileSec` to `hasRole("ADMIN")`.
 - **"Default address" invariant**: `AddressService.unsetDefaultIfNeeded` clears
   other default addresses before saving a new default; keep this behavior when
   modifying address create/update logic.

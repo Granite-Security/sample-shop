@@ -2,11 +2,18 @@ import { request } from './client';
 import type {
   AddressRequest,
   AddressResponse,
+  AdminUserProfile,
   ProfileResponse,
   UpdateProfileRequest,
 } from '../types';
 
 export const profileApi = {
+  getProfiles: () =>
+    request<AdminUserProfile[]>('/api/profiles'),
+
+  getProfileByUsername: (username: string) =>
+    request<AdminUserProfile>(`/api/profiles/${encodeURIComponent(username)}`),
+
   getProfile: () =>
     request<ProfileResponse>('/api/profiles/me'),
 

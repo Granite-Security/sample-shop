@@ -24,6 +24,16 @@ public class ProfileHandler {
                 .flatMap(profile -> ServerResponse.ok().bodyValue(profile));
     }
 
+    public Mono<ServerResponse> listAll(ServerRequest request) {
+        return ServerResponse.ok().body(profileService.listAll(), org.granitesecurity.profile.dto.ProfileResponse.class);
+    }
+
+    public Mono<ServerResponse> getByUsername(ServerRequest request) {
+        String username = request.pathVariable("username");
+        return profileService.getByUsername(username)
+                .flatMap(profile -> ServerResponse.ok().bodyValue(profile));
+    }
+
     public Mono<ServerResponse> updateMe(ServerRequest request) {
         var bodyMono = request.bodyToMono(UpdateProfileRequest.class);
         var usernameMono = getUsername(request);
