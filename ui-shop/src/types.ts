@@ -1,3 +1,9 @@
+export interface MediaItem {
+  key: string;
+  url: string;
+  contentType: string;
+}
+
 export interface Product {
   id: number;
   name: string;
@@ -6,6 +12,7 @@ export interface Product {
   stock: number;
   categoryId: number;
   imageUrl: string;
+  media: MediaItem[];
 }
 
 export interface Category {
@@ -66,6 +73,14 @@ export interface CreateProductRequest {
   stock: number;
   categoryId: number;
   imageUrl: string;
+  media: MediaItem[];
+}
+
+export interface PresignResponse {
+  key: string;
+  uploadUrl: string;
+  publicUrl: string;
+  expiresIn: number;
 }
 
 export interface CreateCategoryRequest {

@@ -33,6 +33,9 @@ public class RouterConfig {
     @Value("${microservices.delivery.uri:http://localhost:8063}")
     private String deliveryServiceUri;
 
+    @Value("${microservices.storage.uri:http://localhost:8065}")
+    private String storageServiceUri;
+
     @Bean
     RouteLocator gatewayRouter(RouteLocatorBuilder builder) {
         return builder.routes()
@@ -58,6 +61,9 @@ public class RouterConfig {
                 .route("delivery-service", r -> r
                         .path("/api/delivery/**")
                         .uri(deliveryServiceUri))
+                .route("storage-service", r -> r
+                        .path("/api/storage/**")
+                        .uri(storageServiceUri))
                 .route("auth-server", r -> r
                         .path("/auth/**")
                         .uri(authServerUri))

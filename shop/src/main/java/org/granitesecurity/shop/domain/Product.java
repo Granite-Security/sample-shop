@@ -19,6 +19,7 @@ public class Product {
     private Integer stock;
     @Column("image_url")
     private String imageUrl;
+    private String media;
     @Column("category_id")
     private Long categoryId;
     @Column("created_at")

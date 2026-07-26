@@ -16,6 +16,8 @@ resources:
   - payment.yaml
   - profile.yaml
   - delivery.yaml
+  - garage.yaml
+  - storage.yaml
   - ui-shop.yaml
 
 namespace: granite

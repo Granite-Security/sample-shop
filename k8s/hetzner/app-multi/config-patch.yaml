@@ -40,3 +40,22 @@ data:
 
   # Both domains can now call shop/payment/profile directly from the browser.
   CORS_ALLOWED_ORIGINS: "https://granite-security.org,https://sichocolate.com"
+
+  # ── Storage (+ Garage S3 backend) ─────────────────────
+  # The storage service itself stays cluster-internal (MICROSERVICES_STORAGE_URI
+  # keeps its k8s/base default, http://storage:8065 — only the gateway calls it).
+  # These three DO need overriding because they end up baked into URLs the
+  # BROWSER follows directly, bypassing the gateway entirely:
+  # - STORAGE_S3_ENDPOINT: the host the storage service signs presigned PUT
+  #   URLs against. Must be internet-reachable — "http://garage:3900" would
+  #   put a cluster-internal hostname the browser can't resolve into the URL.
+  #   Routed via gateway.yaml's s3.granite-security.org listener → garage:3900.
+  # - STORAGE_S3_BUCKET: Garage's s3_web website endpoint is vhost-only and
+  #   matches the bare Host header to a bucket name (see docs/plans/storage.md
+  #   step 1 status note), so the bucket must be named after the domain that
+  #   serves it.
+  # - STORAGE_PUBLIC_BASE_URL: where product-media <img> tags point; routed via
+  #   gateway.yaml's media.granite-security.org listener → garage:3902.
+  STORAGE_S3_ENDPOINT: "https://s3.granite-security.org"
+  STORAGE_S3_BUCKET: "media.granite-security.org"
+  STORAGE_PUBLIC_BASE_URL: "https://media.granite-security.org"

@@ -56,6 +56,49 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
+    # Product media (storage/garage, docs/plans/storage.md step 8). Two
+    # listeners because the browser needs BOTH ends of the presign flow to be
+    # internet-reachable, and Garage's two endpoints are entirely separate
+    # ports/protocols — s3_web (public GET, vhost-routed by bucket name) can't
+    # also serve the S3 API (presigned PUT, path-style with SigV4 auth).
+    # media.granite-security.org only for now — matches the plan's decision
+    # to keep storage/product-media a granite-security.org-only feature.
+    - name: https-media
+      hostname: media.granite-security.org
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: Same
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: media.granite-security.org-tls
+    - name: http-media
+      hostname: media.granite-security.org
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: https-s3
+      hostname: s3.granite-security.org
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: Same
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: s3.granite-security.org-tls
+    - name: http-s3
+      hostname: s3.granite-security.org
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
     # Grafana lives in granite-observability, not granite, so this listener's
     # allowedRoutes is "All" (not "Same" like the others above) — the
     # HTTPRoute for it is defined in k8s/observability/grafana-gateway.yaml.
@@ -156,3 +199,75 @@ spec:
       backendRefs:
         - name: ui-demo
           port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: granite-http-redirect-media
+spec:
+  parentRefs:
+    - name: granite-gateway
+      sectionName: http-media
+  hostnames:
+    - media.granite-security.org
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: granite-route-media
+spec:
+  parentRefs:
+    - name: granite-gateway
+      sectionName: https-media
+  hostnames:
+    - media.granite-security.org
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: garage
+          port: 3902
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: granite-http-redirect-s3
+spec:
+  parentRefs:
+    - name: granite-gateway
+      sectionName: http-s3
+  hostnames:
+    - s3.granite-security.org
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: granite-route-s3
+spec:
+  parentRefs:
+    - name: granite-gateway
+      sectionName: https-s3
+  hostnames:
+    - s3.granite-security.org
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: garage
+          port: 3900

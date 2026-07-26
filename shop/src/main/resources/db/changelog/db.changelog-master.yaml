@@ -17,3 +17,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/006-add-delivery-status.sql
       relativeToChangelogFile: false
+  - include:
+      file: db/changelog/007-add-product-media.sql
+      relativeToChangelogFile: false

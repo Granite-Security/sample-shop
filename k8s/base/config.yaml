@@ -27,6 +27,7 @@ data:
   MICROSERVICES_PAYMENT_URI: "http://payment:8062"
   MICROSERVICES_PROFILE_URI: "http://profile:8064"
   MICROSERVICES_DELIVERY_URI: "http://delivery:8063"
+  MICROSERVICES_STORAGE_URI: "http://storage:8065"
   MICROSERVICES_SPA_URI: "http://ui-shop:80"
 
   # ── Greetings ────────────────────────────────────────
@@ -53,6 +54,18 @@ data:
   DELIVERY_PORT: "8063"
   DELIVERY_R2DBC_URL: "r2dbc:postgresql://postgres-delivery:5432/deliverydb"
   DELIVERY_JDBC_URL: "jdbc:postgresql://postgres-delivery:5432/deliverydb"
+
+  # ── Storage (+ Garage S3 backend) ─────────────────────
+  STORAGE_PORT: "8065"
+  # kind default: cluster-internal endpoint, fine because presigned URLs never
+  # leave the cluster in kind (no browser reaching in from outside). Multi-
+  # domain production overlay overrides this to a public S3 API hostname —
+  # see k8s/hetzner/app-multi/config-patch.yaml for why (browsers must be able
+  # to reach the exact host baked into the presigned URL).
+  STORAGE_S3_ENDPOINT: "http://garage:3900"
+  STORAGE_S3_REGION: "garage"
+  STORAGE_S3_BUCKET: "product-media"
+  STORAGE_PUBLIC_BASE_URL: "http://garage:3902"
 
   # ── Kafka ────────────────────────────────────────────
   KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"

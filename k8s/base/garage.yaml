@@ -1,0 +1,109 @@
+---
+# Cluster config for the Garage v2 S3-compatible object store backing the
+# `storage` service. Local-dev equivalent: storage/local/garage.toml (see its
+# comments for the full rationale — this mirrors it with two cluster-specific
+# differences, called out inline below).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: garage-config
+data:
+  garage.toml: |
+    metadata_dir = "/var/lib/garage/meta"
+    data_dir = "/var/lib/garage/data"
+    db_engine = "lmdb"
+
+    # Single node, no redundancy — same as local dev (see docs/plans/storage.md
+    # step 8 for backup notes: the PVC below is the only copy).
+    replication_factor = 1
+
+    rpc_bind_addr = "[::]:3901"
+    # rpc_secret is deliberately absent here — Garage reads it from the
+    # GARAGE_RPC_SECRET env var (set from granite-secrets below) instead of
+    # this file, unlike local dev's throwaway hardcoded value.
+
+    [s3_api]
+    s3_region = "garage"
+    api_bind_addr = "[::]:3900"
+
+    [s3_web]
+    bind_addr = "[::]:3902"
+    index = "index.html"
+    # No root_domain (unlike local dev's ".localhost"): on the cluster the
+    # bucket is named after its domain (media.granite-security.org) and Garage
+    # matches the bare Host header directly to that bucket name — see
+    # docs/plans/storage.md step 1 status note on the bare-Host rule.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: garage-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: garage
+  labels:
+    tier: backend
+spec:
+  replicas: 1
+  # Single-node Garage on a RWO PVC: a rolling update would briefly run two
+  # processes against the same LMDB data dir. Recreate avoids that (plan step 8).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: garage
+  template:
+    metadata:
+      labels:
+        app: garage
+        tier: backend
+    spec:
+      containers:
+        - name: garage
+          image: dxflrs/garage:v2.3.0
+          args: ["server"]
+          ports:
+            - containerPort: 3900 # S3 API — cluster-internal (presigned uploads route
+              #                     through a public listener on the same port, see
+              #                     k8s/hetzner/app-multi/gateway.yaml)
+            - containerPort: 3902 # s3_web — public product-media reads
+          env:
+            - name: GARAGE_RPC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: garage-rpc-secret
+          volumeMounts:
+            - name: config
+              mountPath: /etc/garage.toml
+              subPath: garage.toml
+            - name: data
+              mountPath: /var/lib/garage
+      volumes:
+        - name: config
+          configMap:
+            name: garage-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: garage-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: garage
+spec:
+  ports:
+    - name: s3-api
+      port: 3900
+    - name: s3-web
+      port: 3902
+  selector:
+    app: garage

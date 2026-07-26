@@ -1,0 +1,24 @@
+server:
+  port: ${STORAGE_SERVER_PORT:8065}
+
+spring:
+  application:
+    name: storage
+
+jwt:
+  jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:9090/auth/oauth2/jwks}
+  trusted-issuers: ${TRUSTED_JWT_ISSUERS:http://localhost:8080/auth}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:8080}
+
+storage:
+  s3:
+    endpoint: ${STORAGE_S3_ENDPOINT:http://localhost:3900}
+    region: ${STORAGE_S3_REGION:garage}
+    bucket: ${STORAGE_S3_BUCKET:product-media}
+    # Local-dev Garage credentials (from storage/local/garage-init.sh) — dev-only,
+    # like the DB passwords in compose.yaml. Real values come from env/cluster secrets.
+    access-key: ${STORAGE_S3_ACCESS_KEY:GK7211c01b0948e980c9d08710}
+    secret-key: ${STORAGE_S3_SECRET_KEY:900b103d902df51fc94729bd4dc3eb361b737c9174726ab3428760ababbb39cc}
+    public-base-url: ${STORAGE_PUBLIC_BASE_URL:http://product-media.localhost:3902}

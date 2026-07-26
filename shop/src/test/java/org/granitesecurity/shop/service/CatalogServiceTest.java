@@ -5,6 +5,7 @@ import org.granitesecurity.shop.domain.Product;
 import org.granitesecurity.shop.dto.CategoryResponse;
 import org.granitesecurity.shop.dto.CreateCategoryRequest;
 import org.granitesecurity.shop.dto.CreateProductRequest;
+import org.granitesecurity.shop.dto.MediaItem;
 import org.granitesecurity.shop.dto.ProductResponse;
 import org.granitesecurity.shop.repository.CategoryRepository;
 import org.granitesecurity.shop.repository.ProductRepository;
@@ -18,6 +19,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -205,7 +207,7 @@ class CatalogServiceTest {
     @Test
     void shouldCreateProduct() {
         var request = new CreateProductRequest(
-                "NewItem", "New desc", BigDecimal.valueOf(15), 100, 1L, "img.jpg");
+                "NewItem", "New desc", BigDecimal.valueOf(15), 100, 1L, "img.jpg", null);
         var saved = new Product("NewItem", BigDecimal.valueOf(15), 100, 1L);
         saved.setId(7L);
         saved.setDescription("New desc");
@@ -222,6 +224,29 @@ class CatalogServiceTest {
                     assert r.stock() == 100;
                     assert r.categoryId().equals(1L);
                     assert r.imageUrl().equals("img.jpg");
+                    assert r.media().isEmpty();
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void shouldCreateProductWithMedia() {
+        var media = List.of(new MediaItem("products/abc/hero.jpg",
+                "http://product-media.localhost:3902/products/abc/hero.jpg", "image/jpeg"));
+        var request = new CreateProductRequest(
+                "NewItem", "New desc", BigDecimal.valueOf(15), 100, 1L, "img.jpg", media);
+
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> {
+            Product saved = invocation.getArgument(0);
+            saved.setId(8L);
+            return Mono.just(saved);
+        });
+
+        StepVerifier.create(catalogService.createProduct(request))
+                .assertNext(r -> {
+                    assert r.media().size() == 1;
+                    assert r.media().get(0).key().equals("products/abc/hero.jpg");
+                    assert r.media().get(0).contentType().equals("image/jpeg");
                 })
                 .verifyComplete();
     }
@@ -231,7 +256,7 @@ class CatalogServiceTest {
         var existing = new Product("Old", BigDecimal.ONE, 1, 1L);
         existing.setId(4L);
         var request = new CreateProductRequest(
-                "Updated", "U desc", BigDecimal.valueOf(25), 50, 2L, "u.jpg");
+                "Updated", "U desc", BigDecimal.valueOf(25), 50, 2L, "u.jpg", null);
 
         when(productRepository.findById(4L)).thenReturn(Mono.just(existing));
         when(productRepository.save(any(Product.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
@@ -245,6 +270,7 @@ class CatalogServiceTest {
                     assert r.stock() == 50;
                     assert r.categoryId().equals(2L);
                     assert r.imageUrl().equals("u.jpg");
+                    assert r.media().isEmpty();
                 })
                 .verifyComplete();
     }
@@ -254,7 +280,7 @@ class CatalogServiceTest {
         when(productRepository.findById(99L)).thenReturn(Mono.empty());
 
         StepVerifier.create(catalogService.updateProduct(99L,
-                        new CreateProductRequest("X", null, BigDecimal.ZERO, 0, 1L, null)))
+                        new CreateProductRequest("X", null, BigDecimal.ZERO, 0, 1L, null, null)))
                 .expectErrorMatches(e -> e instanceof ShopException
                         && e.getMessage().equals("Product not found: 99"))
                 .verify();

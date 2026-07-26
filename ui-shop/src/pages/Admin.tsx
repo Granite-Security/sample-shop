@@ -42,7 +42,7 @@ export default function Admin() {
       <section style={{ marginTop: 24 }}>
         <h2>Manage</h2>
         <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
-          <span className="status status-paid">Products</span>
+          <Link to="/admin/products" className="btn" style={{ textDecoration: 'none' }}>Products</Link>
           <span className="status status-paid">Categories</span>
           <span className="status status-paid">Orders</span>
           {(isAdmin || isManager) && (
