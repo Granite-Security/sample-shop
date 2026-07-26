@@ -1,10 +1,14 @@
 package org.granitesecurity.shop.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.granitesecurity.shop.domain.Category;
 import org.granitesecurity.shop.domain.Product;
 import org.granitesecurity.shop.dto.CategoryResponse;
 import org.granitesecurity.shop.dto.CreateCategoryRequest;
 import org.granitesecurity.shop.dto.CreateProductRequest;
+import org.granitesecurity.shop.dto.MediaItem;
 import org.granitesecurity.shop.dto.PagedResult;
 import org.granitesecurity.shop.dto.ProductResponse;
 import org.granitesecurity.shop.repository.CategoryRepository;
@@ -15,9 +19,12 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.util.List;
 
 @Service
 public class CatalogService {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
@@ -92,6 +99,7 @@ public class CatalogService {
         Product product = new Product(request.name(), request.price(), request.stock(), request.categoryId());
         product.setDescription(request.description());
         product.setImageUrl(request.imageUrl());
+        product.setMedia(serializeMedia(request.media()));
         // created_at/updated_at are NOT NULL; R2DBC includes them in the INSERT,
         // bypassing the column defaults, so they must be set explicitly.
         Instant now = Instant.now();
@@ -111,6 +119,7 @@ public class CatalogService {
                     existing.setStock(request.stock());
                     existing.setCategoryId(request.categoryId());
                     existing.setImageUrl(request.imageUrl());
+                    existing.setMedia(serializeMedia(request.media()));
                     existing.setUpdatedAt(Instant.now());
                     return productRepository.save(existing);
                 })
@@ -133,7 +142,30 @@ public class CatalogService {
                 product.getPrice(),
                 product.getStock(),
                 product.getCategoryId(),
-                product.getImageUrl()
+                product.getImageUrl(),
+                deserializeMedia(product.getMedia())
         );
+    }
+
+    private String serializeMedia(List<MediaItem> media) {
+        if (media == null || media.isEmpty()) {
+            return null;
+        }
+        try {
+            return OBJECT_MAPPER.writeValueAsString(media);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to serialize product media", e);
+        }
+    }
+
+    private List<MediaItem> deserializeMedia(String media) {
+        if (media == null || media.isBlank()) {
+            return List.of();
+        }
+        try {
+            return OBJECT_MAPPER.readValue(media, new TypeReference<List<MediaItem>>() {});
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to deserialize product media", e);
+        }
     }
 }

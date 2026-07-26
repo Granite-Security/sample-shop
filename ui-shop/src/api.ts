@@ -4,6 +4,7 @@ import { ordersApi } from './api/orders';
 import { paymentsApi } from './api/payments';
 import { profileApi } from './api/profile';
 import { shopApi } from './api/shop';
+import { storageApi } from './api/storage';
 
 export const api = {
   shop: shopApi,
@@ -12,6 +13,7 @@ export const api = {
   payments: paymentsApi,
   profile: profileApi,
   delivery: deliveryApi,
+  storage: storageApi,
 };
 
 export { setAccessToken } from './api/client';

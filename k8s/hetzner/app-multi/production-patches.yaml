@@ -117,6 +117,33 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: storage
+spec:
+  template:
+    spec:
+      containers:
+        - name: storage
+          imagePullPolicy: Always
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: garage
+spec:
+  template:
+    spec:
+      containers:
+        - name: garage
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 1Gi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: ui-shop
 spec:
   template:

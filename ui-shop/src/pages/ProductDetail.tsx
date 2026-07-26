@@ -8,12 +8,16 @@ export default function ProductDetail() {
   const { id } = useParams();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeImage, setActiveImage] = useState<string | null>(null);
   const { addItem } = useCart();
 
   useEffect(() => {
     if (!id) return;
     api.catalog.getProduct(Number(id))
-      .then(setProduct)
+      .then(p => {
+        setProduct(p);
+        setActiveImage(p.imageUrl || p.media[0]?.url || null);
+      })
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -22,10 +26,22 @@ export default function ProductDetail() {
 
   return (
     <div className="page product-detail">
-      <div className="product-detail-img">
-        {product.imageUrl
-          ? <img src={product.imageUrl} alt={product.name} />
-          : <div className="img-placeholder">No Image</div>}
+      <div>
+        <div className="product-detail-img">
+          {activeImage
+            ? <img src={activeImage} alt={product.name} />
+            : <div className="img-placeholder">No Image</div>}
+        </div>
+        {product.media.length > 1 && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            {product.media.map(item => (
+              <button key={item.key} onClick={() => setActiveImage(item.url)}
+                style={{ width: 48, height: 48, padding: 0, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-secondary)', cursor: 'pointer' }}>
+                <img src={item.url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="product-detail-info">
         <h1>{product.name}</h1>

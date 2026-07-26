@@ -2,6 +2,7 @@ package org.granitesecurity.shop.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
+import java.util.List;
 
 @Schema(description = "Product returned in catalog responses")
 public record ProductResponse(
@@ -11,6 +12,7 @@ public record ProductResponse(
         @Schema(description = "Price", example = "79.99") BigDecimal price,
         @Schema(description = "Available stock", example = "50") Integer stock,
         @Schema(description = "Category ID this product belongs to", example = "1") Long categoryId,
-        @Schema(description = "Product image URL", example = "https://picsum.photos/seed/headphones/400/400") String imageUrl
+        @Schema(description = "Product image URL", example = "https://picsum.photos/seed/headphones/400/400") String imageUrl,
+        @Schema(description = "Gallery/video media attached to the product") List<MediaItem> media
 ) {
 }

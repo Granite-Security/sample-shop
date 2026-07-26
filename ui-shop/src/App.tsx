@@ -9,6 +9,8 @@ import Orders from './pages/Orders'
 import OrderDetail from './pages/OrderDetail'
 import RetryPayment from './pages/RetryPayment'
 import Admin from './pages/Admin'
+import ProductsManagement from './pages/ProductsManagement'
+import ProductForm from './pages/ProductForm'
 import DeliveryManagement from './pages/DeliveryManagement'
 import UsersManagement from './pages/UsersManagement'
 import UserProfileView from './pages/UserProfileView'
@@ -32,6 +34,9 @@ export default function App() {
         <Route path="profile" element={<Profile />} />
         <Route path="addresses" element={<Addresses />} />
         <Route path="admin" element={<Admin />} />
+        <Route path="admin/products" element={<ProductsManagement />} />
+        <Route path="admin/products/new" element={<ProductForm />} />
+        <Route path="admin/products/:id/edit" element={<ProductForm />} />
         <Route path="admin/deliveries" element={<DeliveryManagement />} />
         <Route path="admin/users" element={<UsersManagement />} />
         <Route path="admin/users/:username" element={<UserProfileView />} />

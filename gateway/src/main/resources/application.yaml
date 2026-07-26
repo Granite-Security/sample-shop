@@ -52,5 +52,7 @@ microservices:
     uri: ${MICROSERVICES_PROFILE_URI:http://localhost:8064}
   delivery:
     uri: ${MICROSERVICES_DELIVERY_URI:http://localhost:8063}
+  storage:
+    uri: ${MICROSERVICES_STORAGE_URI:http://localhost:8065}
   spa:
     uri: ${SPA_MICROSERVICE:http://localhost:5173}

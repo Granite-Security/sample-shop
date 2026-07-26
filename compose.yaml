@@ -51,6 +51,18 @@ services:
     ports:
       - '5436:5432'
 
+  garage:
+    image: dxflrs/garage:v2.3.0
+    container_name: garage
+    ports:
+      - "3900:3900"   # S3 API (presigned uploads land here)
+      - "3902:3902"   # S3 website endpoint (public product-media reads)
+    volumes:
+      - ./storage/local/garage.toml:/etc/garage.toml
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    restart: unless-stopped
+
   kafka:
     image: confluentinc/cp-kafka:latest
     container_name: kafka
@@ -151,6 +163,7 @@ services:
       - MICROSERVICES_PAYMENT_URI=http://payment:8062
       - MICROSERVICES_PROFILE_URI=http://profile:8064
       - MICROSERVICES_DELIVERY_URI=http://delivery:8063
+      - MICROSERVICES_STORAGE_URI=http://storage:8065
       - MICROSERVICES_AUTH_SERVER_URI=http://auth-server:9090
     depends_on:
       auth-server:
@@ -251,6 +264,31 @@ services:
         condition: service_started
     restart: on-failure
 
+  storage:
+    build:
+      context: ./storage
+    container_name: storage
+    ports:
+      - "8065:8065"
+    environment:
+      - STORAGE_SERVER_PORT=8065
+      - STORAGE_S3_ENDPOINT=http://garage:3900
+      - STORAGE_S3_REGION=garage
+      - STORAGE_S3_BUCKET=product-media
+      - STORAGE_S3_ACCESS_KEY=${STORAGE_S3_ACCESS_KEY}
+      - STORAGE_S3_SECRET_KEY=${STORAGE_S3_SECRET_KEY}
+      # Browsers load media from Garage's website endpoint (vhost-style, *.localhost → 127.0.0.1)
+      - STORAGE_PUBLIC_BASE_URL=http://product-media.localhost:3902
+      - JWT_JWK_SET_URI=http://auth-server:9090/auth/oauth2/jwks
+      - TRUSTED_JWT_ISSUERS=http://gateway:8080/auth
+      - CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:8080
+    depends_on:
+      gateway:
+        condition: service_started
+      garage:
+        condition: service_started
+    restart: on-failure
+
   delivery:
     build:
       context: ./delivery
@@ -276,3 +314,7 @@ services:
         condition: service_started
     restart: on-failure
 
+
+volumes:
+  garage-meta:
+  garage-data:

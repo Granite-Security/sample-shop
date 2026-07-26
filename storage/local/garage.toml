@@ -1,0 +1,29 @@
+# Garage v2 configuration for LOCAL DEVELOPMENT only (mounted into the garage
+# container by the root compose.yaml). Cluster config lives in k8s/base/garage.yaml.
+# rpc_secret below is a throwaway dev value — never reuse it outside localhost.
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "lmdb"
+
+# Single node, no redundancy — fine for local dev. The Hetzner cluster uses
+# the same layout (one node), see docs/plans/storage.md step 8 for backup notes.
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_secret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+
+# Website endpoint: serves public buckets anonymously over plain HTTP GET.
+# Product media reads go through here (public bucket, see garage-init.sh).
+# Addressing is virtual-host style (path-style is NOT supported on s3_web):
+# root_domain ".localhost" → http://product-media.localhost:3902/<key>
+# (*.localhost resolves to 127.0.0.1 on macOS/Linux; bare bucket name as Host
+# also works, e.g. on the cluster where the bucket is named after its domain).
+[s3_web]
+bind_addr = "[::]:3902"
+root_domain = ".localhost"
+index = "index.html"
