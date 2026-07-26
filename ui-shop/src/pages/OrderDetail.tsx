@@ -8,49 +8,69 @@ const POLL_INTERVAL = 5000;
 
 export default function OrderDetail() {
   const { id } = useParams();
-  const { isAdmin } = useAuth();
+  const { isAdmin, loading: authLoading } = useAuth();
   const [order, setOrder] = useState<OrderResponse | null>(null);
   const [payment, setPayment] = useState<CreatePaymentIntentResponse | null>(null);
   const [delivery, setDelivery] = useState<DeliveryResponse | null>(null);
   const [tracking, setTracking] = useState<TrackingDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refunding, setRefunding] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fetchRef = useRef<() => void>(() => {});
 
   useEffect(() => {
-    if (!id) return;
+    // Wait for the OIDC token restore to finish so the first request on a
+    // hard reload isn't fired without an Authorization header (which would
+    // 401 and get misread as the order not existing).
+    if (!id || authLoading) return;
     let cancelled = false;
 
     const fetch = () => {
       const orderId = Number(id);
-      Promise.all([
-        api.orders.getOrder(orderId),
-        api.payments.getPaymentIntent(orderId).catch(() => null),
-        api.delivery.getDelivery(orderId),
-        api.delivery.getDeliveryTracking(orderId),
-      ])
-        .then(([o, p, d, t]) => {
+      api.orders.getOrder(orderId)
+        .then(o => {
           if (cancelled) return;
           setOrder(o);
-          setPayment(p);
-          setDelivery(d);
-          setTracking(t);
-          setLoading(false);
-          if (o.status === 'RETURNED') {
-            // No Stripe webhooks in this stack — sync reconciles the refund state.
-            api.payments.syncPaymentIntent(orderId).catch(() => null);
-          }
-          if (o.status !== 'PENDING' && o.status !== 'PROCESSING' && o.status !== 'RETURNED') {
+          setNotFound(false);
+          setLoadError(null);
+          return Promise.all([
+            api.payments.getPaymentIntent(orderId).catch(() => null),
+            api.delivery.getDelivery(orderId),
+            api.delivery.getDeliveryTracking(orderId),
+          ]).then(([p, d, t]) => {
+            if (cancelled) return;
+            setPayment(p);
+            setDelivery(d);
+            setTracking(t);
+            setLoading(false);
+            if (o.status === 'RETURNED') {
+              // No Stripe webhooks in this stack — sync reconciles the refund state.
+              api.payments.syncPaymentIntent(orderId).catch(() => null);
+            }
+            if (o.status !== 'PENDING' && o.status !== 'PROCESSING' && o.status !== 'RETURNED') {
+              if (pollRef.current) {
+                clearInterval(pollRef.current);
+                pollRef.current = null;
+              }
+            }
+          });
+        })
+        .catch(err => {
+          if (cancelled) return;
+          const message = err instanceof Error ? err.message : String(err);
+          if (/^\[404\]/.test(message)) {
+            setNotFound(true);
+            setOrder(null);
             if (pollRef.current) {
               clearInterval(pollRef.current);
               pollRef.current = null;
             }
+          } else {
+            setLoadError(message);
           }
-        })
-        .catch(() => {
-          if (!cancelled) setOrder(null);
           setLoading(false);
         });
     };
@@ -66,15 +86,21 @@ export default function OrderDetail() {
         pollRef.current = null;
       }
     };
-  }, [id]);
+  }, [id, authLoading]);
 
-  if (loading) return (
+  if (authLoading || loading) return (
     <div className="page" style={{ textAlign: 'center', paddingTop: '3rem' }}>
       <div className="spinner" style={{ margin: '0 auto 1rem' }} />
       <p>Loading order...</p>
     </div>
   );
-  if (!order) return <div className="page"><p>Order not found.</p></div>;
+  if (notFound) return <div className="page"><p>Order not found.</p></div>;
+  if (!order) return (
+    <div className="page">
+      <p>Couldn't load this order{loadError ? `: ${loadError}` : ''}.</p>
+      <button className="btn" onClick={() => fetchRef.current()}>Retry</button>
+    </div>
+  );
 
   const statusClass = `status status-${order.status.toLowerCase()}`;
   const conditionsMet = payment?.status === 'SUCCEEDED' && delivery?.status === 'FAILED';
