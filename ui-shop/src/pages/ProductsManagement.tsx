@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { useAuth } from '../auth';
 import { api } from '../api';
 import type { Product } from '../types';
+import { getDefaultMedia } from '../utils/media';
 
 export default function ProductsManagement() {
   const { isAdmin, isManager } = useAuth();
@@ -55,14 +56,16 @@ export default function ProductsManagement() {
         <p>No products yet.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {products.map(p => (
+          {products.map(p => {
+            const thumbnail = getDefaultMedia(p.media)?.url ?? p.imageUrl;
+            return (
             <div key={p.id} style={{
               display: 'flex', alignItems: 'center', gap: 12, padding: 12,
               background: 'var(--surface)', borderRadius: 8, border: '1px solid var(--border)',
             }}>
               <div style={{ width: 56, height: 56, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-secondary)', borderRadius: 6 }}>
-                {p.imageUrl
-                  ? <img src={p.imageUrl} alt={p.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                {thumbnail
+                  ? <img src={thumbnail} alt={p.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                   : <span className="img-placeholder">—</span>}
               </div>
               <div style={{ flex: 1 }}>
@@ -76,7 +79,8 @@ export default function ProductsManagement() {
                 <button className="btn" style={{ color: 'var(--danger)' }} onClick={() => handleDelete(p.id)}>Delete</button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
