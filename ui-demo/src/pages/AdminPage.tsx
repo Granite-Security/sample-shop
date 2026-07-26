@@ -1,10 +1,11 @@
-import { Fragment, useEffect, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { formatPrice, useShop } from '../store';
-import type { CreateProductRequest, OrderResponse, Product } from '../types';
+import type { CreateProductRequest, MediaItem, OrderResponse, Product } from '../types';
 import { ChocolateArt, variantFor } from '../components/ChocolateArt';
+import { getDefaultMedia } from '../utils/media';
 
 const EMPTY_FORM: CreateProductRequest = {
   name: '',
@@ -13,6 +14,7 @@ const EMPTY_FORM: CreateProductRequest = {
   stock: 0,
   categoryId: 0,
   imageUrl: '',
+  media: [],
 };
 
 const inputStyle =
@@ -24,6 +26,7 @@ export function AdminPage() {
   const [form, setForm] = useState<CreateProductRequest>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
   if (loading) {
@@ -64,6 +67,7 @@ export function AdminPage() {
       stock: p.stock,
       categoryId: p.categoryId,
       imageUrl: p.imageUrl ?? '',
+      media: p.media ?? [],
     });
     setMessage(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -113,6 +117,53 @@ export function AdminPage() {
     } finally {
       setBusy(false);
     }
+  };
+
+  // Upload/remove touch the storage backend, so they persist immediately
+  // (unlike the rest of the form's fields, which wait for Save Changes).
+  const persistMedia = async (media: MediaItem[]) => {
+    const next = { ...form, media };
+    setForm(next);
+    if (editingId !== null) {
+      await api.updateProduct(editingId, next);
+      await refresh();
+    }
+  };
+
+  const onFileSelected = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploading(true);
+    setMessage(null);
+    try {
+      const item = await api.uploadProductImage(file);
+      await persistMedia([...(form.media ?? []), item]);
+    } catch (err) {
+      setMessage({ kind: 'error', text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const onRemoveMedia = async (item: MediaItem) => {
+    setMessage(null);
+    try {
+      await api.deleteStorageObject(item.key);
+      // Filtering the item out already clears its isDefault flag with it —
+      // no other image gets silently promoted (see getDefaultMedia).
+      await persistMedia((form.media ?? []).filter((m) => m.key !== item.key));
+    } catch (err) {
+      setMessage({ kind: 'error', text: err instanceof Error ? err.message : String(err) });
+    }
+  };
+
+  // Local-only until Save Changes — no storage side effect, unlike upload/remove.
+  const onSetDefaultMedia = (item: MediaItem) => {
+    setForm({
+      ...form,
+      media: (form.media ?? []).map((m) => ({ ...m, isDefault: m.key === item.key })),
+    });
   };
 
   return (
@@ -223,6 +274,65 @@ export function AdminPage() {
                   ))}
                 </select>
               </div>
+
+              {editingId !== null && (
+                <div className="border-t border-cocoa/10 pt-4">
+                  <p className="mb-1 block text-xs uppercase tracking-[0.16em] text-cocoa/60">Media</p>
+                  <p className="text-xs text-cocoa/50">
+                    The default image is used as this piece's photo across the boutique — click
+                    "Save Changes" below to persist your selection.
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    {(form.media ?? []).map((item) => {
+                      const isDefault = getDefaultMedia(form.media)?.key === item.key;
+                      return (
+                        <div key={item.key} className="w-24">
+                          <div
+                            className={`relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-md bg-cocoa/5 ${
+                              isDefault ? 'ring-2 ring-gold' : ''
+                            }`}
+                          >
+                            {isDefault && (
+                              <span className="absolute left-1 top-1 bg-gold px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-cocoa">
+                                Default
+                              </span>
+                            )}
+                            <img src={item.url} alt="" className="h-full w-full object-contain" />
+                          </div>
+                          <button
+                            type="button"
+                            disabled={isDefault}
+                            onClick={() => onSetDefaultMedia(item)}
+                            className="mt-1 w-full text-[10px] uppercase tracking-wide text-cocoa/70 underline decoration-gold underline-offset-2 hover:text-terracotta disabled:opacity-40"
+                          >
+                            {isDefault ? 'Default' : 'Set default'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onRemoveMedia(item)}
+                            className="mt-1 w-full text-[10px] uppercase tracking-wide text-terracotta/80 underline underline-offset-2 hover:text-terracotta"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-3">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      disabled={uploading}
+                      onChange={onFileSelected}
+                      className="text-xs text-cocoa/70"
+                    />
+                    {uploading && <span className="ml-2 text-xs text-cocoa/50">Uploading…</span>}
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-3 pt-2">
                 <button
                   type="submit"
@@ -250,10 +360,14 @@ export function AdminPage() {
               Current Collection <span className="text-cocoa/40">({managed.length})</span>
             </h2>
             <ul className="mt-6 divide-y divide-cocoa/10 border-y border-cocoa/10">
-              {managed.map((p) => (
+              {managed.map((p) => {
+                const defaultImage = getDefaultMedia(p.media);
+                return (
                 <li key={p.id} className="flex items-center gap-4 py-4">
                   <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md">
-                    <ChocolateArt seed={p.id} variant={variantFor(p.name, p.id)} className="h-full w-full" />
+                    {defaultImage
+                      ? <img src={defaultImage.url} alt={p.name} className="h-full w-full object-cover" />
+                      : <ChocolateArt seed={p.id} variant={variantFor(p.name, p.id)} className="h-full w-full" />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <Link to={`/products/${p.id}`} className="font-display text-lg text-cocoa hover:text-terracotta">
@@ -277,7 +391,8 @@ export function AdminPage() {
                     Delete
                   </button>
                 </li>
-              ))}
+                );
+              })}
               {managed.length === 0 && (
                 <li className="py-6 text-sm text-cocoa/50">No live products — is the shop backend running?</li>
               )}

@@ -6,6 +6,7 @@ import type { Product } from '../types';
 import { ChocolateArt, variantFor } from './../components/ChocolateArt';
 import { ArrowIcon, HeartIcon, LeafIcon, StarIcon, TruckIcon } from '../components/icons';
 import { Reveal } from '../components/Reveal';
+import { getDefaultMedia } from '../utils/media';
 
 /** Same deterministic pseudo-rating used by the bestseller cards. */
 const ratingFor = (id: number) => 4.6 + (Math.abs(id * 7) % 4) / 10;
@@ -69,6 +70,7 @@ export function ProductPage() {
   const rating = ratingFor(product.id);
   const wished = wishlist.has(product.id);
   const inStock = product.stock > 0;
+  const defaultImage = getDefaultMedia(product.media);
 
   return (
     <div className="bg-ivory pt-28 lg:pt-32">
@@ -88,11 +90,15 @@ export function ProductPage() {
         <div className="mt-8 grid gap-10 lg:grid-cols-2 lg:gap-20">
           <Reveal>
             <div className="overflow-hidden rounded-lg">
-              <ChocolateArt
-                seed={product.id}
-                variant={variantFor(product.name, product.id)}
-                className="aspect-square w-full"
-              />
+              {defaultImage ? (
+                <img src={defaultImage.url} alt={product.name} className="aspect-square w-full object-cover" />
+              ) : (
+                <ChocolateArt
+                  seed={product.id}
+                  variant={variantFor(product.name, product.id)}
+                  className="aspect-square w-full"
+                />
+              )}
             </div>
           </Reveal>
 
@@ -193,15 +199,25 @@ function RelatedProducts({ currentId }: { currentId: number }) {
         <h2 className="font-display text-[28px] text-cocoa lg:text-[32px]">You May Also Like</h2>
       </Reveal>
       <div className="mt-8 grid grid-cols-2 gap-x-6 gap-y-10 lg:grid-cols-4">
-        {related.map((p, i) => (
+        {related.map((p, i) => {
+          const defaultImage = getDefaultMedia(p.media);
+          return (
           <Reveal key={p.id} delay={i * 100}>
             <Link to={`/products/${p.id}`} className="group block">
               <div className="overflow-hidden rounded-lg">
-                <ChocolateArt
-                  seed={p.id}
-                  variant={variantFor(p.name, p.id)}
-                  className="aspect-square w-full transition-transform duration-1000 ease-luxe group-hover:scale-108"
-                />
+                {defaultImage ? (
+                  <img
+                    src={defaultImage.url}
+                    alt={p.name}
+                    className="aspect-square w-full object-cover transition-transform duration-1000 ease-luxe group-hover:scale-108"
+                  />
+                ) : (
+                  <ChocolateArt
+                    seed={p.id}
+                    variant={variantFor(p.name, p.id)}
+                    className="aspect-square w-full transition-transform duration-1000 ease-luxe group-hover:scale-108"
+                  />
+                )}
               </div>
               <h3 className="mt-3 font-display text-lg text-cocoa">{p.name}</h3>
               <p className="mt-1 flex items-center justify-between text-sm">
@@ -212,7 +228,8 @@ function RelatedProducts({ currentId }: { currentId: number }) {
               </p>
             </Link>
           </Reveal>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
