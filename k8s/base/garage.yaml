@@ -36,6 +36,14 @@ data:
     # directly to that bucket name — see docs/plans/storage.md step 1 status
     # note on the bare-Host rule.
     root_domain = ""
+
+    # Admin API — backs the garage-webui dashboard (garage-webui.yaml) and
+    # `garage` CLI status/layout commands. admin_token is deliberately absent
+    # here, same reasoning as rpc_secret above: Garage reads it from the
+    # GARAGE_ADMIN_TOKEN env var (set from granite-secrets) instead of this
+    # file, so the token never sits in a plaintext ConfigMap.
+    [admin]
+    api_bind_addr = "[::]:3903"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -81,12 +89,18 @@ spec:
               #                     through a public listener on the same port, see
               #                     k8s/hetzner/app-multi/gateway.yaml)
             - containerPort: 3902 # s3_web — public product-media reads
+            - containerPort: 3903 # admin API — cluster-internal, consumed by garage-webui
           env:
             - name: GARAGE_RPC_SECRET
               valueFrom:
                 secretKeyRef:
                   name: granite-secrets
                   key: garage-rpc-secret
+            - name: GARAGE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: garage-admin-token
           volumeMounts:
             - name: config
               mountPath: /etc/garage.toml
@@ -111,5 +125,7 @@ spec:
       port: 3900
     - name: s3-web
       port: 3902
+    - name: admin-api
+      port: 3903
   selector:
     app: garage

@@ -415,6 +415,38 @@ multipart phase).
 - **Rate limiting / abuse** on presign endpoint; virus scanning — probably
   overkill for an admin-only upload surface.
 
+## Step 10 — Admin UI for Garage (2026-07-26)
+
+Garage itself ships no web UI (just the S3 API + `s3_web` static-site
+endpoint) and its own Admin API was disabled by default in Step 8. Added a
+dashboard so buckets/keys/cluster layout can be inspected without shelling
+into the pod for every `garage` CLI call.
+
+- `k8s/base/garage.yaml`: enabled Garage's `[admin]` API on port 3903.
+  `admin_token` deliberately left out of the `garage.toml` ConfigMap — same
+  reasoning as `rpc_secret` — Garage reads it from `GARAGE_ADMIN_TOKEN`
+  (sourced from `granite-secrets` key `garage-admin-token`) instead.
+- `k8s/base/garage-webui.yaml` (new, added to `kustomization.yaml`): deploys
+  [khairul169/garage-webui](https://github.com/khairul169/garage-webui)
+  (third-party, not part of Garage), pointed at `garage:3903` (admin API) and
+  `garage:3900` (S3 API). Gated behind its own `AUTH_USER_PASS` login
+  (`granite-secrets` key `garage-webui-auth-user-pass`, `username:bcrypt_hash`
+  format) since the admin token alone only authorizes the API calls the UI
+  makes on your behalf, not the page itself.
+- `k8s/hetzner/app-multi/gateway.yaml`: new `garage.granite-security.org`
+  Gateway listener pair (https+http, cert-manager TLS) + HTTPRoutes
+  (http→https redirect, then routing to `garage-webui:3909`) — mirrors the
+  `media`/`s3` listener pattern from Step 8.
+- `k8s/hetzner/app-multi/production-patches.yaml`: resource requests/limits
+  for the new `garage-webui` Deployment (same small footprint as `ui-shop`).
+- Secrets: added `garage-admin-token` and `garage-webui-auth-user-pass` to
+  `k8s/base/secrets.yaml(.example)` (throwaway local values) and
+  `k8s/hetzner/app-multi/secrets-patch.yaml(.example)` (real values in the
+  gitignored file only). Cloudflare DNS `A` record for
+  `garage.granite-security.org` — manual step, same as `media`/`s3`/`grafana`.
+- Not yet run against a real cluster at time of writing — this is the
+  as-implemented manifest state, not a confirmed-working transcript.
+
 ## Verification checklist (end of implementation)
 
 1. `cd storage && ./gradlew build -x test && ./gradlew test`

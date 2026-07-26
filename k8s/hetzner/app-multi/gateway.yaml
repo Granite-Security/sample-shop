@@ -99,6 +99,28 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
+    # garage-webui admin dashboard (garage-webui.yaml) — internal tool, but
+    # still gated by its own AUTH_USER_PASS login (see secrets-patch.yaml)
+    # since it's reachable from the internet like everything else on this
+    # Gateway.
+    - name: https-garage-ui
+      hostname: garage.granite-security.org
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: Same
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: garage.granite-security.org-tls
+    - name: http-garage-ui
+      hostname: garage.granite-security.org
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
     # Grafana lives in granite-observability, not granite, so this listener's
     # allowedRoutes is "All" (not "Same" like the others above) — the
     # HTTPRoute for it is defined in k8s/observability/grafana-gateway.yaml.
@@ -271,3 +293,39 @@ spec:
       backendRefs:
         - name: garage
           port: 3900
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: granite-http-redirect-garage-ui
+spec:
+  parentRefs:
+    - name: granite-gateway
+      sectionName: http-garage-ui
+  hostnames:
+    - garage.granite-security.org
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: granite-route-garage-ui
+spec:
+  parentRefs:
+    - name: granite-gateway
+      sectionName: https-garage-ui
+  hostnames:
+    - garage.granite-security.org
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: garage-webui
+          port: 3909
