@@ -33,6 +33,13 @@ export interface OrderResponse {
   address?: DeliveryAddress;
 }
 
+export interface RefundInfo {
+  stripeRefundId: string | null;
+  amount: number;
+  status: string;
+  createdAt: string;
+}
+
 export interface CreatePaymentIntentResponse {
   id: string;
   orderId: number;
@@ -42,6 +49,7 @@ export interface CreatePaymentIntentResponse {
   amount: number;
   currency: string;
   createdAt: string;
+  refund?: RefundInfo | null;
 }
 
 export interface PagedResult<T> {

@@ -133,7 +133,8 @@ class ShopRouteTest extends AbstractTestcontainers {
         when(orderService.placeOrder(anyString(), any(PlaceOrderRequest.class)))
                 .thenReturn(Mono.just(new OrderResponse(
                         1L, "testuser", "PENDING", BigDecimal.valueOf(20),
-                        Instant.now(), List.of(new OrderItemResponse(1L, 1L, 2, BigDecimal.TEN)))));
+                        Instant.now(), List.of(new OrderItemResponse(1L, 1L, "Widget", 2, BigDecimal.TEN)),
+                        null, null)));
 
         webTestClient
                 .mutateWith(mockJwt().jwt(jwt -> jwt.subject("testuser")))
@@ -170,7 +171,7 @@ class ShopRouteTest extends AbstractTestcontainers {
     @Test
     void listOrdersShouldSucceedWithUserJwt() {
         var orders = new PagedResult<>(List.of(
-                new OrderResponse(1L, "testuser", "PENDING", BigDecimal.TEN, Instant.now(), List.of())
+                new OrderResponse(1L, "testuser", "PENDING", BigDecimal.TEN, Instant.now(), List.of(), null, null)
         ), 1L, 0, 20);
         when(orderService.getOrdersForUser(anyString(), eq(0), eq(20))).thenReturn(Mono.just(orders));
 
@@ -192,9 +193,9 @@ class ShopRouteTest extends AbstractTestcontainers {
 
     @Test
     void getOrderByIdShouldReturn200ForOwner() {
-        when(orderService.getOrder(eq(1L), anyString()))
+        when(orderService.getOrder(eq(1L), anyString(), anyBoolean()))
                 .thenReturn(Mono.just(new OrderResponse(
-                        1L, "owner", "PENDING", BigDecimal.valueOf(25), Instant.now(), List.of())));
+                        1L, "owner", "PENDING", BigDecimal.valueOf(25), Instant.now(), List.of(), null, null)));
 
         webTestClient
                 .mutateWith(mockJwt().jwt(jwt -> jwt.subject("owner")))
@@ -207,7 +208,7 @@ class ShopRouteTest extends AbstractTestcontainers {
 
     @Test
     void getOrderByIdShouldReturn404ForForeignUser() {
-        when(orderService.getOrder(eq(1L), anyString()))
+        when(orderService.getOrder(eq(1L), anyString(), anyBoolean()))
                 .thenReturn(Mono.error(new ShopException("Order not found: 1", HttpStatus.NOT_FOUND, "Not Found")));
 
         webTestClient

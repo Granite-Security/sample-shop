@@ -47,6 +47,10 @@ public class EventConsumer {
                     case "CANCELED" -> {
                         log.info("PaymentCanceled -> order {}, no status transition", orderId);
                     }
+                    case "REFUNDED" -> {
+                        orderService.updateOrderStatus(orderId, OrderStatus.REIMBURSED).block();
+                        log.info("PaymentRefunded -> order {} marked REIMBURSED", orderId);
+                    }
                     default -> log.warn("Unknown payment status: {}", s);
                 }
             } else if (data.containsKey("paymentId")) {
@@ -100,10 +104,15 @@ public class EventConsumer {
             String status = data.get("status") != null ? data.get("status").toString() : null;
             if ("DISPATCHED".equals(status)) {
                 orderService.updateOrderStatus(orderId, OrderStatus.SHIPPED).block();
+                orderService.updateDeliveryStatus(orderId, "DISPATCHED").block();
                 log.info("DeliveryDispatched -> order {} marked SHIPPED", orderId);
             } else if ("DELIVERED".equals(status)) {
                 orderService.updateOrderStatus(orderId, OrderStatus.DELIVERED).block();
+                orderService.updateDeliveryStatus(orderId, "DELIVERED").block();
                 log.info("DeliveryDelivered -> order {} marked DELIVERED", orderId);
+            } else if ("FAILED".equals(status)) {
+                orderService.updateDeliveryStatus(orderId, "FAILED").block();
+                log.info("DeliveryFailed -> order {} delivery status FAILED", orderId);
             } else {
                 log.debug("Delivery status {} for order {}, no transition", status, orderId);
             }

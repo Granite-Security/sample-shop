@@ -43,6 +43,9 @@ class OrderServiceTest {
     @InjectMocks
     private OrderService orderService;
 
+    private static final PlaceOrderRequest.DeliveryAddress ADDRESS = new PlaceOrderRequest.DeliveryAddress(
+            "Alice Smith", "123 Main St", null, "Springfield", "IL", "62701", "USA");
+
     @Test
     void shouldPlaceOrderSuccessfully() {
         Product product1 = new Product("Widget", BigDecimal.valueOf(10.00), 50, 1L);
@@ -53,7 +56,7 @@ class OrderServiceTest {
         when(productRepository.findAllById(List.of(1L, 2L)))
                 .thenReturn(Flux.just(product1, product2));
 
-        CustomerOrder savedOrder = new CustomerOrder("testuser", "PENDING", BigDecimal.valueOf(70.00));
+        CustomerOrder savedOrder = order("testuser", "PENDING", BigDecimal.valueOf(70.00));
         savedOrder.setId(100L);
         savedOrder.setCreatedAt(Instant.now());
 
@@ -72,7 +75,7 @@ class OrderServiceTest {
         PlaceOrderRequest request = new PlaceOrderRequest(List.of(
                 new PlaceOrderRequest.LineItem(1L, 2),
                 new PlaceOrderRequest.LineItem(2L, 3)
-        ));
+        ), ADDRESS);
 
         StepVerifier.create(orderService.placeOrder("testuser", request))
                 .assertNext(response -> {
@@ -83,7 +86,7 @@ class OrderServiceTest {
                 })
                 .verifyComplete();
 
-        verify(productRepository).findAllById(List.of(1L, 2L));
+        verify(productRepository, times(2)).findAllById(List.of(1L, 2L));
         verify(productRepository, times(2)).save(any(Product.class));
         verify(customerOrderRepository).save(any(CustomerOrder.class));
         verify(orderItemRepository).saveAll(any(List.class));
@@ -92,7 +95,7 @@ class OrderServiceTest {
 
     @Test
     void shouldRejectEmptyOrder() {
-        PlaceOrderRequest request = new PlaceOrderRequest(List.of());
+        PlaceOrderRequest request = new PlaceOrderRequest(List.of(), ADDRESS);
 
         StepVerifier.create(orderService.placeOrder("testuser", request))
                 .expectErrorMatches(e -> e instanceof ShopException
@@ -109,7 +112,7 @@ class OrderServiceTest {
 
         PlaceOrderRequest request = new PlaceOrderRequest(List.of(
                 new PlaceOrderRequest.LineItem(999L, 1)
-        ));
+        ), ADDRESS);
 
         StepVerifier.create(orderService.placeOrder("testuser", request))
                 .expectErrorMatches(e -> e instanceof ShopException
@@ -130,7 +133,7 @@ class OrderServiceTest {
 
         PlaceOrderRequest request = new PlaceOrderRequest(List.of(
                 new PlaceOrderRequest.LineItem(1L, 5)
-        ));
+        ), ADDRESS);
 
         StepVerifier.create(orderService.placeOrder("testuser", request))
                 .expectErrorMatches(e -> e instanceof ShopException
@@ -143,9 +146,9 @@ class OrderServiceTest {
 
     @Test
     void shouldReturnOrdersForUser() {
-        CustomerOrder order1 = new CustomerOrder("testuser", "PENDING", BigDecimal.valueOf(30.00));
+        CustomerOrder order1 = order("testuser", "PENDING", BigDecimal.valueOf(30.00));
         order1.setId(10L);
-        CustomerOrder order2 = new CustomerOrder("testuser", "SHIPPED", BigDecimal.valueOf(50.00));
+        CustomerOrder order2 = order("testuser", "SHIPPED", BigDecimal.valueOf(50.00));
         order2.setId(20L);
 
         when(customerOrderRepository.countByUsername("testuser"))
@@ -159,6 +162,7 @@ class OrderServiceTest {
         when(orderItemRepository.findByOrderId(20L)).thenReturn(Flux.just(
                 new OrderItem(20L, 2L, 1, BigDecimal.valueOf(50.00))
         ));
+        when(productRepository.findAllById(any(java.util.List.class))).thenReturn(Flux.empty());
 
         StepVerifier.create(orderService.getOrdersForUser("testuser", 0, 20))
                 .assertNext(result -> {
@@ -174,7 +178,7 @@ class OrderServiceTest {
 
     @Test
     void shouldReturnOrderByIdWithOwnershipCheck() {
-        CustomerOrder order = new CustomerOrder("testuser", "PENDING", BigDecimal.valueOf(25.00));
+        CustomerOrder order = order("testuser", "PENDING", BigDecimal.valueOf(25.00));
         order.setId(5L);
         order.setCreatedAt(Instant.now());
 
@@ -182,8 +186,9 @@ class OrderServiceTest {
         when(orderItemRepository.findByOrderId(5L)).thenReturn(Flux.just(
                 new OrderItem(5L, 1L, 1, BigDecimal.valueOf(25.00))
         ));
+        when(productRepository.findAllById(any(java.util.List.class))).thenReturn(Flux.empty());
 
-        StepVerifier.create(orderService.getOrder(5L, "testuser"))
+        StepVerifier.create(orderService.getOrder(5L, "testuser", false))
                 .assertNext(r -> {
                     assert r.id().equals(5L);
                     assert r.username().equals("testuser");
@@ -194,12 +199,12 @@ class OrderServiceTest {
 
     @Test
     void shouldRejectOrderForWrongUser() {
-        CustomerOrder order = new CustomerOrder("otheruser", "PENDING", BigDecimal.valueOf(25.00));
+        CustomerOrder order = order("otheruser", "PENDING", BigDecimal.valueOf(25.00));
         order.setId(5L);
 
         when(customerOrderRepository.findById(5L)).thenReturn(Mono.just(order));
 
-        StepVerifier.create(orderService.getOrder(5L, "testuser"))
+        StepVerifier.create(orderService.getOrder(5L, "testuser", false))
                 .expectErrorMatches(e -> e instanceof ShopException
                         && e.getMessage().equals("Order not found: 5"))
                 .verify();
@@ -209,9 +214,171 @@ class OrderServiceTest {
     void shouldRejectNonExistentOrder() {
         when(customerOrderRepository.findById(999L)).thenReturn(Mono.empty());
 
-        StepVerifier.create(orderService.getOrder(999L, "testuser"))
+        StepVerifier.create(orderService.getOrder(999L, "testuser", false))
                 .expectErrorMatches(e -> e instanceof ShopException
                         && e.getMessage().equals("Order not found: 999"))
                 .verify();
+    }
+
+    @Test
+    void userRefundSucceedsWhenDeliveryFailed() {
+        CustomerOrder order = order("testuser", "SHIPPED", BigDecimal.valueOf(25.00));
+        order.setId(5L);
+        order.setDeliveryStatus("FAILED");
+
+        when(customerOrderRepository.findById(5L)).thenReturn(Mono.just(order));
+        when(customerOrderRepository.save(any(CustomerOrder.class)))
+                .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(outboxRepository.save(any(OutboxEvent.class))).thenReturn(Mono.just(new OutboxEvent()));
+        when(orderItemRepository.findByOrderId(5L)).thenReturn(Flux.empty());
+        when(productRepository.findAllById(any(java.util.List.class))).thenReturn(Flux.empty());
+
+        StepVerifier.create(orderService.requestRefund(5L, "testuser", false))
+                .assertNext(r -> {
+                    assert r.id().equals(5L);
+                    assert r.status().equals("RETURNED");
+                })
+                .verifyComplete();
+
+        verify(customerOrderRepository).save(any(CustomerOrder.class));
+        verify(outboxRepository).save(argThat(e -> "RefundRequested".equals(e.getEventType())
+                && e.getPayload().contains("\"eventType\":\"RefundRequested\"")
+                && e.getPayload().contains("\"orderId\":5")
+                && e.getPayload().contains("\"username\":\"testuser\"")));
+    }
+
+    @Test
+    void userRefundRejectedWhenStatusNotShipped() {
+        CustomerOrder order = order("testuser", "PAID", BigDecimal.valueOf(25.00));
+        order.setId(5L);
+        order.setDeliveryStatus("FAILED");
+
+        when(customerOrderRepository.findById(5L)).thenReturn(Mono.just(order));
+
+        StepVerifier.create(orderService.requestRefund(5L, "testuser", false))
+                .expectErrorMatches(e -> e instanceof ShopException se
+                        && se.getStatus() == org.springframework.http.HttpStatus.CONFLICT
+                        && se.getMessage().equals("Order is not eligible for a refund"))
+                .verify();
+
+        verify(customerOrderRepository, never()).save(any());
+        verifyNoInteractions(outboxRepository);
+    }
+
+    @Test
+    void userRefundRejectedWhenDeliveryStatusNotFailed() {
+        CustomerOrder order = order("testuser", "SHIPPED", BigDecimal.valueOf(25.00));
+        order.setId(5L);
+        order.setDeliveryStatus("DELIVERED");
+
+        when(customerOrderRepository.findById(5L)).thenReturn(Mono.just(order));
+
+        StepVerifier.create(orderService.requestRefund(5L, "testuser", false))
+                .expectErrorMatches(e -> e instanceof ShopException se
+                        && se.getStatus() == org.springframework.http.HttpStatus.CONFLICT
+                        && se.getMessage().equals("Order is not eligible for a refund"))
+                .verify();
+
+        verify(customerOrderRepository, never()).save(any());
+        verifyNoInteractions(outboxRepository);
+    }
+
+    @Test
+    void userRefundRejectedForNonOwner() {
+        CustomerOrder order = order("otheruser", "SHIPPED", BigDecimal.valueOf(25.00));
+        order.setId(5L);
+        order.setDeliveryStatus("FAILED");
+
+        when(customerOrderRepository.findById(5L)).thenReturn(Mono.just(order));
+
+        StepVerifier.create(orderService.requestRefund(5L, "testuser", false))
+                .expectErrorMatches(e -> e instanceof ShopException se
+                        && se.getStatus() == org.springframework.http.HttpStatus.NOT_FOUND
+                        && se.getMessage().equals("Order not found: 5"))
+                .verify();
+
+        verify(customerOrderRepository, never()).save(any());
+        verifyNoInteractions(outboxRepository);
+    }
+
+    @Test
+    void adminRefundSucceedsFromPaid() {
+        CustomerOrder order = order("testuser", "PAID", BigDecimal.valueOf(25.00));
+        order.setId(5L);
+
+        when(customerOrderRepository.findById(5L)).thenReturn(Mono.just(order));
+        when(customerOrderRepository.save(any(CustomerOrder.class)))
+                .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(outboxRepository.save(any(OutboxEvent.class))).thenReturn(Mono.just(new OutboxEvent()));
+        when(orderItemRepository.findByOrderId(5L)).thenReturn(Flux.empty());
+        when(productRepository.findAllById(any(java.util.List.class))).thenReturn(Flux.empty());
+
+        StepVerifier.create(orderService.requestRefund(5L, "admin", true))
+                .assertNext(r -> { assert r.status().equals("RETURNED"); })
+                .verifyComplete();
+
+        verify(outboxRepository).save(argThat(e -> "RefundRequested".equals(e.getEventType())));
+    }
+
+    @Test
+    void adminRefundSucceedsFromDelivered() {
+        CustomerOrder order = order("testuser", "DELIVERED", BigDecimal.valueOf(25.00));
+        order.setId(5L);
+        order.setDeliveryStatus("DELIVERED");
+
+        when(customerOrderRepository.findById(5L)).thenReturn(Mono.just(order));
+        when(customerOrderRepository.save(any(CustomerOrder.class)))
+                .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(outboxRepository.save(any(OutboxEvent.class))).thenReturn(Mono.just(new OutboxEvent()));
+        when(orderItemRepository.findByOrderId(5L)).thenReturn(Flux.empty());
+        when(productRepository.findAllById(any(java.util.List.class))).thenReturn(Flux.empty());
+
+        StepVerifier.create(orderService.requestRefund(5L, "admin", true))
+                .assertNext(r -> { assert r.status().equals("RETURNED"); })
+                .verifyComplete();
+    }
+
+    @Test
+    void adminRefundRejectedWhenPending() {
+        CustomerOrder order = order("testuser", "PENDING", BigDecimal.valueOf(25.00));
+        order.setId(5L);
+
+        when(customerOrderRepository.findById(5L)).thenReturn(Mono.just(order));
+
+        StepVerifier.create(orderService.requestRefund(5L, "admin", true))
+                .expectErrorMatches(e -> e instanceof ShopException se
+                        && se.getStatus() == org.springframework.http.HttpStatus.CONFLICT
+                        && se.getMessage().equals("Order was never successfully paid"))
+                .verify();
+
+        verify(customerOrderRepository, never()).save(any());
+        verifyNoInteractions(outboxRepository);
+    }
+
+    @Test
+    void adminRefundRejectedWhenReimbursed() {
+        CustomerOrder order = order("testuser", "REIMBURSED", BigDecimal.valueOf(25.00));
+        order.setId(5L);
+
+        when(customerOrderRepository.findById(5L)).thenReturn(Mono.just(order));
+
+        StepVerifier.create(orderService.requestRefund(5L, "admin", true))
+                .expectErrorMatches(e -> e instanceof ShopException se
+                        && se.getStatus() == org.springframework.http.HttpStatus.CONFLICT
+                        && se.getMessage().equals("Refund already requested"))
+                .verify();
+
+        verify(customerOrderRepository, never()).save(any());
+        verifyNoInteractions(outboxRepository);
+    }
+
+    private static CustomerOrder order(String username, String status, BigDecimal total) {
+        CustomerOrder order = new CustomerOrder();
+        order.setUsername(username);
+        order.setStatus(status);
+        order.setTotal(total);
+        order.setCreatedAt(Instant.now());
+        order.setUpdatedAt(order.getCreatedAt());
+        return order;
     }
 }

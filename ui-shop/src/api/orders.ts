@@ -10,4 +10,7 @@ export const ordersApi = {
 
   placeOrder: (body: PlaceOrderRequest) =>
     request<OrderResponse>('/api/shop/orders', { method: 'POST', body: JSON.stringify(body) }),
+
+  refundOrder: (orderId: number) =>
+    request<OrderResponse>(`/api/shop/orders/${orderId}/refund`, { method: 'POST' }),
 };

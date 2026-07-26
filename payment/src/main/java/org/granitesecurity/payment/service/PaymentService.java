@@ -6,12 +6,17 @@ import com.stripe.model.PaymentIntent;
 import com.stripe.net.RequestOptions;
 import com.stripe.param.PaymentIntentCreateParams;
 import com.stripe.param.PaymentIntentSearchParams;
+import com.stripe.param.RefundCreateParams;
 import tools.jackson.databind.ObjectMapper;
 import org.granitesecurity.payment.domain.OutboxEvent;
 import org.granitesecurity.payment.domain.Payment;
 import org.granitesecurity.payment.domain.PaymentStatus;
+import org.granitesecurity.payment.domain.Refund;
+import org.granitesecurity.payment.domain.RefundStatus;
+import org.granitesecurity.payment.dto.CreatePaymentIntentResponse;
 import org.granitesecurity.payment.repository.OutboxRepository;
 import org.granitesecurity.payment.repository.PaymentRepository;
+import org.granitesecurity.payment.repository.RefundRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,7 +26,9 @@ import reactor.core.scheduler.Schedulers;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Component
@@ -32,13 +39,15 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final OutboxRepository outboxRepository;
+    private final RefundRepository refundRepository;
 
     @Value("${stripe.currency:usd}")
     private String currency;
 
-    public PaymentService(PaymentRepository paymentRepository, OutboxRepository outboxRepository) {
+    public PaymentService(PaymentRepository paymentRepository, OutboxRepository outboxRepository, RefundRepository refundRepository) {
         this.paymentRepository = paymentRepository;
         this.outboxRepository = outboxRepository;
+        this.refundRepository = refundRepository;
     }
 
     public Mono<Void> processOrderPlaced(Long orderId, BigDecimal total, String username) {
@@ -49,6 +58,123 @@ public class PaymentService {
                 }))
                 .doOnNext(existing -> log.info("Payment already exists for order {}, skipping", orderId))
                 .then();
+    }
+
+    public Mono<CreatePaymentIntentResponse> getPaymentByOrderId(Long orderId) {
+        return paymentRepository.findByOrderId(orderId)
+                .flatMap(payment -> refundRepository.findByOrderId(orderId)
+                        .map(refund -> toResponse(payment, toRefundInfo(refund)))
+                        .defaultIfEmpty(toResponse(payment, null)));
+    }
+
+    public static CreatePaymentIntentResponse toResponse(Payment payment, CreatePaymentIntentResponse.RefundInfo refund) {
+        return new CreatePaymentIntentResponse(
+                payment.getId(),
+                payment.getOrderId(),
+                payment.getStripePaymentIntentId(),
+                payment.getClientSecret(),
+                payment.getStatus(),
+                payment.getAmount(),
+                payment.getCurrency(),
+                payment.getCreatedAt(),
+                refund);
+    }
+
+    public Mono<Void> processRefundRequested(Long orderId) {
+        return paymentRepository.findByOrderId(orderId)
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.warn("Refund requested for order {} but no payment found, skipping", orderId);
+                    return Mono.empty();
+                }))
+                .flatMap(payment -> {
+                    if (!PaymentStatus.SUCCEEDED.name().equals(payment.getStatus())) {
+                        log.warn("Refund requested for order {} but payment status is {}, skipping",
+                                orderId, payment.getStatus());
+                        return Mono.empty();
+                    }
+                    return refundRepository.findByOrderId(orderId)
+                            .map(Optional::of)
+                            .defaultIfEmpty(Optional.empty())
+                            .flatMap(refundOpt -> {
+                                if (refundOpt.isPresent()) {
+                                    Refund existing = refundOpt.get();
+                                    if (RefundStatus.SUCCEEDED.name().equals(existing.getStatus())) {
+                                        log.info("Refund already succeeded for order {}, republishing PaymentRefunded event", orderId);
+                                        return publishPaymentRefundedEvent(existing);
+                                    }
+                                    log.info("Refund for order {} in status {}, retrying Stripe refund", orderId, existing.getStatus());
+                                    return executeRefund(payment, existing);
+                                }
+                                Refund refund = new Refund(orderId, payment.getId(), payment.getAmount());
+                                refund.setCreatedAt(Instant.now());
+                                refund.setUpdatedAt(Instant.now());
+                                return refundRepository.save(refund)
+                                        .flatMap(saved -> executeRefund(payment, saved));
+                            });
+                })
+                .then();
+    }
+
+    private Mono<Void> executeRefund(Payment payment, Refund refund) {
+        Long orderId = payment.getOrderId();
+        long amountCents = payment.getAmount().multiply(BigDecimal.valueOf(100)).longValue();
+
+        var params = RefundCreateParams.builder()
+                .setPaymentIntent(payment.getStripePaymentIntentId())
+                .setAmount(amountCents)
+                .build();
+
+        var options = RequestOptions.builder()
+                .setIdempotencyKey("refund-order-" + orderId)
+                .build();
+
+        return Mono.fromCallable(() -> com.stripe.model.Refund.create(params, options))
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(stripeRefund -> {
+                    refund.setStatus(RefundStatus.SUCCEEDED.name());
+                    refund.setStripeRefundId(stripeRefund.getId());
+                    refund.setUpdatedAt(Instant.now());
+                    refund.markNotNew();
+
+                    payment.setStatus(PaymentStatus.REFUNDED.name());
+                    payment.setUpdatedAt(Instant.now());
+                    payment.markNotNew();
+
+                    return refundRepository.save(refund)
+                            .then(paymentRepository.save(payment))
+                            .then(publishPaymentRefundedEvent(refund))
+                            .doOnSuccess(v -> log.info("Refunded order {} via Stripe refund {}", orderId, stripeRefund.getId()));
+                })
+                .onErrorResume(StripeException.class, e -> {
+                    log.error("Stripe API error refunding order {}: {}", orderId, e.getMessage(), e);
+                    refund.setStatus(RefundStatus.FAILED.name());
+                    refund.setUpdatedAt(Instant.now());
+                    refund.markNotNew();
+                    return refundRepository.save(refund).then();
+                });
+    }
+
+    private Mono<Void> publishPaymentRefundedEvent(Refund refund) {
+        try {
+            Map<String, Object> eventPayload = new LinkedHashMap<>();
+            eventPayload.put("orderId", refund.getOrderId());
+            eventPayload.put("status", PaymentStatus.REFUNDED.name());
+            eventPayload.put("stripeRefundId", refund.getStripeRefundId());
+            eventPayload.put("amount", refund.getAmount());
+            eventPayload.put("refundedAt", refund.getUpdatedAt() != null ? refund.getUpdatedAt() : Instant.now());
+            String json = MAPPER.writeValueAsString(eventPayload);
+            OutboxEvent outbox = new OutboxEvent(
+                    "payment",
+                    String.valueOf(refund.getOrderId()),
+                    "PaymentRefunded",
+                    json,
+                    "PENDING"
+            );
+            return outboxRepository.save(outbox).then();
+        } catch (Exception e) {
+            log.error("Failed to serialize PaymentRefunded event", e);
+            return Mono.error(e);
+        }
     }
 
     public Mono<Payment> createPaymentIntent(Long orderId, BigDecimal total, String currencyOverride, String username) {
@@ -109,7 +235,7 @@ public class PaymentService {
                 });
     }
 
-    public Mono<Payment> syncPaymentStatus(Long orderId) {
+    public Mono<CreatePaymentIntentResponse> syncPaymentStatus(Long orderId) {
         return paymentRepository.findByOrderId(orderId)
                 .switchIfEmpty(Mono.error(new RuntimeException("Payment not found for order " + orderId)))
                 .flatMap(payment -> {
@@ -120,7 +246,78 @@ public class PaymentService {
                     return Mono.fromCallable(() -> PaymentIntent.retrieve(stripePiId))
                             .subscribeOn(Schedulers.boundedElastic())
                             .flatMap(intent -> updateFromStripeStatus(payment, intent.getStatus()));
+                })
+                .flatMap(payment -> reconcileRefund(payment).thenReturn(payment))
+                .flatMap(payment -> refundRepository.findByOrderId(orderId)
+                        .map(refund -> toResponse(payment, toRefundInfo(refund)))
+                        .defaultIfEmpty(toResponse(payment, null)));
+    }
+
+    private static CreatePaymentIntentResponse.RefundInfo toRefundInfo(Refund refund) {
+        return new CreatePaymentIntentResponse.RefundInfo(
+                refund.getStripeRefundId(),
+                refund.getAmount(),
+                refund.getStatus(),
+                refund.getCreatedAt());
+    }
+
+    private Mono<Void> reconcileRefund(Payment payment) {
+        Long orderId = payment.getOrderId();
+        return refundRepository.findByOrderId(orderId)
+                .flatMap(refund -> {
+                    if (RefundStatus.SUCCEEDED.name().equals(refund.getStatus())) {
+                        return Mono.empty();
+                    }
+                    if (refund.getStripeRefundId() != null && !refund.getStripeRefundId().isBlank()) {
+                        return syncRefundFromStripe(payment, refund);
+                    }
+                    // PENDING/FAILED without a Stripe refund id — the create call never completed,
+                    // so re-attempt; the fixed idempotency key makes this safe.
+                    log.info("Re-attempting refund for order {} via /sync (status {}, no Stripe refund id)",
+                            orderId, refund.getStatus());
+                    return executeRefund(payment, refund);
                 });
+    }
+
+    private Mono<Void> syncRefundFromStripe(Payment payment, Refund refund) {
+        return Mono.fromCallable(() -> com.stripe.model.Refund.retrieve(refund.getStripeRefundId()))
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(stripeRefund -> {
+                    RefundStatus newStatus = mapStripeRefundStatus(stripeRefund.getStatus());
+                    if (newStatus == null || newStatus.name().equals(refund.getStatus())) {
+                        return Mono.<Void>empty();
+                    }
+                    refund.setStatus(newStatus.name());
+                    refund.setUpdatedAt(Instant.now());
+                    refund.markNotNew();
+
+                    Mono<Void> saveRefund = refundRepository.save(refund).then();
+                    if (newStatus != RefundStatus.SUCCEEDED) {
+                        return saveRefund;
+                    }
+                    payment.setStatus(PaymentStatus.REFUNDED.name());
+                    payment.setUpdatedAt(Instant.now());
+                    payment.markNotNew();
+                    return saveRefund
+                            .then(paymentRepository.save(payment))
+                            .then(publishPaymentRefundedEvent(refund))
+                            .doOnSuccess(v -> log.info("Refund {} for order {} reconciled to SUCCEEDED via /sync",
+                                    refund.getStripeRefundId(), payment.getOrderId()));
+                })
+                .onErrorResume(StripeException.class, e -> {
+                    log.error("Stripe API error retrieving refund {} for order {}: {}",
+                            refund.getStripeRefundId(), payment.getOrderId(), e.getMessage(), e);
+                    return Mono.empty();
+                });
+    }
+
+    private static RefundStatus mapStripeRefundStatus(String stripeStatus) {
+        return switch (stripeStatus) {
+            case "succeeded" -> RefundStatus.SUCCEEDED;
+            case "failed", "canceled" -> RefundStatus.FAILED;
+            case "pending" -> RefundStatus.PENDING;
+            default -> null;
+        };
     }
 
     private Mono<Payment> updateFromStripeStatus(Payment payment, String stripeStatus) {

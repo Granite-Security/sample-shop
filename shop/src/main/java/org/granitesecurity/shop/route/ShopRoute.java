@@ -123,6 +123,12 @@ public class ShopRoute {
             beanClass = OrderHandler.class,
             beanMethod = "getOrder"
         ),
+        @RouterOperation(
+            path = "/api/shop/orders/{id}/refund",
+            method = RequestMethod.POST,
+            beanClass = OrderHandler.class,
+            beanMethod = "refundOrder"
+        ),
     })
     public RouterFunction<ServerResponse> shopRoutes(
             GreetingsHandler greetingsHandler,
@@ -142,6 +148,7 @@ public class ShopRoute {
                 // "/orders/all" must be registered before "/orders/{id}"
                 .GET("/api/shop/orders/all", orderHandler::getAllOrders)
                 .GET("/api/shop/orders/{id}", orderHandler::getOrder)
+                .POST("/api/shop/orders/{id}/refund", orderHandler::refundOrder)
 
                 // Admin — products
                 .POST("/api/shop/products", catalogHandler::createProduct)

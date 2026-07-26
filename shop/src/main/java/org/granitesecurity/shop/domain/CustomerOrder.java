@@ -15,6 +15,8 @@ public class CustomerOrder {
     private Long id;
     private String username;
     private String status;
+    @Column("delivery_status")
+    private String deliveryStatus;
     private BigDecimal total;
     @Column("created_at")
     private Instant createdAt;

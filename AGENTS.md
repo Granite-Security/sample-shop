@@ -114,8 +114,13 @@ request paths, and do not apply R2DBC/reactor patterns inside `auth-server`.
   **delivery**.
 - Payment writes `PaymentReceived` to its own outbox → topic `payments.events`
   → shop consumes it and transitions the order to `PAID`.
+- Refund flow: `POST /api/shop/orders/{id}/refund` transitions the order to
+  `RETURNED` and shop writes `RefundRequested` to its outbox → payment performs
+  the Stripe refund and writes `PaymentRefunded` → shop consumes it and
+  transitions the order `RETURNED → REIMBURSED`. No Stripe webhook is used; the
+  existing sync endpoint also reconciles refund state.
 - Order status machine: `PENDING → PAID → SHIPPED → DELIVERED`, plus
-  `PAYMENT_FAILED`, `CANCELLED`, `RETURNED → REINBURSED`.
+  `PAYMENT_FAILED`, `CANCELLED`, `RETURNED → REIMBURSED`.
 - For local dev without a Stripe webhook, the frontend calls
   `POST /api/payments/intent/{orderId}/sync` to advance payment status
   synchronously. Event schemas are documented in `docs/events/events.md`.
