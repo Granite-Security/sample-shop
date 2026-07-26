@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router';
 import { useAuth } from '../auth';
 import { api } from '../api';
 import type { DeliveryResponse } from '../types';
@@ -158,6 +159,7 @@ export default function DeliveryManagement() {
               {d.items && <p style={{ margin: '4px 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Items: {d.items}</p>}
 
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <Link to={`/orders/${d.orderId}`} className="btn">View Order</Link>
                 {d.status === 'PENDING' && (
                   <button className="btn" onClick={() => updateStatus(d.orderId, 'DISPATCHED', 'Order dispatched')}
                     disabled={actionLoading === d.orderId}>
