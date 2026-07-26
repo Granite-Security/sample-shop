@@ -1,4 +1,11 @@
 // Mirrors the shop service contracts used by ui-shop (see ui-shop/src/types.ts).
+export interface MediaItem {
+  key: string;
+  url: string;
+  contentType: string;
+  isDefault: boolean;
+}
+
 export interface Product {
   id: number;
   name: string;
@@ -7,6 +14,9 @@ export interface Product {
   stock: number;
   categoryId: number;
   imageUrl: string;
+  // Optional (not required) so FALLBACK_PRODUCTS (editorial, client-only
+  // entries with negative ids) don't need a media field at all.
+  media?: MediaItem[];
 }
 
 export interface Category {
@@ -22,6 +32,14 @@ export interface CreateProductRequest {
   stock: number;
   categoryId: number;
   imageUrl: string;
+  media: MediaItem[];
+}
+
+export interface PresignResponse {
+  key: string;
+  uploadUrl: string;
+  publicUrl: string;
+  expiresIn: number;
 }
 
 export interface OrderItemResponse {

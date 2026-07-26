@@ -10,6 +10,8 @@ import type {
   AddressRequest,
   ProfileResponse,
   UpdateProfileRequest,
+  MediaItem,
+  PresignResponse,
 } from './types';
 
 // Same-origin calls through the gateway, exactly like ui-shop. Browsing the
@@ -96,6 +98,31 @@ export const api = {
 
   deleteProduct: (id: number) =>
     request<void>(`/api/shop/products/${id}`, { method: 'DELETE' }),
+
+  // Product media — presigned upload straight to the storage service's
+  // Garage backend, mirroring ui-shop/src/api/storage.ts.
+  presignUpload: (fileName: string, contentType: string, scope = 'products') =>
+    request<PresignResponse>('/api/storage/presign', {
+      method: 'POST',
+      body: JSON.stringify({ fileName, contentType, scope }),
+    }),
+
+  uploadProductImage: async (file: File, scope = 'products'): Promise<MediaItem> => {
+    const presigned = await api.presignUpload(file.name, file.type, scope);
+    const putResponse = await fetch(presigned.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type },
+      body: file,
+    });
+    if (!putResponse.ok) {
+      throw new Error(`Upload failed: ${putResponse.status} ${putResponse.statusText}`);
+    }
+    // Never auto-default a freshly uploaded image — the admin picks one explicitly.
+    return { key: presigned.key, url: presigned.publicUrl, contentType: file.type, isDefault: false };
+  },
+
+  deleteStorageObject: (key: string) =>
+    request<void>('/api/storage/objects', { method: 'DELETE', body: JSON.stringify({ key }) }),
 };
 
 // Editorial fallback catalog — shown when the shop backend isn't reachable

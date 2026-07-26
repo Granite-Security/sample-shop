@@ -4,6 +4,7 @@ import type { Product } from '../types';
 import { ChocolateArt, variantFor } from './ChocolateArt';
 import { HeartIcon, StarIcon } from './icons';
 import { Reveal } from './Reveal';
+import { getDefaultMedia } from '../utils/media';
 
 /** Deterministic pseudo-rating so cards look editorial without backend review data. */
 const ratingFor = (id: number) => 4.6 + (Math.abs(id * 7) % 4) / 10;
@@ -23,22 +24,33 @@ function ProductCard({ product, index }: { product: Product; index: number }) {
   const variant = variantFor(product.name, product.id);
   // hover swaps to an alternate composition of the same product
   const altSeed = product.id + 2;
+  const defaultImage = getDefaultMedia(product.media);
 
   return (
     <Reveal delay={(index % 4) * 100}>
       <article className="group flex h-full flex-col">
         <div className="relative aspect-square overflow-hidden rounded-lg bg-espresso transition-all duration-700 ease-luxe group-hover:-translate-y-1.5 group-hover:shadow-xl group-hover:shadow-cocoa/20">
           <Link to={`/products/${product.id}`} aria-label={`View ${product.name}`} className="absolute inset-0">
-            <ChocolateArt
-              seed={product.id}
-              variant={variant}
-              className="absolute inset-0 h-full w-full transition-opacity duration-700 group-hover:opacity-0"
-            />
-            <ChocolateArt
-              seed={altSeed}
-              variant={variant}
-              className="absolute inset-0 h-full w-full opacity-0 transition-opacity duration-700 group-hover:opacity-100"
-            />
+            {defaultImage ? (
+              <img
+                src={defaultImage.url}
+                alt={product.name}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <>
+                <ChocolateArt
+                  seed={product.id}
+                  variant={variant}
+                  className="absolute inset-0 h-full w-full transition-opacity duration-700 group-hover:opacity-0"
+                />
+                <ChocolateArt
+                  seed={altSeed}
+                  variant={variant}
+                  className="absolute inset-0 h-full w-full opacity-0 transition-opacity duration-700 group-hover:opacity-100"
+                />
+              </>
+            )}
           </Link>
 
           {badge && (
