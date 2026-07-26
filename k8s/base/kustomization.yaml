@@ -17,6 +17,7 @@ resources:
   - profile.yaml
   - delivery.yaml
   - garage.yaml
+  - garage-webui.yaml
   - storage.yaml
   - ui-shop.yaml
 

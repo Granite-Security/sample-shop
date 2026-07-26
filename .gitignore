@@ -9,3 +9,4 @@ k8s/hetzner/app/secrets-patch.yaml
 k8s/hetzner/app-chocolate/secrets-patch.yaml
 k8s/hetzner/secrets.info
 k8s/hetzner/app-multi/secrets-patch.yaml
+kimi-export-session_-20260726-184213.md
