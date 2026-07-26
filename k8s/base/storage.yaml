@@ -37,7 +37,7 @@ spec:
             - sh
             - -c
             - >
-              until curl -sf http://garage:3900/;
+              until curl -s -o /dev/null http://garage:3900/;
               do echo "waiting for garage..."; sleep 3; done
       containers:
         - name: storage
@@ -104,13 +104,13 @@ spec:
             httpGet:
               path: /actuator/health
               port: 8065
-            initialDelaySeconds: 15
+            initialDelaySeconds: 30
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /actuator/health
               port: 8065
-            initialDelaySeconds: 30
+            initialDelaySeconds: 90
             periodSeconds: 20
 ---
 apiVersion: v1

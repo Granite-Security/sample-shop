@@ -29,10 +29,13 @@ data:
     [s3_web]
     bind_addr = "[::]:3902"
     index = "index.html"
-    # No root_domain (unlike local dev's ".localhost"): on the cluster the
-    # bucket is named after its domain (media.granite-security.org) and Garage
-    # matches the bare Host header directly to that bucket name — see
-    # docs/plans/storage.md step 1 status note on the bare-Host rule.
+    # root_domain is mandatory in the TOML schema (Garage errors out at
+    # startup without it) but left empty on purpose: unlike local dev's
+    # ".localhost" suffix, on the cluster the bucket is named after its domain
+    # (media.granite-security.org) and Garage matches the bare Host header
+    # directly to that bucket name — see docs/plans/storage.md step 1 status
+    # note on the bare-Host rule.
+    root_domain = ""
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -69,7 +72,10 @@ spec:
       containers:
         - name: garage
           image: dxflrs/garage:v2.3.0
-          args: ["server"]
+          # No args/command override: the image's own CMD is "/garage server"
+          # with no separate ENTRYPOINT, so setting args here would replace
+          # that whole CMD and try to exec a literal "server" binary. Matches
+          # root compose.yaml's garage service, which also leaves this unset.
           ports:
             - containerPort: 3900 # S3 API — cluster-internal (presigned uploads route
               #                     through a public listener on the same port, see
