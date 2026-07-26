@@ -49,13 +49,13 @@ images:
     newTag: 1598f8bb48eec598358165933be8281bc6861d33
   - name: granite-profile
     newName: docker.io/moldovean/granite-profile
-    newTag: b7a52aa6e601e7d2c98bacb715d733c45ff1d558
+    newTag: 5e695e4c9d3b47dd24d7a91e32b273e49103c85d
   - name: granite-delivery
     newName: docker.io/moldovean/granite-delivery
     newTag: latest
   - name: granite-ui-shop
     newName: docker.io/moldovean/granite-ui-shop
-    newTag: bff708c2d9af88486dfdec814a67d3fecf0c498a
+    newTag: 5e695e4c9d3b47dd24d7a91e32b273e49103c85d
   - name: granite-ui-demo
     newName: docker.io/moldovean/granite-ui-demo
     newTag: b7a52aa6e601e7d2c98bacb715d733c45ff1d558
