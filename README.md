@@ -168,6 +168,7 @@ Order placed ──► Outbox (shop DB) ──► Kafka (orders.events) ──�
 - **Order → Payment:** The shop writes an `OrderPlaced` event to an outbox table, which Kafka relays to the payment service. The payment service creates a Stripe PaymentIntent asynchronously.
 - **Payment → Order:** After Stripe confirms the payment (via webhook or sync endpoint), the payment service emits a `PaymentReceived` event to Kafka. The shop consumes it and transitions the order to `PAID`.
 - **Frontend:** The React SPA polls for the `clientSecret`, then completes payment client-side with Stripe Elements. A sync endpoint (`POST /api/payments/intent/{orderId}/sync`) is used for local development when Stripe webhooks aren't available.
+- **Refunds:** `POST /api/shop/orders/{id}/refund` (shop) transitions the order to `RETURNED` and emits a `RefundRequested` event. The payment service consumes it, performs the Stripe refund, and emits `PaymentRefunded`; the shop then transitions the order `RETURNED → REIMBURSED`. No Stripe webhook is used — the sync endpoint above also reconciles refund state.
 
 | Kafka topic | Producer | Consumers |
 |-------------|----------|-----------|
@@ -183,6 +184,7 @@ Order placed ──► Outbox (shop DB) ──► Kafka (orders.events) ──�
 | `/api/shop/products` | GET public, POST/DELETE ADMIN | Shop service |
 | `/api/shop/categories` | GET public, POST/DELETE ADMIN | Shop service |
 | `/api/shop/orders` | JWT required | Shop service (token relayed) |
+| `/api/shop/orders/{id}/refund` | JWT required (admin: any paid order; user: own order, failed delivery only) | Shop service (token relayed) |
 | `/api/payments/intent/**` | Public (clientSecret fetch) | Payment service |
 | `/api/payments/webhook` | Public (Stripe signature) | Payment service |
 | `/api/delivery/**` | JWT required | Delivery service (token relayed) |

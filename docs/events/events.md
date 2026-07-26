@@ -50,6 +50,7 @@ Every event published to Kafka uses the following envelope stored as Avro in the
 |---|---|---|---|---|
 | `OrderPlaced` | orderId (string) | hash(key) → partition | 7 days | [OrderPlaced](#orderplaced) |
 | `OrderCancelled` | orderId (string) | hash(key) → partition | 7 days | [OrderCancelled](#ordercancelled) |
+| `RefundRequested` | orderId (string) | hash(key) → partition | 7 days | [RefundRequested](#refundrequested) |
 
 **Key** = order id (UUID string) — all events for the same order land in the same partition, preserving order.
 
@@ -98,6 +99,26 @@ Every event published to Kafka uses the following envelope stored as Avro in the
 }
 ```
 
+#### RefundRequested
+
+Published when a refund is accepted via `POST /api/shop/orders/{id}/refund`
+(order transitions to `RETURNED`). Consumed by the payment service, which
+performs the Stripe refund.
+
+```avro
+{
+  "type": "record",
+  "name": "RefundRequested",
+  "namespace": "com.granitesecurity.event.order",
+  "fields": [
+    { "name": "eventType", "type": "string", "doc": "RefundRequested" },
+    { "name": "orderId",   "type": "string", "doc": "Order UUID" },
+    { "name": "total",     "type": "float",  "doc": "Amount to refund (order grand total)" },
+    { "name": "username",  "type": "string", "doc": "Username / customer identifier" }
+  ]
+}
+```
+
 ---
 
 ### `payments.events`
@@ -106,6 +127,7 @@ Every event published to Kafka uses the following envelope stored as Avro in the
 |---|---|---|---|---|
 | `PaymentReceived` | orderId (string) | hash(key) → partition | 7 days | [PaymentReceived](#paymentreceived) |
 | `PaymentFailed` | orderId (string) | hash(key) → partition | 7 days | [PaymentFailed](#paymentfailed) |
+| `PaymentRefunded` | orderId (string) | hash(key) → partition | 7 days | [PaymentRefunded](#paymentrefunded) |
 
 #### PaymentReceived
 
@@ -134,6 +156,27 @@ Every event published to Kafka uses the following envelope stored as Avro in the
     { "name": "orderId",  "type": "string", "doc": "Order UUID" },
     { "name": "reason",   "type": "string", "doc": "Failure reason / error code" },
     { "name": "failedAt", "type": "string", "doc": "ISO-8601 timestamp" }
+  ]
+}
+```
+
+#### PaymentRefunded
+
+Published after a successful Stripe refund (or republished if a SUCCEEDED
+refund already exists for the order — idempotent, Stripe is not called again).
+The shop consumes it and transitions the order `RETURNED → REIMBURSED`.
+
+```avro
+{
+  "type": "record",
+  "name": "PaymentRefunded",
+  "namespace": "com.granitesecurity.event.payment",
+  "fields": [
+    { "name": "orderId",        "type": "string", "doc": "Order UUID" },
+    { "name": "status",         "type": "string", "doc": "REFUNDED" },
+    { "name": "stripeRefundId", "type": "string", "doc": "Stripe refund ID (re_...)" },
+    { "name": "amount",         "type": "float",  "doc": "Amount refunded" },
+    { "name": "refundedAt",     "type": "string", "doc": "ISO-8601 timestamp" }
   ]
 }
 ```

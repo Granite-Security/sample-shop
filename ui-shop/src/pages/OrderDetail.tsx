@@ -1,18 +1,23 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router';
 import { api } from '../api';
+import { useAuth } from '../auth';
 import type { OrderResponse, CreatePaymentIntentResponse, DeliveryResponse, TrackingDetailResponse } from '../types';
 
 const POLL_INTERVAL = 5000;
 
 export default function OrderDetail() {
   const { id } = useParams();
+  const { isAdmin } = useAuth();
   const [order, setOrder] = useState<OrderResponse | null>(null);
   const [payment, setPayment] = useState<CreatePaymentIntentResponse | null>(null);
   const [delivery, setDelivery] = useState<DeliveryResponse | null>(null);
   const [tracking, setTracking] = useState<TrackingDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refunding, setRefunding] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fetchRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     if (!id) return;
@@ -33,7 +38,11 @@ export default function OrderDetail() {
           setDelivery(d);
           setTracking(t);
           setLoading(false);
-          if (o.status !== 'PENDING' && o.status !== 'PROCESSING') {
+          if (o.status === 'RETURNED') {
+            // No Stripe webhooks in this stack — sync reconciles the refund state.
+            api.payments.syncPaymentIntent(orderId).catch(() => null);
+          }
+          if (o.status !== 'PENDING' && o.status !== 'PROCESSING' && o.status !== 'RETURNED') {
             if (pollRef.current) {
               clearInterval(pollRef.current);
               pollRef.current = null;
@@ -46,6 +55,7 @@ export default function OrderDetail() {
         });
     };
 
+    fetchRef.current = fetch;
     fetch();
     pollRef.current = setInterval(fetch, POLL_INTERVAL);
 
@@ -67,6 +77,20 @@ export default function OrderDetail() {
   if (!order) return <div className="page"><p>Order not found.</p></div>;
 
   const statusClass = `status status-${order.status.toLowerCase()}`;
+  const conditionsMet = payment?.status === 'SUCCEEDED' && delivery?.status === 'FAILED';
+
+  const handleRefund = () => {
+    if (!window.confirm(`Refund the full order total of $${Number(order.total).toFixed(2)}? This cannot be undone.`)) return;
+    setRefunding(true);
+    api.orders.refundOrder(order.id)
+      .then(o => {
+        setError(null);
+        setOrder(o);
+        fetchRef.current();
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setRefunding(false));
+  };
 
   return (
     <div className="page order-detail-page">
@@ -78,7 +102,7 @@ export default function OrderDetail() {
             Delivery: {delivery.status}
           </span>
         )}
-        {(order.status === 'PENDING' || order.status === 'PROCESSING') && (
+        {(order.status === 'PENDING' || order.status === 'PROCESSING' || order.status === 'RETURNED') && (
           <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
             (refreshing…)
           </span>
@@ -166,10 +190,27 @@ export default function OrderDetail() {
           ))}
         </tbody>
       </table>
-      <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+      {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
+      <div style={{ display: 'flex', gap: 12, marginTop: 16, alignItems: 'center' }}>
         <Link to="/orders" className="btn">Back to Orders</Link>
         {payment && payment.status !== 'SUCCEEDED' && !TERMINAL_ORDER_STATUSES.includes(order.status) && (
           <Link to={`/orders/${order.id}/pay`} className="btn">Retry Payment</Link>
+        )}
+        {payment?.refund?.status === 'SUCCEEDED' && (
+          <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+            Refunded ${Number(payment.refund.amount).toFixed(2)} on {new Date(payment.refund.createdAt).toLocaleDateString()}
+          </span>
+        )}
+        {payment?.refund?.status !== 'SUCCEEDED' && (order.status === 'RETURNED' || !!payment?.refund) && (
+          <button className="btn" disabled style={{ background: '#e74c3c', color: '#fff', opacity: 0.7 }}>
+            Refund processing…
+          </button>
+        )}
+        {payment && !payment.refund && order.status !== 'RETURNED' && order.status !== 'REIMBURSED' && (isAdmin || conditionsMet) && (
+          <button className="btn" style={{ background: '#e74c3c', color: '#fff' }}
+            onClick={handleRefund} disabled={refunding}>
+            {refunding ? 'Refunding…' : 'Refund'}
+          </button>
         )}
       </div>
     </div>

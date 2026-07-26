@@ -179,7 +179,12 @@ class EventConsumerIntegrationTest {
     // ── helpers ───────────────────────────────────────────────────
 
     private CustomerOrder seedOrder(String status) {
-        CustomerOrder order = new CustomerOrder("testuser", status, BigDecimal.valueOf(99.99));
+        CustomerOrder order = new CustomerOrder();
+        order.setUsername("testuser");
+        order.setStatus(status);
+        order.setTotal(BigDecimal.valueOf(99.99));
+        order.setCreatedAt(java.time.Instant.now());
+        order.setUpdatedAt(order.getCreatedAt());
         return customerOrderRepository.save(order).block();
     }
 

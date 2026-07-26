@@ -85,7 +85,7 @@ class RepositoryTest extends AbstractTestcontainers {
     void shouldMapSnakeCaseColumns() {
         var category = categoryRepository.save(new Category("Books", null)).block();
         var product = productRepository.save(new Product("Reactive Spring", BigDecimal.valueOf(44.99), 20, category.getId())).block();
-        var order = customerOrderRepository.save(new CustomerOrder("buyer", "PENDING", BigDecimal.valueOf(89.98))).block();
+        var order = customerOrderRepository.save(buyerOrder()).block();
         var item = new OrderItem(order.getId(), product.getId(), 2, BigDecimal.valueOf(44.99));
 
         StepVerifier.create(orderItemRepository.save(item))
@@ -100,7 +100,7 @@ class RepositoryTest extends AbstractTestcontainers {
     void shouldFindOrderItemsByOrderId() {
         var category = categoryRepository.save(new Category("Books", null)).block();
         var product = productRepository.save(new Product("Reactive Spring", BigDecimal.valueOf(44.99), 20, category.getId())).block();
-        var order = customerOrderRepository.save(new CustomerOrder("buyer", "PENDING", BigDecimal.valueOf(89.98))).block();
+        var order = customerOrderRepository.save(buyerOrder()).block();
 
         var item = new OrderItem(order.getId(), product.getId(), 2, BigDecimal.valueOf(44.99));
 
@@ -119,7 +119,10 @@ class RepositoryTest extends AbstractTestcontainers {
 
     @Test
     void shouldFindOrdersByUsername() {
-        var order = new CustomerOrder("testuser", "PENDING", BigDecimal.valueOf(49.99));
+        var order = new CustomerOrder();
+        order.setUsername("testuser");
+        order.setStatus("PENDING");
+        order.setTotal(BigDecimal.valueOf(49.99));
 
         StepVerifier.create(customerOrderRepository.save(order))
                 .assertNext(saved -> {
@@ -135,5 +138,15 @@ class RepositoryTest extends AbstractTestcontainers {
         StepVerifier.create(customerOrderRepository.findByUsername("other"))
                 .expectNextCount(0)
                 .verifyComplete();
+    }
+
+    private static CustomerOrder buyerOrder() {
+        CustomerOrder order = new CustomerOrder();
+        order.setUsername("buyer");
+        order.setStatus("PENDING");
+        order.setTotal(BigDecimal.valueOf(89.98));
+        order.setCreatedAt(java.time.Instant.now());
+        order.setUpdatedAt(order.getCreatedAt());
+        return order;
     }
 }

@@ -77,9 +77,33 @@ public class OrderHandler {
     })
     public Mono<ServerResponse> getOrder(ServerRequest request) {
         Long id = Long.valueOf(request.pathVariable("id"));
-        return getUsername(request)
-                .flatMap(username -> orderService.getOrder(id, username))
+        return request.principal()
+                .cast(Authentication.class)
+                .flatMap(auth -> orderService.getOrder(
+                        id, ((Jwt) auth.getCredentials()).getSubject(), isAdmin(auth)))
                 .flatMap(order -> ServerResponse.ok().bodyValue(order));
+    }
+
+    @Operation(operationId = "refundOrder", summary = "Request a refund for an order", description = "Users can refund an order whose delivery failed; admins can refund any paid order")
+    @SecurityRequirement(name = "bearer-jwt")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Refund requested — order marked RETURNED"),
+            @ApiResponse(responseCode = "404", description = "Order not found or not owned by user", content = @Content()),
+            @ApiResponse(responseCode = "409", description = "Order is not eligible for a refund", content = @Content()),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content())
+    })
+    public Mono<ServerResponse> refundOrder(ServerRequest request) {
+        Long id = Long.valueOf(request.pathVariable("id"));
+        return request.principal()
+                .cast(Authentication.class)
+                .flatMap(auth -> orderService.requestRefund(
+                        id, ((Jwt) auth.getCredentials()).getSubject(), isAdmin(auth)))
+                .flatMap(order -> ServerResponse.ok().bodyValue(order));
+    }
+
+    private static boolean isAdmin(Authentication auth) {
+        return auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
     }
 
     private Mono<String> getUsername(ServerRequest request) {

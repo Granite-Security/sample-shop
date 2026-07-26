@@ -12,5 +12,13 @@ public record CreatePaymentIntentResponse(
     String status,
     BigDecimal amount,
     String currency,
-    Instant createdAt
-) {}
+    Instant createdAt,
+    RefundInfo refund
+) {
+    public record RefundInfo(
+        String stripeRefundId,
+        BigDecimal amount,
+        String status,
+        Instant createdAt
+    ) {}
+}

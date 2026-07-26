@@ -26,6 +26,16 @@ public class OrderPlacedConsumer {
     void onOrderPlaced(String message) {
         try {
             Map<String, Object> data = MAPPER.readValue(message, Map.class);
+            if ("RefundRequested".equals(data.get("eventType"))) {
+                Long refundOrderId = parseLong(data.get("orderId"));
+                if (refundOrderId == null) {
+                    log.warn("RefundRequested event missing orderId: {}", message);
+                    return;
+                }
+                log.info("Processing RefundRequested event for order {}", refundOrderId);
+                paymentService.processRefundRequested(refundOrderId).block();
+                return;
+            }
             Long orderId = parseLong(data.get("orderId"));
             if (orderId == null) {
                 log.warn("OrderPlaced event missing orderId: {}", message);

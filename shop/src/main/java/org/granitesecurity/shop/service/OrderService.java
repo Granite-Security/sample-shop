@@ -186,17 +186,77 @@ public class OrderService {
                 .map(tuple -> new PagedResult<>(tuple.getT2(), tuple.getT1(), page, size));
     }
 
-    public Mono<OrderResponse> getOrder(Long id, String username) {
+    public Mono<OrderResponse> getOrder(Long id, String username, boolean isAdmin) {
         return customerOrderRepository.findById(id)
                 .switchIfEmpty(Mono.error(
                         new ShopException("Order not found: " + id, HttpStatus.NOT_FOUND, "Not Found")))
                 .flatMap(order -> {
-                    if (!order.getUsername().equals(username)) {
+                    if (!isAdmin && !order.getUsername().equals(username)) {
                         return Mono.error(
                                 new ShopException("Order not found: " + id, HttpStatus.NOT_FOUND, "Not Found"));
                     }
                     return enrichOrder(order);
                 });
+    }
+
+    @Transactional
+    public Mono<OrderResponse> requestRefund(Long orderId, String username, boolean isAdmin) {
+        return customerOrderRepository.findById(orderId)
+                .switchIfEmpty(Mono.error(
+                        new ShopException("Order not found: " + orderId, HttpStatus.NOT_FOUND, "Not Found")))
+                .flatMap(order -> {
+                    if (!isAdmin && !order.getUsername().equals(username)) {
+                        return Mono.error(new ShopException(
+                                "Order not found: " + orderId, HttpStatus.NOT_FOUND, "Not Found"));
+                    }
+                    OrderStatus current = OrderStatus.valueOf(order.getStatus());
+                    if (isAdmin) {
+                        if (current == OrderStatus.RETURNED || current == OrderStatus.REIMBURSED) {
+                            return Mono.error(new ShopException(
+                                    "Refund already requested", HttpStatus.CONFLICT, "Refund not eligible"));
+                        }
+                        if (current != OrderStatus.PAID && current != OrderStatus.SHIPPED
+                                && current != OrderStatus.DELIVERED) {
+                            return Mono.error(new ShopException(
+                                    "Order was never successfully paid", HttpStatus.CONFLICT, "Refund not eligible"));
+                        }
+                    } else if (current != OrderStatus.SHIPPED || !"FAILED".equals(order.getDeliveryStatus())) {
+                        return Mono.error(new ShopException(
+                                "Order is not eligible for a refund", HttpStatus.CONFLICT, "Refund not eligible"));
+                    }
+                    order.setStatus(current.transitionTo(OrderStatus.RETURNED).name());
+                    order.setUpdatedAt(Instant.now());
+                    return customerOrderRepository.save(order)
+                            .flatMap(saved -> outboxRepository.save(createRefundOutboxEvent(saved))
+                                    .then(enrichOrder(saved)));
+                });
+    }
+
+    public Mono<Void> updateDeliveryStatus(Long orderId, String status) {
+        return customerOrderRepository.findById(orderId)
+                .flatMap(order -> {
+                    if (status.equals(order.getDeliveryStatus())) {
+                        return Mono.empty();
+                    }
+                    order.setDeliveryStatus(status);
+                    order.setUpdatedAt(Instant.now());
+                    return customerOrderRepository.save(order);
+                })
+                .then();
+    }
+
+    private OutboxEvent createRefundOutboxEvent(CustomerOrder order) {
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("eventType", "RefundRequested");
+            payload.put("orderId", order.getId());
+            payload.put("total", order.getTotal());
+            payload.put("username", order.getUsername());
+            String json = OBJECT_MAPPER.writeValueAsString(payload);
+            return new OutboxEvent("order", String.valueOf(order.getId()), "RefundRequested", json, "PENDING");
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to serialize outbox payload", e);
+        }
     }
 
     public Mono<Void> updateOrderStatus(Long orderId, OrderStatus targetStatus) {

@@ -117,8 +117,47 @@ class EventConsumerTest {
         verify(customerOrderRepository, times(3)).save(any());
     }
 
+    @Test
+    void deliveryFailedPersistsDeliveryStatus() {
+        CustomerOrder order = orderWithStatus(OrderStatus.SHIPPED);
+        when(customerOrderRepository.findById(1L)).thenReturn(Mono.just(order));
+        when(customerOrderRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+
+        eventConsumer.onDeliveryEvent(json(Map.of("orderId", 1, "status", "FAILED")));
+
+        assertEquals("FAILED", order.getDeliveryStatus());
+        assertEquals("SHIPPED", order.getStatus());
+        verify(customerOrderRepository).save(any());
+    }
+
+    @Test
+    void deliveryDispatchedPersistsDeliveryStatus() {
+        CustomerOrder order = orderWithStatus(OrderStatus.PAID);
+        when(customerOrderRepository.findById(1L)).thenReturn(Mono.just(order));
+        when(customerOrderRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+
+        eventConsumer.onDeliveryEvent(json(Map.of("orderId", 1, "status", "DISPATCHED")));
+
+        assertEquals("SHIPPED", order.getStatus());
+        assertEquals("DISPATCHED", order.getDeliveryStatus());
+    }
+
+    @Test
+    void paymentRefundedTransitionsToReimbursed() {
+        CustomerOrder order = orderWithStatus(OrderStatus.RETURNED);
+        when(customerOrderRepository.findById(1L)).thenReturn(Mono.just(order));
+        when(customerOrderRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+
+        eventConsumer.onPaymentEvent(json(Map.of("orderId", 1, "status", "REFUNDED")));
+
+        assertEquals("REIMBURSED", order.getStatus());
+    }
+
     private static CustomerOrder orderWithStatus(OrderStatus status) {
-        CustomerOrder order = new CustomerOrder("user", status.name(), BigDecimal.valueOf(99.99));
+        CustomerOrder order = new CustomerOrder();
+        order.setUsername("user");
+        order.setStatus(status.name());
+        order.setTotal(BigDecimal.valueOf(99.99));
         order.setId(1L);
         return order;
     }
