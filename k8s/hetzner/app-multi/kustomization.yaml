@@ -55,7 +55,7 @@ images:
     newTag: latest
   - name: granite-ui-shop
     newName: docker.io/moldovean/granite-ui-shop
-    newTag: 1598f8bb48eec598358165933be8281bc6861d33
+    newTag: f329361899ee12fb410f04744a5e9507795d7779
   - name: granite-ui-demo
     newName: docker.io/moldovean/granite-ui-demo
     newTag: b7a52aa6e601e7d2c98bacb715d733c45ff1d558
