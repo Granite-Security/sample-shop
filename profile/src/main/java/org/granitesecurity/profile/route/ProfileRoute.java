@@ -1,6 +1,7 @@
 package org.granitesecurity.profile.route;
 
 import org.granitesecurity.profile.handler.AddressHandler;
+import org.granitesecurity.profile.handler.InternalNotificationHandler;
 import org.granitesecurity.profile.handler.ProfileHandler;
 import org.granitesecurity.profile.handler.UserFileHandler;
 import org.springframework.context.annotation.Bean;
@@ -16,7 +17,8 @@ public class ProfileRoute {
     public RouterFunction<ServerResponse> profileRoutes(
             ProfileHandler profileHandler,
             AddressHandler addressHandler,
-            UserFileHandler userFileHandler) {
+            UserFileHandler userFileHandler,
+            InternalNotificationHandler internalNotificationHandler) {
         return RouterFunctions.route()
                 .GET("/api/profiles/me", profileHandler::getMe)
                 .PUT("/api/profiles/me", profileHandler::updateMe)
@@ -28,6 +30,8 @@ public class ProfileRoute {
                 .POST("/api/profiles/me/files", userFileHandler::register)
                 .DELETE("/api/profiles/me/files/{id}", userFileHandler::delete)
                 .GET("/api/profiles/internal/{username}/addresses/{id}", addressHandler::getAddressById)
+                .POST("/api/profiles/internal/{username}/notify/password-changed",
+                        internalNotificationHandler::passwordChanged)
                 // Admin endpoints — registered after the explicit /api/profiles/me*
                 // routes so {username} never shadows "me".
                 .GET("/api/profiles", profileHandler::listAll)

@@ -140,6 +140,8 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - SERVER_PORT=9090
+      - MICROSERVICES_PROFILE_URI=http://profile:8064
+      - AUTH_SERVER_TOKEN_URI=http://auth-server:9090/auth/oauth2/token
     healthcheck:
       test: ["CMD", "wget", "--spider", "http://localhost:9090/auth/login"]
       interval: 10s
@@ -257,6 +259,8 @@ services:
       - PROFILE_JDBC_PASSWORD=secret
       - AUTH_ISSUER_URI=http://gateway:8080/auth
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - RESEND_FROM=Granite Security <no-reply@notify.granite-security.org>
     depends_on:
       gateway:
         condition: service_started

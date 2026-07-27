@@ -49,3 +49,11 @@ app:
       # that resolve to the same secret, which crashed auth-server in prod
       # when both fell back to their unset-env-var defaults simultaneously.
       secret: ${INTERNAL_CLIENT_SECRET_ENCODED:{noop}internal-secret}
+      # Raw counterpart of the encoded secret above — same value profile
+      # already sends as its own client-secret when calling storage. Used
+      # when auth-server itself acts as this client to call profile.
+      raw-secret: ${INTERNAL_CLIENT_SECRET:internal-secret}
+
+microservices:
+  profile:
+    uri: ${MICROSERVICES_PROFILE_URI:http://localhost:8064}
