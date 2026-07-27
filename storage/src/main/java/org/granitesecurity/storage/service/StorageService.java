@@ -48,7 +48,7 @@ public class StorageService {
     }
 
     public Mono<PresignResponse> presign(String fileName, String contentType, String scope,
-                                          Collection<String> authorities) {
+                                          Collection<String> authorities, String username) {
         return Mono.fromCallable(() -> {
             if (fileName == null || fileName.isBlank()) {
                 throw new StorageException("fileName is required");
@@ -62,7 +62,14 @@ public class StorageService {
                 throw new StorageException("contentType must be one of " + allowedContentTypes);
             }
 
-            String key = scope + "/" + UUID.randomUUID() + "/" + sanitize(fileName);
+            // Only user-files gets a per-uploader folder — products has no
+            // per-admin ownership concept, so a username segment there would
+            // just be noise. The bucket is public, so this does mean a
+            // user's own username is visible in their own file URLs; that's
+            // an accepted, deliberate trade-off for browsable per-user
+            // folders in Garage, not an oversight.
+            String prefix = USER_FILES_SCOPE.equals(scope) ? scope + "/" + sanitizeSegment(username) : scope;
+            String key = prefix + "/" + UUID.randomUUID() + "/" + sanitize(fileName);
 
             PresignedPutObjectRequest presigned = s3Presigner.presignPutObject(PutObjectPresignRequest.builder()
                     .signatureDuration(PRESIGN_EXPIRY)
@@ -118,5 +125,20 @@ public class StorageService {
         String base = fileName.replaceAll(".*[/\\\\]", "");
         String sanitized = base.replaceAll("[^a-zA-Z0-9._-]", "_").replaceAll("^\\.+", "");
         return sanitized.isBlank() ? "file" : sanitized;
+    }
+
+    // Usernames are already restricted to [a-zA-Z0-9._-] at registration, but
+    // this key ends up in a public URL, so treat it as untrusted input here
+    // too rather than relying solely on that upstream validation.
+    private String sanitizeSegment(String value) {
+        if (value == null) {
+            return "user";
+        }
+        // Replace disallowed chars first, then collapse any run of 2+ dots
+        // (wherever it lands, not just at the start) so a value like
+        // "../../etc/passwd" can't reassemble a ".." traversal segment
+        // after slashes are turned into underscores.
+        String sanitized = value.replaceAll("[^a-zA-Z0-9._-]", "_").replaceAll("\\.{2,}", "_");
+        return sanitized.isBlank() ? "user" : sanitized;
     }
 }

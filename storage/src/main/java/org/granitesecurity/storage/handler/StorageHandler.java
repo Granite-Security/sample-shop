@@ -5,6 +5,7 @@ import org.granitesecurity.storage.dto.PresignRequest;
 import org.granitesecurity.storage.service.StorageService;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
@@ -25,9 +26,11 @@ public class StorageHandler {
     public Mono<ServerResponse> presign(ServerRequest request) {
         var bodyMono = request.bodyToMono(PresignRequest.class);
         var authoritiesMono = getAuthorities(request);
-        return bodyMono.zipWith(authoritiesMono)
+        var usernameMono = getUsername(request);
+        return Mono.zip(bodyMono, authoritiesMono, usernameMono)
                 .flatMap(tuple -> storageService.presign(
-                        tuple.getT1().fileName(), tuple.getT1().contentType(), tuple.getT1().scope(), tuple.getT2()))
+                        tuple.getT1().fileName(), tuple.getT1().contentType(), tuple.getT1().scope(),
+                        tuple.getT2(), tuple.getT3()))
                 .flatMap(response -> ServerResponse.ok().bodyValue(response));
     }
 
@@ -45,5 +48,11 @@ public class StorageHandler {
                 .map(auth -> auth.getAuthorities().stream()
                         .map(GrantedAuthority::getAuthority)
                         .collect(Collectors.toSet()));
+    }
+
+    private Mono<String> getUsername(ServerRequest request) {
+        return request.principal()
+                .cast(Authentication.class)
+                .map(auth -> ((Jwt) auth.getCredentials()).getSubject());
     }
 }
