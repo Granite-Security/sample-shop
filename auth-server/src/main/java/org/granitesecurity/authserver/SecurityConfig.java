@@ -186,14 +186,17 @@ public class SecurityConfig {
             throws Exception {
         http
                 .authorizeHttpRequests((authorize) -> authorize
-                        .requestMatchers(HttpMethod.POST, "/api/register").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/register", "/api/password-reset/request",
+                                "/api/password-reset/confirm").permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 )
-                // The registration endpoint is unauthenticated, creates a brand-new
-                // principal, and has no session or ambient authority for a forged
-                // request to ride on, so it's safe to exempt from CSRF.
-                .csrf((csrf) -> csrf.ignoringRequestMatchers("/api/register"))
+                // These endpoints are all unauthenticated, create/act on a
+                // principal with no session or ambient authority for a forged
+                // request to ride on, so it's safe to exempt them from CSRF —
+                // same reasoning as /api/register already documented here.
+                .csrf((csrf) -> csrf.ignoringRequestMatchers("/api/register", "/api/password-reset/request",
+                        "/api/password-reset/confirm"))
                 // Form login handles the redirect to the login page from the
                 // authorization server filter chain
                 .formLogin(Customizer.withDefaults())

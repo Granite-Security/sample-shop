@@ -90,4 +90,36 @@ class EmailServiceTest {
 
         assert calls.get() == 2;
     }
+
+    @Test
+    void passwordResetRequestedDisabledWhenApiKeyBlank() {
+        ResendClient resendClient = new ResendClient(WebClient.builder(), BASE_URL, "", FROM);
+        EmailService emailService = new EmailService(resendClient, "");
+
+        StepVerifier.create(emailService.sendPasswordResetRequested(
+                        "alice@example.com", "Alice", "https://granite-security.org/reset-password/confirm?token=abc"))
+                .expectNext(false)
+                .verifyComplete();
+    }
+
+    @Test
+    void passwordResetRequestedReturnsTrueOn200() {
+        AtomicInteger calls = new AtomicInteger();
+        WebClient.Builder builder = WebClient.builder().exchangeFunction(request -> {
+            calls.incrementAndGet();
+            return Mono.just(ClientResponse.create(HttpStatus.OK)
+                    .header("Content-Type", "application/json")
+                    .body("{\"id\":\"msg_789\"}")
+                    .build());
+        });
+        ResendClient resendClient = new ResendClient(builder, BASE_URL, "re_test", FROM);
+        EmailService emailService = new EmailService(resendClient, "re_test");
+
+        StepVerifier.create(emailService.sendPasswordResetRequested(
+                        "alice@example.com", "Alice", "https://granite-security.org/reset-password/confirm?token=abc"))
+                .expectNext(true)
+                .verifyComplete();
+
+        assert calls.get() == 1;
+    }
 }

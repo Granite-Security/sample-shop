@@ -56,4 +56,17 @@ public class ProfileNotificationClient {
             log.warn("failed to notify profile of password change: {}", ex.getMessage());
         }
     }
+
+    @Async
+    public void notifyPasswordResetRequested(String username, String email, String resetLink) {
+        try {
+            restClient.post()
+                    .uri("/api/profiles/internal/{username}/notify/password-reset-requested", username)
+                    .body(Map.of("email", email, "resetLink", resetLink))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (Exception ex) {
+            log.warn("failed to notify profile of password reset request: {}", ex.getMessage());
+        }
+    }
 }

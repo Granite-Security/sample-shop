@@ -16,6 +16,8 @@ import UsersManagement from './pages/UsersManagement'
 import UserProfileView from './pages/UserProfileView'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import ResetPasswordRequest from './pages/ResetPasswordRequest'
+import ResetPasswordConfirm from './pages/ResetPasswordConfirm'
 import Callback from './pages/Callback'
 import Addresses from './pages/Addresses'
 import Profile from './pages/Profile'
@@ -43,6 +45,8 @@ export default function App() {
         <Route path="admin/users/:username" element={<UserProfileView />} />
         <Route path="login" element={<Login />} />
         <Route path="register" element={<Register />} />
+        <Route path="reset-password" element={<ResetPasswordRequest />} />
+        <Route path="reset-password/confirm" element={<ResetPasswordConfirm />} />
         <Route path="callback" element={<Callback />} />
       </Route>
     </Routes>
