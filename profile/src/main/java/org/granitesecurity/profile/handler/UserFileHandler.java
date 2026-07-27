@@ -1,6 +1,5 @@
 package org.granitesecurity.profile.handler;
 
-import org.granitesecurity.profile.dto.PresignFileRequest;
 import org.granitesecurity.profile.dto.RegisterFileRequest;
 import org.granitesecurity.profile.service.UserFileService;
 import org.springframework.security.core.Authentication;
@@ -24,14 +23,6 @@ public class UserFileHandler {
                 .flatMapMany(userFileService::listFiles)
                 .collectList()
                 .flatMap(files -> ServerResponse.ok().bodyValue(files));
-    }
-
-    public Mono<ServerResponse> presign(ServerRequest request) {
-        var bodyMono = request.bodyToMono(PresignFileRequest.class);
-        var usernameMono = getUsername(request);
-        return bodyMono.zipWith(usernameMono)
-                .flatMap(tuple -> userFileService.presign(tuple.getT2(), tuple.getT1()))
-                .flatMap(response -> ServerResponse.ok().bodyValue(response));
     }
 
     public Mono<ServerResponse> register(ServerRequest request) {

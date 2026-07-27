@@ -137,12 +137,6 @@ export interface UserFile {
   createdAt: string;
 }
 
-export interface PresignFileResponse {
-  key: string;
-  uploadUrl: string;
-  publicUrl: string;
-  expiresIn: number;
-}
 
 export interface AddressResponse {
   id: number;

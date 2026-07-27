@@ -17,7 +17,17 @@ data:
   # issuer-uri (jwk-set-uri itself stays at its k8s/base default — same signing
   # key regardless of which domain issued the token, so it doesn't need to vary
   # here).
-  TRUSTED_JWT_ISSUERS: "https://granite-security.org/auth,https://sichocolate.com/auth"
+  #
+  # Also includes the cluster-internal issuer (http://auth-server:9090/auth):
+  # since AUTH_SERVER_ISSUER is blank above, the issuer is derived from
+  # whatever Host header the /oauth2/token request actually arrived on. A
+  # service calling the token endpoint directly by its in-cluster DNS name
+  # (profile's client-credentials call to storage, bypassing the gateway and
+  # its public Host header) gets a token stamped with this internal issuer,
+  # not one of the public domains — so every resource server must trust it
+  # too, or that internal call's own downstream requests get rejected with a
+  # 401 (found via profile's file-upload presign returning 502 in prod).
+  TRUSTED_JWT_ISSUERS: "https://granite-security.org/auth,https://sichocolate.com/auth,http://auth-server:9090/auth"
 
   # oidc-client (Postman/manual testing) is a dev tool, not a real frontend —
   # kept pinned to one domain, same as it always has been.

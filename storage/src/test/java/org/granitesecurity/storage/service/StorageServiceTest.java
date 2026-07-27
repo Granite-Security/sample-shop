@@ -36,7 +36,7 @@ class StorageServiceTest {
     private PresignedPutObjectRequest presignedPutObjectRequest;
 
     private static final Set<String> ADMIN = Set.of("ROLE_ADMIN");
-    private static final Set<String> INTERNAL = Set.of("SCOPE_internal");
+    private static final Set<String> PLAIN_USER = Set.of("SCOPE_openid");
 
     private StorageService storageService;
 
@@ -117,13 +117,13 @@ class StorageServiceTest {
     }
 
     @Test
-    void presignShouldAllowInternalCallerForUserFilesScope() throws Exception {
+    void presignShouldAllowPlainUserForUserFilesScope() throws Exception {
         URL url = URI.create("http://localhost:3900/product-media/user-files/abc/note.pdf?signed=1").toURL();
         when(presignedPutObjectRequest.url()).thenReturn(url);
         when(s3Presigner.presignPutObject(any(PutObjectPresignRequest.class)))
                 .thenReturn(presignedPutObjectRequest);
 
-        StepVerifier.create(storageService.presign("note.pdf", "application/pdf", "user-files", INTERNAL))
+        StepVerifier.create(storageService.presign("note.pdf", "application/pdf", "user-files", PLAIN_USER))
                 .assertNext(response -> {
                     assert response.key().startsWith("user-files/");
                 })
@@ -131,8 +131,8 @@ class StorageServiceTest {
     }
 
     @Test
-    void presignShouldRejectInternalCallerForProductsScope() {
-        StepVerifier.create(storageService.presign("hero.jpg", "image/jpeg", "products", INTERNAL))
+    void presignShouldRejectPlainUserForProductsScope() {
+        StepVerifier.create(storageService.presign("hero.jpg", "image/jpeg", "products", PLAIN_USER))
                 .expectErrorMatches(ex -> ex instanceof StorageException)
                 .verify();
 
@@ -140,8 +140,8 @@ class StorageServiceTest {
     }
 
     @Test
-    void deleteObjectShouldRejectInternalCallerForProductsScope() {
-        StepVerifier.create(storageService.deleteObject("products/abc/hero.jpg", INTERNAL))
+    void deleteObjectShouldRejectPlainUserForProductsScope() {
+        StepVerifier.create(storageService.deleteObject("products/abc/hero.jpg", PLAIN_USER))
                 .expectErrorMatches(ex -> ex instanceof StorageException)
                 .verify();
 

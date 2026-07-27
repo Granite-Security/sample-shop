@@ -1,9 +1,9 @@
 import { request } from './client';
+import { storageApi } from './storage';
 import type {
   AddressRequest,
   AddressResponse,
   AdminUserProfile,
-  PresignFileResponse,
   ProfileResponse,
   UpdateProfileRequest,
   UserFile,
@@ -37,17 +37,14 @@ export const profileApi = {
   getFiles: () =>
     request<UserFile[]>('/api/profiles/me/files'),
 
-  presignFile: (fileName: string, contentType: string, sizeBytes: number) =>
-    request<PresignFileResponse>('/api/profiles/me/files/presign', {
-      method: 'POST',
-      body: JSON.stringify({ fileName, contentType, sizeBytes }),
-    }),
-
   registerFile: (body: { key: string; url: string; fileName: string; contentType: string; sizeBytes: number }) =>
     request<UserFile>('/api/profiles/me/files', { method: 'POST', body: JSON.stringify(body) }),
 
+  // Upload goes straight to storage (same pattern as the admin product-media
+  // upload in storageApi.uploadFile) rather than through a profile-brokered
+  // presign — profile only records ownership afterward via registerFile.
   uploadFile: async (file: File): Promise<UserFile> => {
-    const presigned = await profileApi.presignFile(file.name, file.type, file.size);
+    const presigned = await storageApi.presignUpload(file.name, file.type, 'user-files');
     const putResponse = await fetch(presigned.uploadUrl, {
       method: 'PUT',
       headers: { 'Content-Type': file.type },

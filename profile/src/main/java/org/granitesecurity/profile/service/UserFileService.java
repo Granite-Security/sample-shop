@@ -2,8 +2,6 @@ package org.granitesecurity.profile.service;
 
 import org.granitesecurity.profile.client.StorageClient;
 import org.granitesecurity.profile.domain.UserFile;
-import org.granitesecurity.profile.dto.PresignFileRequest;
-import org.granitesecurity.profile.dto.PresignFileResponse;
 import org.granitesecurity.profile.dto.RegisterFileRequest;
 import org.granitesecurity.profile.dto.UserFileResponse;
 import org.granitesecurity.profile.repository.UserFileRepository;
@@ -45,7 +43,21 @@ public class UserFileService {
                 .map(this::toResponse);
     }
 
-    public Mono<PresignFileResponse> presign(String username, PresignFileRequest req) {
+    // Upload itself (presign) now goes straight from the browser to storage
+    // (mirroring the admin product-media upload flow) rather than through a
+    // profile-brokered client-credentials call — storage enforces the
+    // content-type allow-list per scope at that point. What profile still
+    // validates here at register time is everything storage can't know:
+    // per-user file count, and (best-effort, since the object is already
+    // uploaded by now) the declared size/type look sane. A rejected
+    // registration can leave an orphaned object in storage; the Garage
+    // bucket quota is the real backstop for that, same as the presign-time
+    // size guard always was advisory only.
+    public Mono<UserFileResponse> register(String username, RegisterFileRequest req) {
+        if (req.key() == null || !req.key().startsWith(KEY_PREFIX)) {
+            return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "key must be prefixed by " + KEY_PREFIX));
+        }
         if (req.contentType() == null || !ALLOWED_CONTENT_TYPES.contains(req.contentType())) {
             return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "contentType must be one of " + ALLOWED_CONTENT_TYPES));
@@ -60,18 +72,8 @@ public class UserFileService {
                         return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
                                 "maximum of " + MAX_FILES_PER_USER + " files reached"));
                     }
-                    return storageClient.presign(req.fileName(), req.contentType());
+                    return userFileRepository.existsByObjectKey(req.key());
                 })
-                .map(result -> new PresignFileResponse(
-                        result.key(), result.uploadUrl(), result.publicUrl(), result.expiresIn()));
-    }
-
-    public Mono<UserFileResponse> register(String username, RegisterFileRequest req) {
-        if (req.key() == null || !req.key().startsWith(KEY_PREFIX)) {
-            return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "key must be prefixed by " + KEY_PREFIX));
-        }
-        return userFileRepository.existsByObjectKey(req.key())
                 .flatMap(exists -> {
                     if (exists) {
                         return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT,
