@@ -69,7 +69,7 @@ class UserFileServiceTest {
     void registerRejectsOversizedFile() {
         userFileService = newService();
         var req = new RegisterFileRequest(
-                "user-files/abc/big.pdf", "http://public", "big.pdf", "application/pdf", 11L * 1024 * 1024);
+                "user-files/abc/big.pdf", "http://public", "big.pdf", "application/pdf", 5_000_000_001L);
 
         StepVerifier.create(userFileService.register("alice", req))
                 .expectErrorMatches(e -> e instanceof ResponseStatusException rse

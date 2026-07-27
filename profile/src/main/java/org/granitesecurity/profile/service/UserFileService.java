@@ -21,7 +21,11 @@ public class UserFileService {
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
             "image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain");
 
-    private static final long MAX_SIZE_BYTES = 10L * 1024 * 1024;
+    // S3 (and Garage, which implements the same API) rejects a single PUT
+    // above 5 GiB — anything larger needs multipart upload, which this
+    // presign-based flow doesn't support. Stay comfortably under that hard
+    // ceiling rather than at it.
+    private static final long MAX_SIZE_BYTES = 5_000_000_000L;
 
     private static final long MAX_FILES_PER_USER = 50;
 

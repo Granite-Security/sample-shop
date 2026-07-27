@@ -31,7 +31,10 @@ public class StorageService {
                     "application/pdf", "text/plain")
     );
 
-    private static final Duration PRESIGN_EXPIRY = Duration.ofMinutes(10);
+    // Long enough for a multi-GB upload on a slow connection to finish before
+    // the presigned URL expires mid-transfer (10 minutes was fine for small
+    // product images, not for the raised 5 GB user-files limit).
+    private static final Duration PRESIGN_EXPIRY = Duration.ofHours(2);
 
     private final S3Presigner s3Presigner;
     private final S3Client s3Client;
