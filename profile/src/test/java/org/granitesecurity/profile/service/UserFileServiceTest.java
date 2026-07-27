@@ -25,6 +25,7 @@ import static org.mockito.Mockito.when;
 class UserFileServiceTest {
 
     private static final String PUBLIC_BASE_URL = "http://product-media.localhost:3902";
+    private static final String HASH = "a".repeat(64);
 
     @Mock
     private UserFileRepository userFileRepository;
@@ -41,7 +42,8 @@ class UserFileServiceTest {
     @Test
     void registerRejectsKeyWithoutUserFilesPrefix() {
         userFileService = newService();
-        var req = new RegisterFileRequest("products/abc/note.pdf", "http://evil", "note.pdf", "application/pdf", 100L);
+        var req = new RegisterFileRequest(
+                "products/abc/note.pdf", "http://evil", "note.pdf", "application/pdf", 100L, HASH);
 
         StepVerifier.create(userFileService.register("alice", req))
                 .expectErrorMatches(e -> e instanceof ResponseStatusException rse
@@ -55,7 +57,7 @@ class UserFileServiceTest {
     void registerRejectsDisallowedContentType() {
         userFileService = newService();
         var req = new RegisterFileRequest(
-                "user-files/abc/evil.exe", "http://public", "evil.exe", "application/x-msdownload", 100L);
+                "user-files/abc/evil.exe", "http://public", "evil.exe", "application/x-msdownload", 100L, HASH);
 
         StepVerifier.create(userFileService.register("alice", req))
                 .expectErrorMatches(e -> e instanceof ResponseStatusException rse
@@ -69,7 +71,21 @@ class UserFileServiceTest {
     void registerRejectsOversizedFile() {
         userFileService = newService();
         var req = new RegisterFileRequest(
-                "user-files/abc/big.pdf", "http://public", "big.pdf", "application/pdf", 5_000_000_001L);
+                "user-files/abc/big.pdf", "http://public", "big.pdf", "application/pdf", 5_000_000_001L, HASH);
+
+        StepVerifier.create(userFileService.register("alice", req))
+                .expectErrorMatches(e -> e instanceof ResponseStatusException rse
+                        && rse.getStatusCode() == HttpStatus.BAD_REQUEST)
+                .verify();
+
+        verifyNoInteractions(userFileRepository);
+    }
+
+    @Test
+    void registerRejectsMissingContentHash() {
+        userFileService = newService();
+        var req = new RegisterFileRequest(
+                "user-files/abc/note.pdf", "http://public", "note.pdf", "application/pdf", 100L, "   ");
 
         StepVerifier.create(userFileService.register("alice", req))
                 .expectErrorMatches(e -> e instanceof ResponseStatusException rse
@@ -85,7 +101,7 @@ class UserFileServiceTest {
         when(userFileRepository.countByUsername("alice")).thenReturn(Mono.just(50L));
 
         var req = new RegisterFileRequest(
-                "user-files/abc/note.pdf", "http://public", "note.pdf", "application/pdf", 100L);
+                "user-files/abc/note.pdf", "http://public", "note.pdf", "application/pdf", 100L, HASH);
 
         StepVerifier.create(userFileService.register("alice", req))
                 .expectErrorMatches(e -> e instanceof ResponseStatusException rse
@@ -98,6 +114,7 @@ class UserFileServiceTest {
         userFileService = newService();
         when(userFileRepository.countByUsername("alice")).thenReturn(Mono.just(1L));
         when(userFileRepository.existsByObjectKey("user-files/abc/note.pdf")).thenReturn(Mono.just(false));
+        when(userFileRepository.findByUsernameAndContentHash("alice", HASH)).thenReturn(Mono.empty());
         when(userFileRepository.save(any(UserFile.class))).thenAnswer(inv -> {
             UserFile saved = inv.getArgument(0);
             saved.setId(1L);
@@ -106,7 +123,8 @@ class UserFileServiceTest {
         });
 
         var req = new RegisterFileRequest(
-                "user-files/abc/note.pdf", "http://attacker-controlled/evil", "note.pdf", "application/pdf", 100L);
+                "user-files/abc/note.pdf", "http://attacker-controlled/evil", "note.pdf", "application/pdf", 100L,
+                HASH);
 
         StepVerifier.create(userFileService.register("alice", req))
                 .expectNextMatches(res -> res.url().equals(PUBLIC_BASE_URL + "/user-files/abc/note.pdf"))
@@ -119,12 +137,62 @@ class UserFileServiceTest {
         when(userFileRepository.countByUsername("alice")).thenReturn(Mono.just(1L));
         when(userFileRepository.existsByObjectKey(anyString())).thenReturn(Mono.just(true));
 
-        var req = new RegisterFileRequest("user-files/abc/note.pdf", "ignored", "note.pdf", "application/pdf", 100L);
+        var req = new RegisterFileRequest(
+                "user-files/abc/note.pdf", "ignored", "note.pdf", "application/pdf", 100L, HASH);
 
         StepVerifier.create(userFileService.register("alice", req))
                 .expectErrorMatches(e -> e instanceof ResponseStatusException rse
                         && rse.getStatusCode() == HttpStatus.CONFLICT)
                 .verify();
+    }
+
+    @Test
+    void registerRejectsDuplicateContentHashForSameUser() {
+        userFileService = newService();
+        when(userFileRepository.countByUsername("alice")).thenReturn(Mono.just(1L));
+        when(userFileRepository.existsByObjectKey(anyString())).thenReturn(Mono.just(false));
+        UserFile existing = new UserFile();
+        existing.setId(1L);
+        existing.setUsername("alice");
+        existing.setContentHash(HASH);
+        when(userFileRepository.findByUsernameAndContentHash("alice", HASH)).thenReturn(Mono.just(existing));
+
+        var req = new RegisterFileRequest(
+                "user-files/abc/copy.pdf", "http://public", "copy.pdf", "application/pdf", 100L, HASH);
+
+        StepVerifier.create(userFileService.register("alice", req))
+                .expectErrorMatches(e -> e instanceof ResponseStatusException rse
+                        && rse.getStatusCode() == HttpStatus.CONFLICT)
+                .verify();
+
+        verify(userFileRepository, org.mockito.Mockito.never()).save(any(UserFile.class));
+    }
+
+    @Test
+    void checkDuplicateReturnsFalseWhenNoMatch() {
+        userFileService = newService();
+        when(userFileRepository.findByUsernameAndContentHash("alice", HASH)).thenReturn(Mono.empty());
+
+        StepVerifier.create(userFileService.checkDuplicate("alice", HASH))
+                .expectNextMatches(res -> !res.duplicate() && res.existingFile() == null)
+                .verifyComplete();
+    }
+
+    @Test
+    void checkDuplicateReturnsExistingFileWhenMatched() {
+        userFileService = newService();
+        UserFile existing = new UserFile();
+        existing.setId(1L);
+        existing.setUsername("alice");
+        existing.setFileName("note.pdf");
+        existing.setContentHash(HASH);
+        existing.setCreatedAt(Instant.now());
+        when(userFileRepository.findByUsernameAndContentHash("alice", HASH)).thenReturn(Mono.just(existing));
+
+        StepVerifier.create(userFileService.checkDuplicate("alice", HASH))
+                .expectNextMatches(res -> res.duplicate() && res.existingFile() != null
+                        && res.existingFile().fileName().equals("note.pdf"))
+                .verifyComplete();
     }
 
     @Test

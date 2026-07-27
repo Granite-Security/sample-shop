@@ -29,6 +29,9 @@ public class UserFile {
     @Column("content_type")
     private String contentType;
 
+    @Column("content_hash")
+    private String contentHash;
+
     @Column("size_bytes")
     private Long sizeBytes;
 

@@ -25,6 +25,13 @@ public class UserFileHandler {
                 .flatMap(files -> ServerResponse.ok().bodyValue(files));
     }
 
+    public Mono<ServerResponse> checkDuplicate(ServerRequest request) {
+        String hash = request.queryParam("hash").orElse("");
+        return getUsername(request)
+                .flatMap(username -> userFileService.checkDuplicate(username, hash))
+                .flatMap(response -> ServerResponse.ok().bodyValue(response));
+    }
+
     public Mono<ServerResponse> register(ServerRequest request) {
         var bodyMono = request.bodyToMono(RegisterFileRequest.class);
         var usernameMono = getUsername(request);

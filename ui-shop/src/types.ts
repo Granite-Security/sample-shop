@@ -137,6 +137,11 @@ export interface UserFile {
   createdAt: string;
 }
 
+export interface DuplicateFileCheckResponse {
+  duplicate: boolean;
+  existingFile: UserFile | null;
+}
+
 
 export interface AddressResponse {
   id: number;

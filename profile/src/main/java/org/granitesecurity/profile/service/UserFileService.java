@@ -2,6 +2,7 @@ package org.granitesecurity.profile.service;
 
 import org.granitesecurity.profile.client.StorageClient;
 import org.granitesecurity.profile.domain.UserFile;
+import org.granitesecurity.profile.dto.DuplicateFileCheckResponse;
 import org.granitesecurity.profile.dto.RegisterFileRequest;
 import org.granitesecurity.profile.dto.UserFileResponse;
 import org.granitesecurity.profile.repository.UserFileRepository;
@@ -47,6 +48,15 @@ public class UserFileService {
                 .map(this::toResponse);
     }
 
+    // Called before the browser even starts the upload (the client hashes
+    // the file locally) so a duplicate never gets uploaded at all, rather
+    // than discovering it after the fact at register time.
+    public Mono<DuplicateFileCheckResponse> checkDuplicate(String username, String contentHash) {
+        return userFileRepository.findByUsernameAndContentHash(username, contentHash)
+                .map(existing -> new DuplicateFileCheckResponse(true, toResponse(existing)))
+                .defaultIfEmpty(new DuplicateFileCheckResponse(false, null));
+    }
+
     // Upload itself (presign) now goes straight from the browser to storage
     // (mirroring the admin product-media upload flow) rather than through a
     // profile-brokered client-credentials call — storage enforces the
@@ -70,6 +80,9 @@ public class UserFileService {
             return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "sizeBytes must not exceed " + MAX_SIZE_BYTES));
         }
+        if (req.contentHash() == null || req.contentHash().isBlank()) {
+            return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, "contentHash is required"));
+        }
         return userFileRepository.countByUsername(username)
                 .flatMap(count -> {
                     if (count >= MAX_FILES_PER_USER) {
@@ -83,6 +96,17 @@ public class UserFileService {
                         return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT,
                                 "file already registered"));
                     }
+                    // Defense in depth against the client skipping (or losing a race
+                    // around) the pre-upload checkDuplicate call — the DB unique
+                    // index on (username, content_hash) is the real backstop, this
+                    // just turns that into a friendly 409 instead of a raw
+                    // constraint-violation 500.
+                    return userFileRepository.findByUsernameAndContentHash(username, req.contentHash())
+                            .flatMap(dup -> Mono.<Boolean>error(new ResponseStatusException(
+                                    HttpStatus.CONFLICT, "This file has already been uploaded.")))
+                            .defaultIfEmpty(false);
+                })
+                .flatMap(ignored -> {
                     UserFile file = new UserFile();
                     file.setUsername(username);
                     file.setFileName(req.fileName());
@@ -90,6 +114,7 @@ public class UserFileService {
                     file.setUrl(publicBaseUrl + "/" + req.key());
                     file.setContentType(req.contentType());
                     file.setSizeBytes(req.sizeBytes());
+                    file.setContentHash(req.contentHash());
                     file.setCreatedAt(Instant.now());
                     return userFileRepository.save(file);
                 })
