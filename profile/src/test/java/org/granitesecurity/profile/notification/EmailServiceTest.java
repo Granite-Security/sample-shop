@@ -122,4 +122,34 @@ class EmailServiceTest {
 
         assert calls.get() == 1;
     }
+
+    @Test
+    void welcomeDisabledWhenApiKeyBlank() {
+        ResendClient resendClient = new ResendClient(WebClient.builder(), BASE_URL, "", FROM);
+        EmailService emailService = new EmailService(resendClient, "");
+
+        StepVerifier.create(emailService.sendWelcome("alice@example.com", "Alice"))
+                .expectNext(false)
+                .verifyComplete();
+    }
+
+    @Test
+    void welcomeReturnsTrueOn200() {
+        AtomicInteger calls = new AtomicInteger();
+        WebClient.Builder builder = WebClient.builder().exchangeFunction(request -> {
+            calls.incrementAndGet();
+            return Mono.just(ClientResponse.create(HttpStatus.OK)
+                    .header("Content-Type", "application/json")
+                    .body("{\"id\":\"msg_999\"}")
+                    .build());
+        });
+        ResendClient resendClient = new ResendClient(builder, BASE_URL, "re_test", FROM);
+        EmailService emailService = new EmailService(resendClient, "re_test");
+
+        StepVerifier.create(emailService.sendWelcome("alice@example.com", "Alice"))
+                .expectNext(true)
+                .verifyComplete();
+
+        assert calls.get() == 1;
+    }
 }

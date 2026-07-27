@@ -1,9 +1,12 @@
 package org.granitesecurity.authserver.user;
 
+import org.granitesecurity.authserver.client.ProfileNotificationClient;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Locale;
 import java.util.Set;
@@ -13,10 +16,13 @@ public class UserRegistrationService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ProfileNotificationClient profileNotificationClient;
 
-    public UserRegistrationService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserRegistrationService(UserRepository userRepository, PasswordEncoder passwordEncoder,
+                                    ProfileNotificationClient profileNotificationClient) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.profileNotificationClient = profileNotificationClient;
     }
 
     @Transactional
@@ -42,12 +48,26 @@ public class UserRegistrationService {
         user.setProviderId(null);
         grantDefaultAuthorities(user);
 
+        UserEntity saved;
         try {
-            UserEntity saved = userRepository.save(user);
-            return new RegistrationResponse(saved.getUsername(), saved.getEmail());
+            saved = userRepository.save(user);
         } catch (DataIntegrityViolationException ex) {
             throw new DuplicateUserException("username", "Username or email is already taken");
         }
+
+        // Only email once the new user row has actually committed — same
+        // afterCommit pattern PasswordChangeService/PasswordResetService use
+        // for their own notifications.
+        String savedUsername = saved.getUsername();
+        String savedEmail = saved.getEmail();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                profileNotificationClient.notifyUserRegistered(savedUsername, savedEmail);
+            }
+        });
+
+        return new RegistrationResponse(saved.getUsername(), saved.getEmail());
     }
 
     static void grantDefaultAuthorities(UserEntity user) {

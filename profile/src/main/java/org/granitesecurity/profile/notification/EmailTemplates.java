@@ -82,6 +82,35 @@ final class EmailTemplates {
                 """.formatted(name, resetLink);
     }
 
+    static String welcomeSubject() {
+        return "Welcome to Granite Security";
+    }
+
+    static String welcomeHtml(String displayName) {
+        String name = displayName == null || displayName.isBlank() ? "there" : displayName;
+        return """
+                <html>
+                  <body style="font-family: sans-serif; color: #1a1a1a;">
+                    <p>Hi %s,</p>
+                    <p>Welcome to Granite Security — your account has been created and you're ready
+                    to go.</p>
+                    <p>If you didn't create this account, please contact us.</p>
+                  </body>
+                </html>
+                """.formatted(escapeHtml(name));
+    }
+
+    static String welcomeText(String displayName) {
+        String name = displayName == null || displayName.isBlank() ? "there" : displayName;
+        return """
+                Hi %s,
+
+                Welcome to Granite Security — your account has been created and you're ready to go.
+
+                If you didn't create this account, please contact us.
+                """.formatted(name);
+    }
+
     private static String escapeHtml(String value) {
         return value.replace("&", "&amp;")
                 .replace("<", "&lt;")

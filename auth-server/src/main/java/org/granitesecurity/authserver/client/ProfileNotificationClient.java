@@ -69,4 +69,17 @@ public class ProfileNotificationClient {
             log.warn("failed to notify profile of password reset request: {}", ex.getMessage());
         }
     }
+
+    @Async
+    public void notifyUserRegistered(String username, String email) {
+        try {
+            restClient.post()
+                    .uri("/api/profiles/internal/{username}/notify/welcome", username)
+                    .body(Map.of("email", email))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (Exception ex) {
+            log.warn("failed to notify profile of new registration: {}", ex.getMessage());
+        }
+    }
 }

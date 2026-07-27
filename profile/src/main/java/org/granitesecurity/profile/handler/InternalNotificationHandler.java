@@ -2,6 +2,7 @@ package org.granitesecurity.profile.handler;
 
 import org.granitesecurity.profile.dto.PasswordChangedNotifyRequest;
 import org.granitesecurity.profile.dto.PasswordResetRequestedNotifyRequest;
+import org.granitesecurity.profile.dto.WelcomeNotifyRequest;
 import org.granitesecurity.profile.notification.EmailService;
 import org.granitesecurity.profile.repository.UserProfileRepository;
 import org.springframework.stereotype.Service;
@@ -38,6 +39,15 @@ public class InternalNotificationHandler {
         return request.bodyToMono(PasswordResetRequestedNotifyRequest.class)
                 .flatMap(body -> resolveEmail(username, body.email())
                         .flatMap(email -> emailService.sendPasswordResetRequested(email, username, body.resetLink()))
+                        .defaultIfEmpty(false))
+                .flatMap(sent -> ServerResponse.ok().bodyValue(Map.of("sent", sent)));
+    }
+
+    public Mono<ServerResponse> welcome(ServerRequest request) {
+        String username = request.pathVariable("username");
+        return request.bodyToMono(WelcomeNotifyRequest.class)
+                .flatMap(body -> resolveEmail(username, body.email())
+                        .flatMap(email -> emailService.sendWelcome(email, username))
                         .defaultIfEmpty(false))
                 .flatMap(sent -> ServerResponse.ok().bodyValue(Map.of("sent", sent)));
     }

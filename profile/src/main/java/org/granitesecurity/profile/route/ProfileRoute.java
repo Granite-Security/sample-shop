@@ -34,6 +34,8 @@ public class ProfileRoute {
                         internalNotificationHandler::passwordChanged)
                 .POST("/api/profiles/internal/{username}/notify/password-reset-requested",
                         internalNotificationHandler::passwordResetRequested)
+                .POST("/api/profiles/internal/{username}/notify/welcome",
+                        internalNotificationHandler::welcome)
                 // Admin endpoints — registered after the explicit /api/profiles/me*
                 // routes so {username} never shadows "me".
                 .GET("/api/profiles", profileHandler::listAll)
