@@ -10,6 +10,9 @@ import { ProductPage } from './pages/ProductPage';
 import { AdminPage } from './pages/AdminPage';
 import { CheckoutPage } from './pages/CheckoutPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { Register } from './pages/Register';
+import { ResetPasswordRequest } from './pages/ResetPasswordRequest';
+import { ResetPasswordConfirm } from './pages/ResetPasswordConfirm';
 
 function Layout() {
   return (
@@ -37,6 +40,9 @@ export default function App() {
               <Route path="admin" element={<AdminPage />} />
               <Route path="checkout" element={<CheckoutPage />} />
               <Route path="profile" element={<ProfilePage />} />
+              <Route path="register" element={<Register />} />
+              <Route path="reset-password" element={<ResetPasswordRequest />} />
+              <Route path="reset-password/confirm" element={<ResetPasswordConfirm />} />
             </Route>
           </Routes>
         </BrowserRouter>

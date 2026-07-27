@@ -12,6 +12,10 @@ import type {
   UpdateProfileRequest,
   MediaItem,
   PresignResponse,
+  RegistrationRequest,
+  RegistrationResponse,
+  UserFile,
+  DuplicateFileCheckResponse,
 } from './types';
 
 // Same-origin calls through the gateway, exactly like ui-shop. Browsing the
@@ -25,26 +29,63 @@ export function setAccessToken(token: string | null) {
   accessToken = token;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+export class ApiError extends Error {
+  status: number;
+  data: unknown;
+
+  constructor(status: number, message: string, data: unknown) {
+    super(message);
+    this.status = status;
+    this.data = data;
+  }
+}
+
+type RequestOptions = RequestInit & { skipAuth?: boolean };
+
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { skipAuth, ...fetchOptions } = options;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
+    ...(fetchOptions.headers as Record<string, string>),
   };
-  if (accessToken) {
+  if (accessToken && !skipAuth) {
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
   const res = await fetch(`${BASE}${path}`, {
-    ...options,
+    ...fetchOptions,
     headers,
     cache: 'no-store',
   });
   if (res.status === 204) return undefined as T;
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    const msg = body?.detail ?? body?.title ?? res.statusText;
-    throw new Error(`[${res.status}] ${msg}`);
+  if (res.status === 401) {
+    throw new Error('Unauthorized');
   }
-  return res.json();
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const msg = body?.detail ?? body?.title ?? res.statusText;
+    throw new ApiError(res.status, `[${res.status}] ${msg}`, body);
+  }
+  return body;
+}
+
+export class DuplicateFileError extends Error {
+  existingFile: UserFile;
+
+  constructor(existingFile: UserFile) {
+    super('This file has already been uploaded.');
+    this.existingFile = existingFile;
+  }
+}
+
+// Hashed locally so a duplicate can be detected — and the upload skipped
+// entirely — before any bytes are sent, rather than discovering it only
+// after uploading a full copy. Mirrors ui-shop/src/api/profile.ts.
+async function sha256Hex(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 export const api = {
@@ -123,6 +164,74 @@ export const api = {
 
   deleteStorageObject: (key: string) =>
     request<void>('/api/storage/objects', { method: 'DELETE', body: JSON.stringify({ key }) }),
+
+  // Registration + password reset — unauthenticated, mirrors ui-shop/src/api/auth.ts.
+  register: (body: RegistrationRequest) =>
+    request<RegistrationResponse>('/auth/api/register', {
+      method: 'POST',
+      skipAuth: true,
+      body: JSON.stringify(body),
+    }),
+
+  requestPasswordReset: (email: string) =>
+    request<void>('/auth/api/password-reset/request', {
+      method: 'POST',
+      skipAuth: true,
+      body: JSON.stringify({ email }),
+    }),
+
+  confirmPasswordReset: (token: string, newPassword: string) =>
+    request<void>('/auth/api/password-reset/confirm', {
+      method: 'POST',
+      skipAuth: true,
+      body: JSON.stringify({ token, newPassword }),
+    }),
+
+  // Change password while logged in — mirrors ui-shop/src/api/account.ts.
+  changePassword: (body: { currentPassword: string; newPassword: string }) =>
+    request<void>('/auth/api/me/password', { method: 'PUT', body: JSON.stringify(body) }),
+
+  // File cabinet — mirrors ui-shop/src/api/profile.ts.
+  getFiles: () => request<UserFile[]>('/api/profiles/me/files'),
+
+  checkDuplicateFile: (contentHash: string) =>
+    request<DuplicateFileCheckResponse>(`/api/profiles/me/files/duplicate?hash=${encodeURIComponent(contentHash)}`),
+
+  registerFile: (body: {
+    key: string; url: string; fileName: string; contentType: string; sizeBytes: number; contentHash: string;
+  }) => request<UserFile>('/api/profiles/me/files', { method: 'POST', body: JSON.stringify(body) }),
+
+  // Upload goes straight to storage (same pattern as uploadProductImage above)
+  // rather than through a profile-brokered presign — profile only records
+  // ownership afterward via registerFile.
+  uploadFile: async (file: File): Promise<UserFile> => {
+    const contentHash = await sha256Hex(file);
+
+    const dup = await api.checkDuplicateFile(contentHash);
+    if (dup.duplicate && dup.existingFile) {
+      throw new DuplicateFileError(dup.existingFile);
+    }
+
+    const presigned = await api.presignUpload(file.name, file.type, 'user-files');
+    const putResponse = await fetch(presigned.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type },
+      body: file,
+    });
+    if (!putResponse.ok) {
+      throw new Error(`Upload failed: ${putResponse.status} ${putResponse.statusText}`);
+    }
+    return api.registerFile({
+      key: presigned.key,
+      url: presigned.publicUrl,
+      fileName: file.name,
+      contentType: file.type,
+      sizeBytes: file.size,
+      contentHash,
+    });
+  },
+
+  deleteFile: (id: number) => request<void>(`/api/profiles/me/files/${id}`, { method: 'DELETE' }),
 };
 
 // Editorial fallback catalog — shown when the shop backend isn't reachable

@@ -118,12 +118,14 @@ export interface ProfileResponse {
   email: string;
   firstName: string;
   lastName: string;
+  displayName: string | null;
 }
 
 export interface UpdateProfileRequest {
   email: string;
   firstName: string;
   lastName: string;
+  displayName?: string;
 }
 
 export interface PagedResult<T> {
@@ -131,4 +133,31 @@ export interface PagedResult<T> {
   total: number;
   page: number;
   size: number;
+}
+
+export interface RegistrationRequest {
+  username: string;
+  email: string;
+  password: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+export interface RegistrationResponse {
+  username: string;
+  email: string;
+}
+
+export interface UserFile {
+  id: number;
+  fileName: string;
+  url: string;
+  contentType: string;
+  sizeBytes: number | null;
+  createdAt: string;
+}
+
+export interface DuplicateFileCheckResponse {
+  duplicate: boolean;
+  existingFile: UserFile | null;
 }

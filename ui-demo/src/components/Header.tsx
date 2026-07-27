@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router';
+import { api } from '../api';
 import { useAuth } from '../auth';
 import { useShop } from '../store';
 import { AccountIcon, BagIcon, CloseIcon, HeartIcon, MenuIcon, SearchIcon } from './icons';
@@ -47,6 +48,7 @@ export function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [displayName, setDisplayName] = useState<string | null>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -54,6 +56,18 @@ export function Header() {
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  // Google-federated accounts can have an unfriendly `preferred_username`
+  // (e.g. a numeric subject id) — displayName, when set, always wins.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setDisplayName(null);
+      return;
+    }
+    api.getMyProfile().then((p) => setDisplayName(p.displayName)).catch(() => {});
+  }, [isAuthenticated]);
+
+  const accountLabel = displayName ?? user?.name;
 
   // Transparent-over-hero only makes sense on the home page.
   const solid = scrolled || menuOpen || pathname !== '/';
@@ -103,18 +117,18 @@ export function Header() {
             <div className="relative">
               <button
                 className="flex items-center gap-2 p-2 transition-colors hover:text-gold"
-                aria-label={`Account, signed in as ${user?.name}`}
+                aria-label={`Account, signed in as ${accountLabel}`}
                 aria-expanded={accountOpen}
                 onClick={() => setAccountOpen((v) => !v)}
               >
                 <AccountIcon />
                 <span className="hidden sm:inline max-w-24 truncate text-xs tracking-[0.14em] uppercase">
-                  {user?.name}
+                  {accountLabel}
                 </span>
               </button>
               {accountOpen && (
                 <div className="absolute right-0 top-full mt-2 w-44 rounded-md bg-ivory py-2 text-cocoa shadow-xl shadow-espresso/30">
-                  <p className="px-4 py-1.5 text-xs text-cocoa/50">Signed in as {user?.name}</p>
+                  <p className="px-4 py-1.5 text-xs text-cocoa/50">Signed in as {accountLabel}</p>
                   <Link
                     to="/profile"
                     onClick={() => setAccountOpen(false)}
