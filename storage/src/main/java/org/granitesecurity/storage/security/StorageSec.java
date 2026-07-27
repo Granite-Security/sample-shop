@@ -47,9 +47,9 @@ public class StorageSec {
                 .authorizeExchange(exchange -> exchange
                         .pathMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/storage/presign")
-                                .hasAnyRole("ADMIN", "MANAGER")
+                                .hasAnyAuthority("ROLE_ADMIN", "ROLE_MANAGER", "SCOPE_internal")
                         .pathMatchers(HttpMethod.DELETE, "/api/storage/objects")
-                                .hasAnyRole("ADMIN", "MANAGER")
+                                .hasAnyAuthority("ROLE_ADMIN", "ROLE_MANAGER", "SCOPE_internal")
                         .anyExchange().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2

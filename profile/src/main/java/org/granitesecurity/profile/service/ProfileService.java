@@ -11,9 +11,12 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.util.regex.Pattern;
 
 @Service
 public class ProfileService {
+
+    private static final Pattern DISPLAY_NAME_PATTERN = Pattern.compile("^[\\p{L}\\p{N} ._'-]+$");
 
     private final UserProfileRepository userProfileRepository;
 
@@ -46,10 +49,30 @@ public class ProfileService {
                     profile.setEmail(req.email());
                     profile.setFirstName(req.firstName());
                     profile.setLastName(req.lastName());
+                    profile.setDisplayName(validateDisplayName(req.displayName()));
                     profile.setUpdatedAt(Instant.now());
                     return userProfileRepository.save(profile);
                 })
                 .map(this::toResponse);
+    }
+
+    private String validateDisplayName(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        if (trimmed.length() < 2 || trimmed.length() > 64) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "displayName must be between 2 and 64 characters");
+        }
+        if (!DISPLAY_NAME_PATTERN.matcher(trimmed).matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "displayName contains invalid characters");
+        }
+        return trimmed;
     }
 
     private Mono<UserProfile> createProfile(String username) {
@@ -66,6 +89,7 @@ public class ProfileService {
                 profile.getEmail(),
                 profile.getFirstName(),
                 profile.getLastName(),
+                profile.getDisplayName(),
                 profile.getCreatedAt(),
                 profile.getUpdatedAt()
         );

@@ -1,0 +1,39 @@
+package org.granitesecurity.profile.domain;
+
+import lombok.Getter;
+import lombok.Setter;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
+
+import java.time.Instant;
+
+@Table("user_file")
+@Getter
+@Setter
+public class UserFile {
+
+    @Id
+    private Long id;
+
+    private String username;
+
+    @Column("file_name")
+    private String fileName;
+
+    @Column("object_key")
+    private String objectKey;
+
+    private String url;
+
+    @Column("content_type")
+    private String contentType;
+
+    @Column("size_bytes")
+    private Long sizeBytes;
+
+    @Column("created_at")
+    private Instant createdAt;
+
+    public UserFile() {}
+}

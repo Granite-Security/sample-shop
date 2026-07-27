@@ -1,6 +1,7 @@
 package org.granitesecurity.profile.service;
 
 import org.granitesecurity.profile.domain.UserProfile;
+import org.granitesecurity.profile.dto.UpdateProfileRequest;
 import org.granitesecurity.profile.repository.UserProfileRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -58,6 +59,48 @@ class ProfileServiceTest {
         StepVerifier.create(profileService.getByUsername("ghost"))
                 .expectErrorMatches(e -> e instanceof ResponseStatusException rse
                         && rse.getStatusCode() == HttpStatus.NOT_FOUND)
+                .verify();
+    }
+
+    @Test
+    void updateProfileSetsValidDisplayName() {
+        var alice = new UserProfile("alice", "alice@example.com", "Alice", "Anderson");
+        alice.setId(1L);
+        when(userProfileRepository.findByUsername("alice")).thenReturn(Mono.just(alice));
+        when(userProfileRepository.save(alice)).thenReturn(Mono.just(alice));
+
+        var req = new UpdateProfileRequest("alice@example.com", "Alice", "Anderson", "Adrian M");
+
+        StepVerifier.create(profileService.updateProfile("alice", req))
+                .expectNextMatches(p -> "Adrian M".equals(p.displayName()))
+                .verifyComplete();
+    }
+
+    @Test
+    void updateProfileBlankDisplayNameStoresNull() {
+        var alice = new UserProfile("alice", "alice@example.com", "Alice", "Anderson");
+        alice.setId(1L);
+        when(userProfileRepository.findByUsername("alice")).thenReturn(Mono.just(alice));
+        when(userProfileRepository.save(alice)).thenReturn(Mono.just(alice));
+
+        var req = new UpdateProfileRequest("alice@example.com", "Alice", "Anderson", "   ");
+
+        StepVerifier.create(profileService.updateProfile("alice", req))
+                .expectNextMatches(p -> p.displayName() == null)
+                .verifyComplete();
+    }
+
+    @Test
+    void updateProfileRejectsInvalidDisplayName() {
+        var alice = new UserProfile("alice", "alice@example.com", "Alice", "Anderson");
+        alice.setId(1L);
+        when(userProfileRepository.findByUsername("alice")).thenReturn(Mono.just(alice));
+
+        var req = new UpdateProfileRequest("alice@example.com", "Alice", "Anderson", "a");
+
+        StepVerifier.create(profileService.updateProfile("alice", req))
+                .expectErrorMatches(e -> e instanceof ResponseStatusException rse
+                        && rse.getStatusCode() == HttpStatus.BAD_REQUEST)
                 .verify();
     }
 }

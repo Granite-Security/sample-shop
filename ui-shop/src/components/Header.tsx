@@ -1,10 +1,23 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { api } from '../api';
 import { useAuth } from '../auth';
 import { useCart } from '../contexts/CartContext';
 
 export default function Header() {
   const { isAuthenticated, isAdmin, user, logout } = useAuth();
   const { itemCount } = useCart();
+  const [displayName, setDisplayName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setDisplayName(null);
+      return;
+    }
+    api.profile.getProfile()
+      .then(p => setDisplayName(p.displayName))
+      .catch(() => {});
+  }, [isAuthenticated]);
 
   return (
     <header className="header">
@@ -20,7 +33,7 @@ export default function Header() {
         </Link>
         {isAuthenticated ? (
           <span className="user-info">
-            <Link to="/profile" style={{ fontWeight: 600, color: 'inherit' }}>{user?.name}</Link>
+            <Link to="/profile" style={{ fontWeight: 600, color: 'inherit' }}>{displayName ?? user?.name}</Link>
             <button onClick={logout} className="btn-link">Logout</button>
           </span>
         ) : (

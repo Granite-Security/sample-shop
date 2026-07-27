@@ -12,17 +12,24 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
+import org.springframework.http.HttpStatus;
+
 import java.time.Duration;
+import java.util.Collection;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class StorageService {
 
-    private static final Set<String> ALLOWED_CONTENT_TYPES =
-            Set.of("image/jpeg", "image/png", "image/webp");
+    private static final String USER_FILES_SCOPE = "user-files";
 
-    private static final Set<String> ALLOWED_SCOPES = Set.of("products");
+    private static final Map<String, Set<String>> ALLOWED_CONTENT_TYPES_BY_SCOPE = Map.of(
+            "products", Set.of("image/jpeg", "image/png", "image/webp"),
+            USER_FILES_SCOPE, Set.of("image/jpeg", "image/png", "image/webp",
+                    "application/pdf", "text/plain")
+    );
 
     private static final Duration PRESIGN_EXPIRY = Duration.ofMinutes(10);
 
@@ -40,16 +47,19 @@ public class StorageService {
         this.publicBaseUrl = publicBaseUrl;
     }
 
-    public Mono<PresignResponse> presign(String fileName, String contentType, String scope) {
+    public Mono<PresignResponse> presign(String fileName, String contentType, String scope,
+                                          Collection<String> authorities) {
         return Mono.fromCallable(() -> {
             if (fileName == null || fileName.isBlank()) {
                 throw new StorageException("fileName is required");
             }
-            if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType)) {
-                throw new StorageException("contentType must be one of " + ALLOWED_CONTENT_TYPES);
+            Set<String> allowedContentTypes = scope == null ? null : ALLOWED_CONTENT_TYPES_BY_SCOPE.get(scope);
+            if (allowedContentTypes == null) {
+                throw new StorageException("scope must be one of " + ALLOWED_CONTENT_TYPES_BY_SCOPE.keySet());
             }
-            if (scope == null || !ALLOWED_SCOPES.contains(scope)) {
-                throw new StorageException("scope must be one of " + ALLOWED_SCOPES);
+            requireScopeAllowedForCaller(scope, authorities);
+            if (contentType == null || !allowedContentTypes.contains(contentType)) {
+                throw new StorageException("contentType must be one of " + allowedContentTypes);
             }
 
             String key = scope + "/" + UUID.randomUUID() + "/" + sanitize(fileName);
@@ -71,16 +81,35 @@ public class StorageService {
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    public Mono<Void> deleteObject(String key) {
+    public Mono<Void> deleteObject(String key, Collection<String> authorities) {
         return Mono.<Void>fromRunnable(() -> {
-            if (key == null || ALLOWED_SCOPES.stream().noneMatch(scope -> key.startsWith(scope + "/"))) {
-                throw new StorageException("key must be prefixed by an allowed scope: " + ALLOWED_SCOPES);
+            String scope = key == null ? null : ALLOWED_CONTENT_TYPES_BY_SCOPE.keySet().stream()
+                    .filter(s -> key.startsWith(s + "/"))
+                    .findFirst()
+                    .orElse(null);
+            if (scope == null) {
+                throw new StorageException(
+                        "key must be prefixed by an allowed scope: " + ALLOWED_CONTENT_TYPES_BY_SCOPE.keySet());
             }
+            requireScopeAllowedForCaller(scope, authorities);
             s3Client.deleteObject(DeleteObjectRequest.builder()
                     .bucket(bucket)
                     .key(key)
                     .build());
         }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private void requireScopeAllowedForCaller(String scope, Collection<String> authorities) {
+        Collection<String> auths = authorities == null ? Set.of() : authorities;
+        boolean isElevated = auths.contains("ROLE_ADMIN") || auths.contains("ROLE_MANAGER");
+        if (isElevated) {
+            return;
+        }
+        boolean isInternal = auths.contains("SCOPE_internal");
+        if (!isInternal || !USER_FILES_SCOPE.equals(scope)) {
+            throw new StorageException(
+                    "caller is not authorized to use scope: " + scope, HttpStatus.FORBIDDEN, "Forbidden");
+        }
     }
 
     private String sanitize(String fileName) {

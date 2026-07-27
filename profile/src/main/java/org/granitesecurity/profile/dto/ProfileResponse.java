@@ -6,6 +6,7 @@ public record ProfileResponse(
         String email,
         String firstName,
         String lastName,
+        String displayName,
         java.time.Instant createdAt,
         java.time.Instant updatedAt
 ) {}
