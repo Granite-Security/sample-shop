@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router'
 import Layout from './components/Layout'
+import RequireAuth from './components/RequireAuth'
 import Home from './pages/Home'
 import Catalog from './pages/Catalog'
 import ProductDetail from './pages/ProductDetail'
@@ -21,6 +22,8 @@ import ResetPasswordConfirm from './pages/ResetPasswordConfirm'
 import Callback from './pages/Callback'
 import Addresses from './pages/Addresses'
 import Profile from './pages/Profile'
+import Password from './pages/Password'
+import Files from './pages/Files'
 
 export default function App() {
   return (
@@ -34,8 +37,12 @@ export default function App() {
         <Route path="orders" element={<Orders />} />
         <Route path="orders/:id" element={<OrderDetail />} />
         <Route path="orders/:id/pay" element={<RetryPayment />} />
-        <Route path="profile" element={<Profile />} />
-        <Route path="addresses" element={<Addresses />} />
+        <Route element={<RequireAuth />}>
+          <Route path="profile" element={<Profile />} />
+          <Route path="profile/password" element={<Password />} />
+          <Route path="profile/files" element={<Files />} />
+          <Route path="addresses" element={<Addresses />} />
+        </Route>
         <Route path="admin" element={<Admin />} />
         <Route path="admin/products" element={<ProductsManagement />} />
         <Route path="admin/products/new" element={<ProductForm />} />

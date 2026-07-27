@@ -5,11 +5,15 @@ import { Callback } from './components/Callback';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
+import RequireAuth from './components/RequireAuth';
 import { Home } from './pages/Home';
 import { ProductPage } from './pages/ProductPage';
 import { AdminPage } from './pages/AdminPage';
 import { CheckoutPage } from './pages/CheckoutPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { PasswordPage } from './pages/PasswordPage';
+import { FilesPage } from './pages/FilesPage';
+import { AddressesPage } from './pages/AddressesPage';
 import { Register } from './pages/Register';
 import { ResetPasswordRequest } from './pages/ResetPasswordRequest';
 import { ResetPasswordConfirm } from './pages/ResetPasswordConfirm';
@@ -39,7 +43,12 @@ export default function App() {
               <Route path="products/:id" element={<ProductPage />} />
               <Route path="admin" element={<AdminPage />} />
               <Route path="checkout" element={<CheckoutPage />} />
-              <Route path="profile" element={<ProfilePage />} />
+              <Route element={<RequireAuth />}>
+                <Route path="profile" element={<ProfilePage />} />
+                <Route path="profile/password" element={<PasswordPage />} />
+                <Route path="profile/files" element={<FilesPage />} />
+                <Route path="profile/addresses" element={<AddressesPage />} />
+              </Route>
               <Route path="register" element={<Register />} />
               <Route path="reset-password" element={<ResetPasswordRequest />} />
               <Route path="reset-password/confirm" element={<ResetPasswordConfirm />} />
