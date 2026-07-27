@@ -25,7 +25,6 @@ public class ProfileRoute {
                 .PUT("/api/profiles/me/addresses/{id}", addressHandler::updateAddress)
                 .DELETE("/api/profiles/me/addresses/{id}", addressHandler::deleteAddress)
                 .GET("/api/profiles/me/files", userFileHandler::listFiles)
-                .POST("/api/profiles/me/files/presign", userFileHandler::presign)
                 .POST("/api/profiles/me/files", userFileHandler::register)
                 .DELETE("/api/profiles/me/files/{id}", userFileHandler::delete)
                 .GET("/api/profiles/internal/{username}/addresses/{id}", addressHandler::getAddressById)

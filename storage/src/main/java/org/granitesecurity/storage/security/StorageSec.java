@@ -4,7 +4,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.core.GrantedAuthority;
@@ -46,10 +45,11 @@ public class StorageSec {
                 .cors(Customizer.withDefaults())
                 .authorizeExchange(exchange -> exchange
                         .pathMatchers("/actuator/health", "/actuator/health/**").permitAll()
-                        .pathMatchers(HttpMethod.POST, "/api/storage/presign")
-                                .hasAnyAuthority("ROLE_ADMIN", "ROLE_MANAGER", "SCOPE_internal")
-                        .pathMatchers(HttpMethod.DELETE, "/api/storage/objects")
-                                .hasAnyAuthority("ROLE_ADMIN", "ROLE_MANAGER", "SCOPE_internal")
+                        // presign/delete are open to any authenticated caller — the
+                        // per-scope restriction (only ADMIN/MANAGER may use "products";
+                        // everyone else is confined to "user-files") is enforced in
+                        // StorageService, not here, so a plain logged-in user can
+                        // upload/delete their own files without any special authority.
                         .anyExchange().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2

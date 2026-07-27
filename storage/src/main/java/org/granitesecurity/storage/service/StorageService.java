@@ -105,8 +105,10 @@ public class StorageService {
         if (isElevated) {
             return;
         }
-        boolean isInternal = auths.contains("SCOPE_internal");
-        if (!isInternal || !USER_FILES_SCOPE.equals(scope)) {
+        // Any other authenticated caller (a plain logged-in user, not just an
+        // internal service) is confined to the user-files scope — only
+        // ADMIN/MANAGER may sign/delete product-media keys.
+        if (!USER_FILES_SCOPE.equals(scope)) {
             throw new StorageException(
                     "caller is not authorized to use scope: " + scope, HttpStatus.FORBIDDEN, "Forbidden");
         }
