@@ -43,3 +43,9 @@ app:
       post-logout-redirect-uri: ${SPA_CLIENT_CHOCOLATE_POST_LOGOUT_REDIRECT_URI:http://localhost:5173}
     external-client:
       secret: ${EXTERNAL_CLIENT_SECRET:{noop}my-secret}
+    internal-service:
+      # Distinct literal from external-client's default above — Spring's
+      # InMemoryRegisteredClientRepository rejects two registered clients
+      # that resolve to the same secret, which crashed auth-server in prod
+      # when both fell back to their unset-env-var defaults simultaneously.
+      secret: ${INTERNAL_CLIENT_SECRET_ENCODED:{noop}internal-secret}
