@@ -53,6 +53,10 @@ public class ProfileSec {
                 .cors(Customizer.withDefaults())
                 .authorizeExchange(exchange -> exchange
                         .pathMatchers("/api/profiles/internal/**").hasAuthority("SCOPE_internal")
+                        // Must precede the admin {username} wildcard below — "me" is a
+                        // valid value for {username}, so without this rule first,
+                        // GET/PUT /api/profiles/me would require ROLE_ADMIN.
+                        .pathMatchers("/api/profiles/me", "/api/profiles/me/**").authenticated()
                         .pathMatchers(HttpMethod.GET, "/api/profiles", "/api/profiles/{username}").hasRole("ADMIN")
                         .pathMatchers("/api/profiles/**").authenticated()
                         .anyExchange().permitAll()
