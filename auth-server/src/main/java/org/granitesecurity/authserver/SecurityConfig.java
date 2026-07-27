@@ -2,6 +2,7 @@ package org.granitesecurity.authserver;
 
 
 import com.nimbusds.jose.jwk.JWKSet;
+import org.granitesecurity.authserver.user.GoogleOidcUserService;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
@@ -10,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -140,13 +142,18 @@ public class SecurityConfig {
 
     @Bean
     @Order(2)
-    public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http)
+    public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http, GoogleOidcUserService googleOidcUserService)
             throws Exception {
         http
                 .authorizeHttpRequests((authorize) -> authorize
+                        .requestMatchers(HttpMethod.POST, "/api/register").permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 )
+                // The registration endpoint is unauthenticated, creates a brand-new
+                // principal, and has no session or ambient authority for a forged
+                // request to ride on, so it's safe to exempt from CSRF.
+                .csrf((csrf) -> csrf.ignoringRequestMatchers("/api/register"))
                 // Form login handles the redirect to the login page from the
                 // authorization server filter chain
                 .formLogin(Customizer.withDefaults())
@@ -155,6 +162,7 @@ public class SecurityConfig {
                                 .baseUri("/login/oauth2/code/*")
                         )
                         .userInfoEndpoint((userInfo) -> userInfo
+                                .oidcUserService(googleOidcUserService)
                                 .userAuthoritiesMapper(oAuth2LoginAuthoritiesMapper())
                         )
                 );

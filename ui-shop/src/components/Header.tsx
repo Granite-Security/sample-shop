@@ -24,7 +24,10 @@ export default function Header() {
             <button onClick={logout} className="btn-link">Logout</button>
           </span>
         ) : (
-          <Link to="/login" className="btn-link">Login</Link>
+          <>
+            <Link to="/login" className="btn-link">Login</Link>
+            <Link to="/register" className="btn-link">Register</Link>
+          </>
         )}
       </div>
     </header>
