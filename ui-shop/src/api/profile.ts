@@ -4,10 +4,31 @@ import type {
   AddressRequest,
   AddressResponse,
   AdminUserProfile,
+  DuplicateFileCheckResponse,
   ProfileResponse,
   UpdateProfileRequest,
   UserFile,
 } from '../types';
+
+export class DuplicateFileError extends Error {
+  existingFile: UserFile;
+
+  constructor(existingFile: UserFile) {
+    super('This file has already been uploaded.');
+    this.existingFile = existingFile;
+  }
+}
+
+// Hashed locally so a duplicate can be detected — and the upload skipped
+// entirely — before any bytes are sent, rather than discovering it only
+// after uploading a full copy.
+async function sha256Hex(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(digest))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
 
 export const profileApi = {
   getProfiles: () =>
@@ -37,13 +58,25 @@ export const profileApi = {
   getFiles: () =>
     request<UserFile[]>('/api/profiles/me/files'),
 
-  registerFile: (body: { key: string; url: string; fileName: string; contentType: string; sizeBytes: number }) =>
+  checkDuplicateFile: (contentHash: string) =>
+    request<DuplicateFileCheckResponse>(`/api/profiles/me/files/duplicate?hash=${encodeURIComponent(contentHash)}`),
+
+  registerFile: (body: {
+    key: string; url: string; fileName: string; contentType: string; sizeBytes: number; contentHash: string;
+  }) =>
     request<UserFile>('/api/profiles/me/files', { method: 'POST', body: JSON.stringify(body) }),
 
   // Upload goes straight to storage (same pattern as the admin product-media
   // upload in storageApi.uploadFile) rather than through a profile-brokered
   // presign — profile only records ownership afterward via registerFile.
   uploadFile: async (file: File): Promise<UserFile> => {
+    const contentHash = await sha256Hex(file);
+
+    const dup = await profileApi.checkDuplicateFile(contentHash);
+    if (dup.duplicate && dup.existingFile) {
+      throw new DuplicateFileError(dup.existingFile);
+    }
+
     const presigned = await storageApi.presignUpload(file.name, file.type, 'user-files');
     const putResponse = await fetch(presigned.uploadUrl, {
       method: 'PUT',
@@ -59,6 +92,7 @@ export const profileApi = {
       fileName: file.name,
       contentType: file.type,
       sizeBytes: file.size,
+      contentHash,
     });
   },
 

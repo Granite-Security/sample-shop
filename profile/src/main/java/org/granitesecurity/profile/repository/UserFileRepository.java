@@ -18,4 +18,6 @@ public interface UserFileRepository extends ReactiveCrudRepository<UserFile, Lon
     Mono<Boolean> existsByObjectKey(String objectKey);
 
     Mono<Long> countByUsername(String username);
+
+    Mono<UserFile> findByUsernameAndContentHash(String username, String contentHash);
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api } from '../api';
 import { ApiError } from '../api/client';
+import { DuplicateFileError } from '../api/profile';
 import { useAuth } from '../auth';
 import type { ProfileResponse, UserFile } from '../types';
 
@@ -35,6 +36,7 @@ export default function Profile() {
   const [filesLoading, setFilesLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [duplicateFile, setDuplicateFile] = useState<UserFile | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -79,6 +81,7 @@ export default function Profile() {
     if (!file) return;
 
     setFileError(null);
+    setDuplicateFile(null);
     if (!ALLOWED_FILE_TYPES.includes(file.type)) {
       setFileError(`Unsupported file type: ${file.type || 'unknown'}`);
       return;
@@ -93,7 +96,11 @@ export default function Profile() {
       const uploaded = await api.profile.uploadFile(file);
       setFiles(prev => [uploaded, ...prev]);
     } catch (err) {
-      setFileError(err instanceof Error ? err.message : 'Upload failed');
+      if (err instanceof DuplicateFileError) {
+        setDuplicateFile(err.existingFile);
+      } else {
+        setFileError(err instanceof Error ? err.message : 'Upload failed');
+      }
     } finally {
       setUploading(false);
     }
@@ -225,6 +232,13 @@ export default function Profile() {
           />
           {uploading && <p>Uploading…</p>}
           {fileError && <p style={{ color: 'red' }}>{fileError}</p>}
+          {duplicateFile && (
+            <p style={{ color: 'red' }}>
+              You've already uploaded this file as{' '}
+              <a href={duplicateFile.url} target="_blank" rel="noreferrer">{duplicateFile.fileName}</a>
+              {' '}on {new Date(duplicateFile.createdAt).toLocaleDateString()}.
+            </p>
+          )}
 
           {filesLoading ? (
             <p>Loading files…</p>
