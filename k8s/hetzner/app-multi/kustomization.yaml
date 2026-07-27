@@ -61,4 +61,4 @@ images:
     newTag: 8f9b1160ae8e6e2af53617dc7f2552cb3770fafe
   - name: granite-storage
     newName: docker.io/moldovean/granite-storage
-    newTag: 89e108cb5ef16be5ad698588e855d3526e584c4f
+    newTag: e2667bb86f379fbf7acad58705dc360d94217bbc
