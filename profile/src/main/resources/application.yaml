@@ -48,3 +48,8 @@ microservices:
 
 storage:
   public-base-url: ${STORAGE_PUBLIC_BASE_URL:http://product-media.localhost:3902}
+
+resend:
+  api-key: ${RESEND_API_KEY:}
+  from: ${RESEND_FROM:Granite Security <no-reply@notify.granite-security.org>}
+  base-url: ${RESEND_BASE_URL:https://api.resend.com}

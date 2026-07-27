@@ -28,4 +28,19 @@ public class UserExceptionHandler {
         problem.setProperty("field", ex.getField());
         return problem;
     }
+
+    @ExceptionHandler(IncorrectPasswordException.class)
+    public ProblemDetail handleIncorrectPassword(IncorrectPasswordException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(SamePasswordException.class)
+    public ProblemDetail handleSamePassword(SamePasswordException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(NonLocalAccountException.class)
+    public ProblemDetail handleNonLocalAccount(NonLocalAccountException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
 }

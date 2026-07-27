@@ -101,6 +101,16 @@ spec:
                 secretKeyRef:
                   name: granite-secrets
                   key: google-client-secret
+            - name: MICROSERVICES_PROFILE_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: MICROSERVICES_PROFILE_URI
+            - name: AUTH_SERVER_TOKEN_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: AUTH_SERVER_TOKEN_URI
           readinessProbe:
             httpGet:
               path: /auth/login

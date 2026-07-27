@@ -94,6 +94,16 @@ spec:
                   key: AUTH_SERVER_TOKEN_URI
             - name: INTERNAL_CLIENT_ID
               value: "internal-service"
+            - name: RESEND_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: resend-api-key
+            - name: RESEND_FROM
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: RESEND_FROM
 ---
 apiVersion: v1
 kind: Service

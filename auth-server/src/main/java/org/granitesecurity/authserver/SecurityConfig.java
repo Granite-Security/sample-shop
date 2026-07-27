@@ -17,6 +17,8 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.FactorGrantedAuthority;
 import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
@@ -90,6 +92,21 @@ public class SecurityConfig {
     @Value("${app.oauth2.internal-service.secret:{noop}internal-secret}")
     private String internalClientSecret;
 
+    // The raw counterpart to internalClientSecret above: that field is the
+    // ENCODED value stored on the internal-service RegisteredClient (for
+    // OTHER services, like profile, to authenticate against); this is the
+    // RAW value auth-server itself sends when it acts AS that client to call
+    // profile's internal notify endpoint. Same split as oidc-client's
+    // -plain/-encoded secret pair, for the same reason.
+    @Value("${app.oauth2.internal-service.raw-secret:internal-secret}")
+    private String internalClientRawSecret;
+
+    // Cluster-internal token endpoint auth-server calls to mint its own
+    // client-credentials token — same value profile already uses to call
+    // this same endpoint (AUTH_SERVER_TOKEN_URI in granite-config).
+    @Value("${AUTH_SERVER_TOKEN_URI:http://localhost:9090/auth/oauth2/token}")
+    private String selfTokenUri;
+
     @Value("${GOOGLE_CLIENT_ID:google-client-id}")
     private String googleClientId;
 
@@ -143,8 +160,28 @@ public class SecurityConfig {
         return http.build();
     }
 
+    // Bearer-token-authenticated, stateless — validates the same self-issued
+    // JWTs auth-server itself hands out, using the existing jwtDecoder bean
+    // below (built from the same in-process signing key). No new decoder or
+    // trusted-issuers allow-list needed here: unlike downstream resource
+    // servers (profile, storage, ...), auth-server validating its own tokens
+    // doesn't need to reason about which public domain issued them.
     @Bean
     @Order(2)
+    public SecurityFilterChain accountApiSecurityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder)
+            throws Exception {
+        http
+                .securityMatcher("/api/me/**")
+                .csrf(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(authorize -> authorize.anyRequest().authenticated())
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.decoder(jwtDecoder)));
+
+        return http.build();
+    }
+
+    @Bean
+    @Order(3)
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http, GoogleOidcUserService googleOidcUserService)
             throws Exception {
         http
@@ -281,7 +318,24 @@ public class SecurityConfig {
                 .clientName("Google")
                 .build();
 
-        return new InMemoryClientRegistrationRepository(googleRegistration);
+        // auth-server acting AS the internal-service client, to call profile's
+        // internal notify endpoint after a password change (see
+        // ProfileNotificationClient). Built programmatically rather than via
+        // spring.security.oauth2.client.registration.* YAML properties,
+        // because this method already defines the ClientRegistrationRepository
+        // bean by hand — Boot's property-driven autoconfiguration backs off
+        // whenever a user-defined bean of that type already exists, so YAML
+        // config here would silently be ignored.
+        ClientRegistration profileClientRegistration = ClientRegistration.withRegistrationId("profile-client")
+                .clientId("internal-service")
+                .clientSecret(internalClientRawSecret)
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .scope("internal")
+                .tokenUri(selfTokenUri)
+                .build();
+
+        return new InMemoryClientRegistrationRepository(googleRegistration, profileClientRegistration);
     }
 
     @Bean

@@ -1,3 +1,4 @@
+import { accountApi } from './api/account';
 import { authApi } from './api/auth';
 import { catalogApi } from './api/catalog';
 import { deliveryApi } from './api/delivery';
@@ -8,6 +9,7 @@ import { shopApi } from './api/shop';
 import { storageApi } from './api/storage';
 
 export const api = {
+  account: accountApi,
   auth: authApi,
   shop: shopApi,
   catalog: catalogApi,
