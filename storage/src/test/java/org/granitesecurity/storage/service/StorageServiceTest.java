@@ -58,7 +58,7 @@ class StorageServiceTest {
                     assert response.key().endsWith("hero.jpg");
                     assert response.uploadUrl().equals(url.toString());
                     assert response.publicUrl().equals(PUBLIC_BASE_URL + "/" + response.key());
-                    assert response.expiresIn() == 600L;
+                    assert response.expiresIn() == 7200L;
                 })
                 .verifyComplete();
     }

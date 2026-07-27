@@ -6,13 +6,18 @@ import { useAuth } from '../auth';
 import type { ProfileResponse, UserFile } from '../types';
 
 const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'text/plain'];
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+// S3 (and Garage, which implements the same API) rejects a single PUT above
+// 5 GiB — anything larger needs multipart upload, which this presign-based
+// flow doesn't support. Stay comfortably under that hard ceiling, matching
+// UserFileService's own limit on the backend.
+const MAX_FILE_SIZE_BYTES = 5_000_000_000;
 
 function formatSize(bytes: number | null): string {
   if (bytes == null) return '—';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
 export default function Profile() {
@@ -79,7 +84,7 @@ export default function Profile() {
       return;
     }
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      setFileError('File exceeds the 10 MB limit');
+      setFileError('File exceeds the 5 GB limit');
       return;
     }
 
