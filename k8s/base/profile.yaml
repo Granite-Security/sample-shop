@@ -77,6 +77,23 @@ spec:
                 secretKeyRef:
                   name: granite-secrets
                   key: db-myuser-password
+            - name: MICROSERVICES_STORAGE_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: MICROSERVICES_STORAGE_URI
+            - name: STORAGE_PUBLIC_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: STORAGE_PUBLIC_BASE_URL
+            - name: AUTH_SERVER_TOKEN_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: AUTH_SERVER_TOKEN_URI
+            - name: INTERNAL_CLIENT_ID
+              value: "internal-service"
 ---
 apiVersion: v1
 kind: Service

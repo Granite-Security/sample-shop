@@ -87,7 +87,7 @@ public class SecurityConfig {
     @Value("${app.oauth2.external-client.secret:{noop}my-secret}")
     private String externalClientSecret;
 
-    @Value("${app.oauth2.internal-service.secret:{noop}my-secret}")
+    @Value("${app.oauth2.internal-service.secret:{noop}internal-secret}")
     private String internalClientSecret;
 
     @Value("${GOOGLE_CLIENT_ID:google-client-id}")

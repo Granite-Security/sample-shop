@@ -30,7 +30,7 @@ spring:
         registration:
           storage-client:
             client-id: ${INTERNAL_CLIENT_ID:internal-service}
-            client-secret: ${INTERNAL_CLIENT_SECRET:my-secret}
+            client-secret: ${INTERNAL_CLIENT_SECRET:internal-secret}
             authorization-grant-type: client_credentials
             scope: internal
             provider: auth-server

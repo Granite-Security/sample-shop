@@ -83,6 +83,10 @@ data:
   # to a comma-separated list covering every live domain.
   TRUSTED_JWT_ISSUERS: "http://gateway:8080/auth"
   JWT_JWK_SET_URI: "http://auth-server:9090/auth/oauth2/jwks"
+  # Cluster-internal client-credentials token endpoint (profile calls this
+  # directly, not through the gateway) — same host regardless of which public
+  # domain is being served, same reasoning as JWT_JWK_SET_URI above.
+  AUTH_SERVER_TOKEN_URI: "http://auth-server:9090/auth/oauth2/token"
 
   # ── ui-shop runtime config (SPA reads these via window.__ENV__) ──
   # OIDC_AUTHORITY must equal the issuer above; overlays keep them in lockstep.
