@@ -24,6 +24,27 @@ spring:
     password: ${PROFILE_JDBC_PASSWORD:secret}
     change-log: classpath:/db/changelog/db.changelog-master.yaml
 
+  security:
+    oauth2:
+      client:
+        registration:
+          storage-client:
+            client-id: ${INTERNAL_CLIENT_ID:internal-service}
+            client-secret: ${INTERNAL_CLIENT_SECRET:my-secret}
+            authorization-grant-type: client_credentials
+            scope: internal
+            provider: auth-server
+        provider:
+          auth-server:
+            token-uri: ${AUTH_SERVER_TOKEN_URI:http://localhost:9090/auth/oauth2/token}
+
 jwt:
   jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:9090/auth/oauth2/jwks}
   trusted-issuers: ${TRUSTED_JWT_ISSUERS:http://localhost:8080/auth}
+
+microservices:
+  storage:
+    uri: ${MICROSERVICES_STORAGE_URI:http://localhost:8065}
+
+storage:
+  public-base-url: ${STORAGE_PUBLIC_BASE_URL:http://product-media.localhost:3902}

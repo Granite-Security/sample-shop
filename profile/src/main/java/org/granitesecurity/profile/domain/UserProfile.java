@@ -26,6 +26,9 @@ public class UserProfile {
     @Column("last_name")
     private String lastName;
 
+    @Column("display_name")
+    private String displayName;
+
     @Column("created_at")
     private Instant createdAt;
 

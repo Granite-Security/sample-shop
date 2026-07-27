@@ -15,6 +15,7 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 
 import java.net.URI;
 import java.net.URL;
+import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -34,6 +35,9 @@ class StorageServiceTest {
     @Mock
     private PresignedPutObjectRequest presignedPutObjectRequest;
 
+    private static final Set<String> ADMIN = Set.of("ROLE_ADMIN");
+    private static final Set<String> INTERNAL = Set.of("SCOPE_internal");
+
     private StorageService storageService;
 
     @BeforeEach
@@ -48,7 +52,7 @@ class StorageServiceTest {
         when(s3Presigner.presignPutObject(any(PutObjectPresignRequest.class)))
                 .thenReturn(presignedPutObjectRequest);
 
-        StepVerifier.create(storageService.presign("hero.jpg", "image/jpeg", "products"))
+        StepVerifier.create(storageService.presign("hero.jpg", "image/jpeg", "products", ADMIN))
                 .assertNext(response -> {
                     assert response.key().startsWith("products/");
                     assert response.key().endsWith("hero.jpg");
@@ -66,7 +70,7 @@ class StorageServiceTest {
         when(s3Presigner.presignPutObject(any(PutObjectPresignRequest.class)))
                 .thenReturn(presignedPutObjectRequest);
 
-        StepVerifier.create(storageService.presign("../../etc/evil.txt", "image/png", "products"))
+        StepVerifier.create(storageService.presign("../../etc/evil.txt", "image/png", "products", ADMIN))
                 .assertNext(response -> {
                     assert !response.key().contains("..");
                     assert !response.key().contains("/etc/");
@@ -76,7 +80,7 @@ class StorageServiceTest {
 
     @Test
     void presignShouldRejectDisallowedContentType() {
-        StepVerifier.create(storageService.presign("hero.jpg", "application/pdf", "products"))
+        StepVerifier.create(storageService.presign("hero.jpg", "application/pdf", "products", ADMIN))
                 .expectErrorMatches(ex -> ex instanceof StorageException)
                 .verify();
 
@@ -85,7 +89,7 @@ class StorageServiceTest {
 
     @Test
     void presignShouldRejectDisallowedScope() {
-        StepVerifier.create(storageService.presign("hero.jpg", "image/jpeg", "avatars"))
+        StepVerifier.create(storageService.presign("hero.jpg", "image/jpeg", "avatars", ADMIN))
                 .expectErrorMatches(ex -> ex instanceof StorageException)
                 .verify();
 
@@ -97,7 +101,7 @@ class StorageServiceTest {
         when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
                 .thenReturn(DeleteObjectResponse.builder().build());
 
-        StepVerifier.create(storageService.deleteObject("products/abc/hero.jpg"))
+        StepVerifier.create(storageService.deleteObject("products/abc/hero.jpg", ADMIN))
                 .verifyComplete();
 
         verify(s3Client).deleteObject(any(DeleteObjectRequest.class));
@@ -105,7 +109,39 @@ class StorageServiceTest {
 
     @Test
     void deleteObjectShouldRejectKeyOutsideAllowedPrefix() {
-        StepVerifier.create(storageService.deleteObject("../secrets/private.jpg"))
+        StepVerifier.create(storageService.deleteObject("../secrets/private.jpg", ADMIN))
+                .expectErrorMatches(ex -> ex instanceof StorageException)
+                .verify();
+
+        verifyNoInteractions(s3Client);
+    }
+
+    @Test
+    void presignShouldAllowInternalCallerForUserFilesScope() throws Exception {
+        URL url = URI.create("http://localhost:3900/product-media/user-files/abc/note.pdf?signed=1").toURL();
+        when(presignedPutObjectRequest.url()).thenReturn(url);
+        when(s3Presigner.presignPutObject(any(PutObjectPresignRequest.class)))
+                .thenReturn(presignedPutObjectRequest);
+
+        StepVerifier.create(storageService.presign("note.pdf", "application/pdf", "user-files", INTERNAL))
+                .assertNext(response -> {
+                    assert response.key().startsWith("user-files/");
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void presignShouldRejectInternalCallerForProductsScope() {
+        StepVerifier.create(storageService.presign("hero.jpg", "image/jpeg", "products", INTERNAL))
+                .expectErrorMatches(ex -> ex instanceof StorageException)
+                .verify();
+
+        verifyNoInteractions(s3Presigner);
+    }
+
+    @Test
+    void deleteObjectShouldRejectInternalCallerForProductsScope() {
+        StepVerifier.create(storageService.deleteObject("products/abc/hero.jpg", INTERNAL))
                 .expectErrorMatches(ex -> ex instanceof StorageException)
                 .verify();
 

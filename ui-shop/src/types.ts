@@ -108,6 +108,7 @@ export interface ProfileResponse {
   email: string | null;
   firstName: string | null;
   lastName: string | null;
+  displayName: string | null;
 }
 
 export interface AdminUserProfile {
@@ -124,6 +125,23 @@ export interface UpdateProfileRequest {
   email?: string;
   firstName?: string;
   lastName?: string;
+  displayName?: string;
+}
+
+export interface UserFile {
+  id: number;
+  fileName: string;
+  url: string;
+  contentType: string;
+  sizeBytes: number | null;
+  createdAt: string;
+}
+
+export interface PresignFileResponse {
+  key: string;
+  uploadUrl: string;
+  publicUrl: string;
+  expiresIn: number;
 }
 
 export interface AddressResponse {

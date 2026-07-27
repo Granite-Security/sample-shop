@@ -3,3 +3,5 @@ databaseChangeLog:
       file: db/changelog/001-create-profile-schema.sql
   - include:
       file: db/changelog/002-seed-profiles.sql
+  - include:
+      file: db/changelog/003-user-cabinet.sql

@@ -3,8 +3,10 @@ import type {
   AddressRequest,
   AddressResponse,
   AdminUserProfile,
+  PresignFileResponse,
   ProfileResponse,
   UpdateProfileRequest,
+  UserFile,
 } from '../types';
 
 export const profileApi = {
@@ -31,4 +33,38 @@ export const profileApi = {
 
   deleteAddress: (id: number) =>
     request<void>(`/api/profiles/me/addresses/${id}`, { method: 'DELETE' }),
+
+  getFiles: () =>
+    request<UserFile[]>('/api/profiles/me/files'),
+
+  presignFile: (fileName: string, contentType: string, sizeBytes: number) =>
+    request<PresignFileResponse>('/api/profiles/me/files/presign', {
+      method: 'POST',
+      body: JSON.stringify({ fileName, contentType, sizeBytes }),
+    }),
+
+  registerFile: (body: { key: string; url: string; fileName: string; contentType: string; sizeBytes: number }) =>
+    request<UserFile>('/api/profiles/me/files', { method: 'POST', body: JSON.stringify(body) }),
+
+  uploadFile: async (file: File): Promise<UserFile> => {
+    const presigned = await profileApi.presignFile(file.name, file.type, file.size);
+    const putResponse = await fetch(presigned.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type },
+      body: file,
+    });
+    if (!putResponse.ok) {
+      throw new Error(`Upload failed: ${putResponse.status} ${putResponse.statusText}`);
+    }
+    return profileApi.registerFile({
+      key: presigned.key,
+      url: presigned.publicUrl,
+      fileName: file.name,
+      contentType: file.type,
+      sizeBytes: file.size,
+    });
+  },
+
+  deleteFile: (id: number) =>
+    request<void>(`/api/profiles/me/files/${id}`, { method: 'DELETE' }),
 };

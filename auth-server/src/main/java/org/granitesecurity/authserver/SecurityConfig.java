@@ -87,6 +87,9 @@ public class SecurityConfig {
     @Value("${app.oauth2.external-client.secret:{noop}my-secret}")
     private String externalClientSecret;
 
+    @Value("${app.oauth2.internal-service.secret:{noop}my-secret}")
+    private String internalClientSecret;
+
     @Value("${GOOGLE_CLIENT_ID:google-client-id}")
     private String googleClientId;
 
@@ -247,7 +250,18 @@ public class SecurityConfig {
                 .scope(OidcScopes.OPENID)
                 .build();
 
-        return new InMemoryRegisteredClientRepository(oidcClient, spaClientShop, spaClientChocolate, externalClient);
+        // Used by profile to mint a service-to-service token for calling
+        // storage's presign/delete endpoints under the user-files scope.
+        RegisteredClient internalClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId("internal-service")
+                .clientSecret(internalClientSecret)
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .scope("internal")
+                .build();
+
+        return new InMemoryRegisteredClientRepository(
+                oidcClient, spaClientShop, spaClientChocolate, externalClient, internalClient);
     }
 
     @Bean
