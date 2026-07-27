@@ -40,4 +40,21 @@ public class EmailService {
                     return Mono.just(false);
                 });
     }
+
+    public Mono<Boolean> sendPasswordResetRequested(String to, String displayName, String resetLink) {
+        if (!enabled || to == null || to.isBlank()) {
+            log.info("[email disabled] would send password-reset-requested to <redacted>");
+            return Mono.just(false);
+        }
+        String subject = EmailTemplates.passwordResetRequestedSubject();
+        String html = EmailTemplates.passwordResetRequestedHtml(displayName, resetLink);
+        String text = EmailTemplates.passwordResetRequestedText(displayName, resetLink);
+        return resendClient.send(to, subject, html, text)
+                .doOnNext(id -> log.info("password-reset-requested email sent, resend id={}", id))
+                .map(id -> true)
+                .onErrorResume(ex -> {
+                    log.warn("failed to send password-reset-requested email: {}", ex.getMessage());
+                    return Mono.just(false);
+                });
+    }
 }

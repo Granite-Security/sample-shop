@@ -22,6 +22,7 @@ export default function Register() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
@@ -64,6 +65,7 @@ export default function Register() {
       return;
     }
     setFieldErrors({});
+    setShowForgotPassword(false);
     setSubmitting(true);
 
     try {
@@ -80,6 +82,9 @@ export default function Register() {
         const data = err.data as { field?: string; detail?: string };
         if (data.field) {
           setFieldErrors({ [data.field]: data.detail ?? 'Already taken' });
+          if (data.field === 'email') {
+            setShowForgotPassword(true);
+          }
         } else {
           setFormError(data.detail ?? err.message);
         }
@@ -133,6 +138,11 @@ export default function Register() {
             autoComplete="email"
           />
           {fieldErrors.email && <p style={{ color: 'var(--error, red)', margin: '4px 0 0' }}>{fieldErrors.email}</p>}
+          {showForgotPassword && (
+            <p style={{ margin: '4px 0 0' }}>
+              <Link to="/reset-password" state={{ email }}>Forgot password?</Link>
+            </p>
+          )}
         </div>
 
         <div>

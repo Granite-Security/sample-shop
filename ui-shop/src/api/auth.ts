@@ -8,4 +8,18 @@ export const authApi = {
       skipAuth: true,
       body: JSON.stringify(body),
     }),
+
+  requestPasswordReset: (email: string) =>
+    request<void>('/auth/api/password-reset/request', {
+      method: 'POST',
+      skipAuth: true,
+      body: JSON.stringify({ email }),
+    }),
+
+  confirmPasswordReset: (token: string, newPassword: string) =>
+    request<void>('/auth/api/password-reset/confirm', {
+      method: 'POST',
+      skipAuth: true,
+      body: JSON.stringify({ token, newPassword }),
+    }),
 };
