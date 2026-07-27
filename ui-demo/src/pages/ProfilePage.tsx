@@ -1,11 +1,26 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
-import { api } from '../api';
+import { api, ApiError, DuplicateFileError } from '../api';
 import { useAuth } from '../auth';
-import type { AddressRequest, AddressResponse, ProfileResponse } from '../types';
+import type { AddressRequest, AddressResponse, ProfileResponse, UserFile } from '../types';
 
 const inputStyle =
   'w-full border border-cocoa/20 bg-white/70 px-4 py-3 text-sm text-cocoa placeholder:text-cocoa/40 focus:border-gold focus:outline-none';
+
+const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'text/plain'];
+// S3 (and Garage, which implements the same API) rejects a single PUT above
+// 5 GiB — anything larger needs multipart upload, which this presign-based
+// flow doesn't support. Stay comfortably under that hard ceiling, matching
+// UserFileService's own limit on the backend.
+const MAX_FILE_SIZE_BYTES = 5_000_000_000;
+
+function formatSize(bytes: number | null): string {
+  if (bytes == null) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
 
 const EMPTY_ADDRESS: AddressRequest = {
   label: '',
@@ -41,6 +56,12 @@ export function ProfilePage() {
         >
           Sign In
         </button>
+        <p className="text-sm text-cocoa/60">
+          New here?{' '}
+          <Link to="/register" className="text-cocoa underline decoration-gold underline-offset-4 hover:text-terracotta">
+            Create an account
+          </Link>
+        </p>
       </div>
     );
   }
@@ -53,6 +74,8 @@ export function ProfilePage() {
 
         <div className="mt-10 space-y-14">
           <ProfileDetails />
+          <PasswordSection />
+          <FilesSection />
           <AddressBook />
         </div>
       </div>
@@ -62,7 +85,7 @@ export function ProfilePage() {
 
 function ProfileDetails() {
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
-  const [form, setForm] = useState({ email: '', firstName: '', lastName: '' });
+  const [form, setForm] = useState({ email: '', firstName: '', lastName: '', displayName: '' });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
@@ -74,7 +97,12 @@ function ProfileDetails() {
       .then((p) => {
         if (cancelled) return;
         setProfile(p);
-        setForm({ email: p.email ?? '', firstName: p.firstName ?? '', lastName: p.lastName ?? '' });
+        setForm({
+          email: p.email ?? '',
+          firstName: p.firstName ?? '',
+          lastName: p.lastName ?? '',
+          displayName: p.displayName ?? '',
+        });
       })
       .catch((err) => {
         if (!cancelled) setMessage({ kind: 'error', text: err instanceof Error ? err.message : String(err) });
@@ -158,6 +186,21 @@ function ProfileDetails() {
               />
             </div>
             <div className="sm:col-span-2">
+              <label
+                htmlFor="profile-display-name"
+                className="mb-1 block text-xs uppercase tracking-[0.16em] text-cocoa/60"
+              >
+                Display name
+              </label>
+              <input
+                id="profile-display-name"
+                value={form.displayName}
+                onChange={(e) => setForm({ ...form, displayName: e.target.value })}
+                placeholder="How your name appears across the site"
+                className={inputStyle}
+              />
+            </div>
+            <div className="sm:col-span-2">
               <button
                 type="submit"
                 disabled={busy}
@@ -168,6 +211,223 @@ function ProfileDetails() {
             </div>
           </form>
         </>
+      )}
+    </section>
+  );
+}
+
+function PasswordSection() {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+
+  const handleChangePassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setMessage(null);
+
+    if (newPassword.length < 8) {
+      setMessage({ kind: 'error', text: 'New password must be at least 8 characters' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setMessage({ kind: 'error', text: 'New password and confirmation do not match' });
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await api.changePassword({ currentPassword, newPassword });
+      setMessage({ kind: 'ok', text: 'Password changed. A confirmation email was sent to your address.' });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      // The backend's ProblemDetail "detail" is already a friendly message
+      // (e.g. "This account signs in with Google; there is no password to
+      // change.") — surface it directly.
+      if (err instanceof ApiError) {
+        const detail = (err.data as { detail?: string } | undefined)?.detail;
+        setMessage({ kind: 'error', text: detail ?? err.message });
+      } else {
+        setMessage({ kind: 'error', text: 'Failed to change password' });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section aria-label="Password">
+      <h2 className="font-display text-[24px] text-cocoa">Password</h2>
+      {message && (
+        <p
+          role="status"
+          className={`mt-4 border-l-2 px-4 py-3 text-sm ${
+            message.kind === 'ok' ? 'border-sage bg-sage/10 text-cocoa' : 'border-terracotta bg-terracotta/10 text-terracotta'
+          }`}
+        >
+          {message.text}
+        </p>
+      )}
+      <form onSubmit={handleChangePassword} className="mt-6 flex max-w-sm flex-col gap-4">
+        <input
+          type="password"
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          placeholder="Current password"
+          autoComplete="current-password"
+          className={inputStyle}
+        />
+        <input
+          type="password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          placeholder="New password"
+          autoComplete="new-password"
+          className={inputStyle}
+        />
+        <input
+          type="password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          placeholder="Confirm new password"
+          autoComplete="new-password"
+          className={inputStyle}
+        />
+        <button
+          type="submit"
+          disabled={busy}
+          className="bg-cocoa px-8 py-3.5 text-xs uppercase tracking-[0.18em] text-ivory transition-colors duration-300 hover:bg-espresso disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {busy ? 'Changing…' : 'Change Password'}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function FilesSection() {
+  const [files, setFiles] = useState<UserFile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [duplicateFile, setDuplicateFile] = useState<UserFile | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    api
+      .getFiles()
+      .then(setFiles)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (!file) return;
+
+    setFileError(null);
+    setDuplicateFile(null);
+    if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+      setFileError(`Unsupported file type: ${file.type || 'unknown'}`);
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setFileError('File exceeds the 5 GB limit');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const uploaded = await api.uploadFile(file);
+      setFiles((prev) => [uploaded, ...prev]);
+    } catch (err) {
+      if (err instanceof DuplicateFileError) {
+        setDuplicateFile(err.existingFile);
+      } else {
+        setFileError(err instanceof Error ? err.message : 'Upload failed');
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteFile = async (id: number) => {
+    await api.deleteFile(id);
+    setFiles((prev) => prev.filter((f) => f.id !== id));
+  };
+
+  const handleCopyLink = (url: string) => {
+    navigator.clipboard?.writeText(url).catch(() => {});
+  };
+
+  return (
+    <section aria-label="Files">
+      <h2 className="font-display text-[24px] text-cocoa">Files</h2>
+      <p className="mt-2 text-sm text-cocoa/60">
+        Uploaded files are public — anyone with the link can open them. Don't upload sensitive documents here.
+      </p>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ALLOWED_FILE_TYPES.join(',')}
+        onChange={handleFileSelected}
+        disabled={uploading}
+        className="mt-4 text-sm text-cocoa/70"
+      />
+      {uploading && <p className="mt-2 text-sm text-cocoa/60">Uploading…</p>}
+      {fileError && (
+        <p className="mt-2 border-l-2 border-terracotta bg-terracotta/10 px-4 py-3 text-sm text-terracotta">
+          {fileError}
+        </p>
+      )}
+      {duplicateFile && (
+        <p className="mt-2 border-l-2 border-terracotta bg-terracotta/10 px-4 py-3 text-sm text-terracotta">
+          You've already uploaded this file as{' '}
+          <a href={duplicateFile.url} target="_blank" rel="noreferrer" className="underline">
+            {duplicateFile.fileName}
+          </a>{' '}
+          on {new Date(duplicateFile.createdAt).toLocaleDateString()}.
+        </p>
+      )}
+
+      {loading ? (
+        <p className="mt-4 text-sm text-cocoa/50">Loading files…</p>
+      ) : files.length === 0 ? (
+        <p className="mt-4 text-sm text-cocoa/50">No files uploaded yet.</p>
+      ) : (
+        <ul className="mt-4 divide-y divide-cocoa/10 border-y border-cocoa/10">
+          {files.map((file) => (
+            <li key={file.id} className="flex items-center justify-between gap-4 py-4">
+              <div className="min-w-0">
+                <a href={file.url} target="_blank" rel="noreferrer" className="text-cocoa hover:text-terracotta">
+                  {file.fileName}
+                </a>
+                <p className="mt-1 text-sm text-cocoa/50">
+                  {formatSize(file.sizeBytes)} · {new Date(file.createdAt).toLocaleDateString()}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-4">
+                <button
+                  onClick={() => handleCopyLink(file.url)}
+                  className="text-xs uppercase tracking-[0.14em] text-cocoa underline decoration-gold underline-offset-4 hover:text-terracotta"
+                >
+                  Copy link
+                </button>
+                <button
+                  onClick={() => handleDeleteFile(file.id)}
+                  className="text-xs uppercase tracking-[0.14em] text-terracotta/80 underline underline-offset-4 hover:text-terracotta"
+                >
+                  Delete
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );
