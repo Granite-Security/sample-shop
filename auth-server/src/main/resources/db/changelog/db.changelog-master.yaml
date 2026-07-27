@@ -5,3 +5,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/002-seed-users.sql
       relativeToChangelogFile: false
+  - include:
+      file: db/changelog/003-federated-users.sql
+      relativeToChangelogFile: false

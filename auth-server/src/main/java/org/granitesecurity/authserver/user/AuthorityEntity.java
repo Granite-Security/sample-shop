@@ -47,11 +47,15 @@ public class AuthorityEntity {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof AuthorityEntity that)) return false;
+        // Transient entities (id == null) are only equal by reference: two
+        // unsaved authorities being granted to the same new user would
+        // otherwise collide into one HashSet entry, since both have a null id.
+        if (id == null || that.id == null) return false;
         return Objects.equals(id, that.id);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(id);
+        return getClass().hashCode();
     }
 }

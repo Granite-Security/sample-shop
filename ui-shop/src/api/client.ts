@@ -6,6 +6,17 @@ export type ApiRequestOptions = RequestInit & {
   skipAuth?: boolean;
 };
 
+export class ApiError extends Error {
+  status: number;
+  data: unknown;
+
+  constructor(status: number, message: string, data: unknown) {
+    super(message);
+    this.status = status;
+    this.data = data;
+  }
+}
+
 export function setAccessToken(token: string | null) {
   accessToken = token;
 }
@@ -50,7 +61,7 @@ export async function request<T>(path: string, options: ApiRequestOptions = {}):
 
   if (!response.ok) {
     const message = data.detail ?? data.title ?? response.statusText;
-    throw new Error(`[${response.status}] ${message}`);
+    throw new ApiError(response.status, `[${response.status}] ${message}`, data);
   }
 
   return data;

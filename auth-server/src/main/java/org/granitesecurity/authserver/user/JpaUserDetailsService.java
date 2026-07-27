@@ -25,6 +25,12 @@ public class JpaUserDetailsService implements UserDetailsService {
         UserEntity user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
+        // A Google-only account must not be reachable through the form-login
+        // path even if the schema ever allows a null password.
+        if (user.getPassword() == null) {
+            throw new UsernameNotFoundException("User not found: " + username);
+        }
+
         List<SimpleGrantedAuthority> authorities = user.getAuthorities().stream()
                 .map(a -> new SimpleGrantedAuthority(a.getAuthority()))
                 .toList();

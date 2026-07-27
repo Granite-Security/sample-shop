@@ -89,6 +89,19 @@ export interface CreateCategoryRequest {
   description: string;
 }
 
+export interface RegistrationRequest {
+  username: string;
+  email: string;
+  password: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+export interface RegistrationResponse {
+  username: string;
+  email: string;
+}
+
 export interface ProfileResponse {
   id: number;
   username: string;

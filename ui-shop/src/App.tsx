@@ -15,6 +15,7 @@ import DeliveryManagement from './pages/DeliveryManagement'
 import UsersManagement from './pages/UsersManagement'
 import UserProfileView from './pages/UserProfileView'
 import Login from './pages/Login'
+import Register from './pages/Register'
 import Callback from './pages/Callback'
 import Addresses from './pages/Addresses'
 import Profile from './pages/Profile'
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="admin/users" element={<UsersManagement />} />
         <Route path="admin/users/:username" element={<UserProfileView />} />
         <Route path="login" element={<Login />} />
+        <Route path="register" element={<Register />} />
         <Route path="callback" element={<Callback />} />
       </Route>
     </Routes>
