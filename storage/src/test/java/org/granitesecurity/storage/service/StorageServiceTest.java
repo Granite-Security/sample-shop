@@ -52,7 +52,7 @@ class StorageServiceTest {
         when(s3Presigner.presignPutObject(any(PutObjectPresignRequest.class)))
                 .thenReturn(presignedPutObjectRequest);
 
-        StepVerifier.create(storageService.presign("hero.jpg", "image/jpeg", "products", ADMIN))
+        StepVerifier.create(storageService.presign("hero.jpg", "image/jpeg", "products", ADMIN, "admin"))
                 .assertNext(response -> {
                     assert response.key().startsWith("products/");
                     assert response.key().endsWith("hero.jpg");
@@ -70,7 +70,7 @@ class StorageServiceTest {
         when(s3Presigner.presignPutObject(any(PutObjectPresignRequest.class)))
                 .thenReturn(presignedPutObjectRequest);
 
-        StepVerifier.create(storageService.presign("../../etc/evil.txt", "image/png", "products", ADMIN))
+        StepVerifier.create(storageService.presign("../../etc/evil.txt", "image/png", "products", ADMIN, "admin"))
                 .assertNext(response -> {
                     assert !response.key().contains("..");
                     assert !response.key().contains("/etc/");
@@ -80,7 +80,7 @@ class StorageServiceTest {
 
     @Test
     void presignShouldRejectDisallowedContentType() {
-        StepVerifier.create(storageService.presign("hero.jpg", "application/pdf", "products", ADMIN))
+        StepVerifier.create(storageService.presign("hero.jpg", "application/pdf", "products", ADMIN, "admin"))
                 .expectErrorMatches(ex -> ex instanceof StorageException)
                 .verify();
 
@@ -89,7 +89,7 @@ class StorageServiceTest {
 
     @Test
     void presignShouldRejectDisallowedScope() {
-        StepVerifier.create(storageService.presign("hero.jpg", "image/jpeg", "avatars", ADMIN))
+        StepVerifier.create(storageService.presign("hero.jpg", "image/jpeg", "avatars", ADMIN, "admin"))
                 .expectErrorMatches(ex -> ex instanceof StorageException)
                 .verify();
 
@@ -123,16 +123,47 @@ class StorageServiceTest {
         when(s3Presigner.presignPutObject(any(PutObjectPresignRequest.class)))
                 .thenReturn(presignedPutObjectRequest);
 
-        StepVerifier.create(storageService.presign("note.pdf", "application/pdf", "user-files", PLAIN_USER))
+        StepVerifier.create(storageService.presign("note.pdf", "application/pdf", "user-files", PLAIN_USER, "alice"))
                 .assertNext(response -> {
+                    assert response.key().startsWith("user-files/alice/");
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void presignShouldSanitizeUsernameSegment() throws Exception {
+        URL url = URI.create("http://localhost:3900/product-media/user-files/abc/note.pdf?signed=1").toURL();
+        when(presignedPutObjectRequest.url()).thenReturn(url);
+        when(s3Presigner.presignPutObject(any(PutObjectPresignRequest.class)))
+                .thenReturn(presignedPutObjectRequest);
+
+        StepVerifier.create(storageService.presign(
+                        "note.pdf", "application/pdf", "user-files", PLAIN_USER, "../../etc/passwd"))
+                .assertNext(response -> {
+                    assert !response.key().contains("..");
+                    assert !response.key().contains("/etc/");
                     assert response.key().startsWith("user-files/");
                 })
                 .verifyComplete();
     }
 
     @Test
+    void presignShouldNotAddUsernameSegmentForProductsScope() throws Exception {
+        URL url = URI.create("http://localhost:3900/product-media/products/abc/hero.jpg?signed=1").toURL();
+        when(presignedPutObjectRequest.url()).thenReturn(url);
+        when(s3Presigner.presignPutObject(any(PutObjectPresignRequest.class)))
+                .thenReturn(presignedPutObjectRequest);
+
+        StepVerifier.create(storageService.presign("hero.jpg", "image/jpeg", "products", ADMIN, "admin"))
+                .assertNext(response -> {
+                    assert !response.key().contains("/admin/");
+                })
+                .verifyComplete();
+    }
+
+    @Test
     void presignShouldRejectPlainUserForProductsScope() {
-        StepVerifier.create(storageService.presign("hero.jpg", "image/jpeg", "products", PLAIN_USER))
+        StepVerifier.create(storageService.presign("hero.jpg", "image/jpeg", "products", PLAIN_USER, "alice"))
                 .expectErrorMatches(ex -> ex instanceof StorageException)
                 .verify();
 
