@@ -30,7 +30,9 @@ spec:
       tls:
         mode: Terminate
         certificateRefs:
-          - name: granite-security.org-tls
+          - group: ""
+            kind: Secret
+            name: granite-security.org-tls
     - name: http-shop
       hostname: granite-security.org
       port: 80
@@ -48,7 +50,9 @@ spec:
       tls:
         mode: Terminate
         certificateRefs:
-          - name: sichocolate.com-tls
+          - group: ""
+            kind: Secret
+            name: sichocolate.com-tls
     - name: http-chocolate
       hostname: sichocolate.com
       port: 80
@@ -73,7 +77,9 @@ spec:
       tls:
         mode: Terminate
         certificateRefs:
-          - name: media.granite-security.org-tls
+          - group: ""
+            kind: Secret
+            name: media.granite-security.org-tls
     - name: http-media
       hostname: media.granite-security.org
       port: 80
@@ -91,7 +97,9 @@ spec:
       tls:
         mode: Terminate
         certificateRefs:
-          - name: s3.granite-security.org-tls
+          - group: ""
+            kind: Secret
+            name: s3.granite-security.org-tls
     - name: http-s3
       hostname: s3.granite-security.org
       port: 80
@@ -113,7 +121,9 @@ spec:
       tls:
         mode: Terminate
         certificateRefs:
-          - name: garage.granite-security.org-tls
+          - group: ""
+            kind: Secret
+            name: garage.granite-security.org-tls
     - name: http-garage-ui
       hostname: garage.granite-security.org
       port: 80
@@ -141,7 +151,9 @@ spec:
       tls:
         mode: Terminate
         certificateRefs:
-          - name: grafana.granite-security.org-tls
+          - group: ""
+            kind: Secret
+            name: grafana.granite-security.org-tls
     - name: http-grafana
       hostname: grafana.granite-security.org
       port: 80
@@ -156,7 +168,9 @@ metadata:
   name: granite-http-redirect-shop
 spec:
   parentRefs:
-    - name: granite-gateway
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: granite-gateway
       sectionName: http-shop
   hostnames:
     - granite-security.org
@@ -173,7 +187,9 @@ metadata:
   name: granite-http-redirect-chocolate
 spec:
   parentRefs:
-    - name: granite-gateway
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: granite-gateway
       sectionName: http-chocolate
   hostnames:
     - sichocolate.com
@@ -190,7 +206,9 @@ metadata:
   name: granite-route-shop
 spec:
   parentRefs:
-    - name: granite-gateway
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: granite-gateway
       sectionName: https-shop
   hostnames:
     - granite-security.org
@@ -200,8 +218,11 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: ui-shop
+        - group: ""
+          kind: Service
+          name: ui-shop
           port: 80
+          weight: 1
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -209,7 +230,9 @@ metadata:
   name: granite-route-chocolate
 spec:
   parentRefs:
-    - name: granite-gateway
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: granite-gateway
       sectionName: https-chocolate
   hostnames:
     - sichocolate.com
@@ -219,8 +242,11 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: ui-demo
+        - group: ""
+          kind: Service
+          name: ui-demo
           port: 80
+          weight: 1
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -228,7 +254,9 @@ metadata:
   name: granite-http-redirect-media
 spec:
   parentRefs:
-    - name: granite-gateway
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: granite-gateway
       sectionName: http-media
   hostnames:
     - media.granite-security.org
@@ -245,7 +273,9 @@ metadata:
   name: granite-route-media
 spec:
   parentRefs:
-    - name: granite-gateway
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: granite-gateway
       sectionName: https-media
   hostnames:
     - media.granite-security.org
@@ -255,8 +285,11 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: garage
+        - group: ""
+          kind: Service
+          name: garage
           port: 3902
+          weight: 1
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -264,7 +297,9 @@ metadata:
   name: granite-http-redirect-s3
 spec:
   parentRefs:
-    - name: granite-gateway
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: granite-gateway
       sectionName: http-s3
   hostnames:
     - s3.granite-security.org
@@ -281,7 +316,9 @@ metadata:
   name: granite-route-s3
 spec:
   parentRefs:
-    - name: granite-gateway
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: granite-gateway
       sectionName: https-s3
   hostnames:
     - s3.granite-security.org
@@ -291,8 +328,11 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: garage
+        - group: ""
+          kind: Service
+          name: garage
           port: 3900
+          weight: 1
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -300,7 +340,9 @@ metadata:
   name: granite-http-redirect-garage-ui
 spec:
   parentRefs:
-    - name: granite-gateway
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: granite-gateway
       sectionName: http-garage-ui
   hostnames:
     - garage.granite-security.org
@@ -317,7 +359,9 @@ metadata:
   name: granite-route-garage-ui
 spec:
   parentRefs:
-    - name: granite-gateway
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: granite-gateway
       sectionName: https-garage-ui
   hostnames:
     - garage.granite-security.org
@@ -327,5 +371,8 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: garage-webui
+        - group: ""
+          kind: Service
+          name: garage-webui
           port: 3909
+          weight: 1
