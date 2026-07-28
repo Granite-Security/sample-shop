@@ -89,6 +89,36 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: notification
+spec:
+  template:
+    spec:
+      containers:
+        - name: notification
+          imagePullPolicy: Always
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+---
+# Internal tooling only — no HTTPRoute anywhere, reached via
+#   kubectl -n granite port-forward deploy/kafka-ui 8090:8080
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-ui
+spec:
+  template:
+    spec:
+      containers:
+        - name: kafka-ui
+          imagePullPolicy: Always
+          resources:
+            requests: { cpu: 50m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: profile
 spec:
   template:
