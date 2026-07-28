@@ -21,7 +21,8 @@ export function ProfilePage() {
 
           <section aria-label="Quick links">
             <h2 className="font-display text-[24px] text-cocoa">Quick Links</h2>
-            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Link to="/profile/orders" className={quickLinkStyle}>Orders</Link>
               <Link to="/profile/password" className={quickLinkStyle}>Password</Link>
               <Link to="/profile/files" className={quickLinkStyle}>Files</Link>
               <Link to="/profile/addresses" className={quickLinkStyle}>Addresses</Link>
