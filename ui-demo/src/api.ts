@@ -16,6 +16,9 @@ import type {
   RegistrationResponse,
   UserFile,
   DuplicateFileCheckResponse,
+  AdminUserView,
+  AdminUserProfile,
+  DeleteUserResult,
 } from './types';
 
 // Same-origin calls through the gateway, exactly like ui-shop. Browsing the
@@ -142,6 +145,35 @@ export const api = {
 
   deleteProduct: (id: number) =>
     request<void>(`/api/shop/products/${id}`, { method: 'DELETE' }),
+
+  // Admin user management — mirrors ui-shop/src/api/profile.ts. Note this is
+  // the users list, NOT the profiles list: users are a different set from
+  // profiles (docs/users/blocking-users.md §2.1, D3).
+  getAdminUsers: () => request<AdminUserView[]>('/api/profiles/admin/users'),
+
+  blockUser: (username: string) =>
+    request<AdminUserView>(`/api/profiles/admin/users/${encodeURIComponent(username)}/block`, {
+      method: 'POST',
+    }),
+
+  unblockUser: (username: string) =>
+    request<AdminUserView>(`/api/profiles/admin/users/${encodeURIComponent(username)}/unblock`, {
+      method: 'POST',
+    }),
+
+  // Returns an outcome rather than throwing when the user cannot be deleted:
+  // BLOCKED_INSTEAD is a success, and the caller has to say so.
+  deleteUser: (username: string) =>
+    request<DeleteUserResult>(`/api/profiles/admin/users/${encodeURIComponent(username)}`, {
+      method: 'DELETE',
+    }),
+
+  getProfileByUsername: (username: string) =>
+    request<AdminUserProfile>(`/api/profiles/${encodeURIComponent(username)}`),
+
+  getOrdersByUsername: (username: string, page = 0, size = 20) =>
+    request<PagedResult<OrderResponse>>(
+      `/api/shop/users/${encodeURIComponent(username)}/orders?page=${page}&size=${size}`),
 
   // Product media — presigned upload straight to the storage service's
   // Garage backend, mirroring ui-shop/src/api/storage.ts.
