@@ -49,18 +49,104 @@ hypothetical — and one of those four is the Google-sub identity above.
 
 | # | Decision | Resolution |
 |---|---|---|
-| D1 | What does "delete" do? | **Soft delete + anonymise.** Set `deleted_at`, scrub PII, refuse login. `customer_order` is left untouched so shop history and reporting stay honest. |
+| D1 | What does "delete" do? | **Conditional.** Hard delete when the user has never moved money; soft delete + anonymise otherwise. See §3.2 — the condition is subtler than it looks. |
 | D2 | Does blocking kill live sessions? | **No — accept the token window.** `enabled=false` refuses new logins. An already-issued access token stays valid until it expires (~5 min, Spring Authorization Server default — no `TokenSettings` are configured). No session-revocation infrastructure. |
 | D3 | What does the admin page list? | **auth-server users**, via a new admin API, enriched with profile data (§2.1). |
 | D4 | Is a deleted username reusable? | **No.** The row is kept, so the unique constraint reserves the username forever. This prevents someone re-registering as a deleted account and inheriting its apparent history. |
 | D5 | Is a deleted email reusable? | **Yes**, as a consequence of scrubbing it — `existsByEmailIgnoreCase` stops matching, so the person can sign up again with a fresh account. This is intended, and worth stating because it follows from D1 rather than being chosen separately. |
+| D8 | Who decides hard vs soft? | **`shop`, asked synchronously by auth-server** (§3.2). auth-server has no concept of an order; shop already talks to payment. |
 | D6 | Audit trail? | **Yes, minimal.** An `admin_action` table recording who did what to whom and when. "Who blocked this customer?" is the first question anyone asks, and logs age out. |
 | D7 | Email the affected user? | **No.** A "you have been blocked" email is hostile and useful to nobody; a "your account was deleted" mail would go to an address we just scrubbed. `notification` stays uninvolved. |
 
-### 3.1 Rejected alternative: hard delete with an order cascade
+### 3.2 The hard-delete condition
 
-Considered and dropped. Recorded here because it is the obvious first instinct, and the
-reasons it fails are not visible until you look at the data.
+Hard delete is safe exactly when there is nothing to reconcile against Stripe. Two
+findings make the obvious rule wrong.
+
+**`CANCELLED` does not mean "no money".** `OrderStatus` allows `PAID → CANCELLED`
+(`OrderStatus.java:21`), so a cancelled order may have been paid and refunded. A rule
+that treats `CANCELLED` as safe would destroy real payment history — this is the trap to
+avoid.
+
+**`PENDING` orders already have Stripe objects.** Placing an order triggers a
+PaymentIntent, so `payment` holds a row in `CREATED` for every pending order (4 in
+production right now). No money has moved, but a Stripe object exists.
+
+So **order status is not a usable signal.** The source of truth is the payment:
+
+> **A user is hard-deletable iff none of their orders has a payment in `SUCCEEDED` or
+> `REFUNDED`.**
+
+Everything else — `PENDING` orders, `PAYMENT_FAILED`, payments still in `CREATED` — means
+no money ever moved, and those orders can be removed with the user.
+
+| Payment status | Money moved? | Effect |
+|---|---|---|
+| `CREATED` | no — uncaptured PaymentIntent | hard delete allowed |
+| `SUCCEEDED` | **yes** | forces soft delete |
+| `REFUNDED` | **yes** (both directions) | forces soft delete |
+
+**Leftover Stripe PaymentIntents.** Hard-deleting a user with `CREATED` payments leaves
+uncaptured PaymentIntents in Stripe with no local row. They expire on Stripe's side and
+never charged anyone, so this is untidy rather than harmful — but it is a real, permanent
+divergence and should be a known consequence, not a surprise. Cancelling them via the
+Stripe API during the purge is a reasonable refinement if it ever matters.
+
+**Resolving eligibility** (D8): `auth-server` asks `shop`; `shop` resolves the user's
+orders and consults `payment` (a call it already makes — `PAYMENT_SERVICE_URI` is already
+configured) to classify them. auth-server never learns what an order is.
+
+#### New shop endpoints — orders by user
+
+There is currently **no way to fetch one user's orders**. `GET /api/shop/orders` returns
+the *caller's* own; `GET /api/shop/orders/all` returns everything (admin);
+`GET /api/shop/orders/{id}` takes an **order** id. Using `/orders/all` and filtering in
+the browser would pull every order in the system to count one user's, and hand the admin
+UI every customer's order data to do it. Two endpoints instead:
+
+| Endpoint | Auth | Caller | Returns |
+|---|---|---|---|
+| `GET /api/shop/users/{username}/orders` | `ROLE_ADMIN` | admin UI | that user's orders, for display and the delete confirmation count |
+| `GET /api/shop/internal/users/{username}/purge-eligibility` | `SCOPE_internal` | auth-server | `{ eligible, orderIds[], paidOrderCount }` |
+
+**Do not put these under `/api/shop/orders/`.** `{id}` there is an order id, so
+`/api/shop/orders/{username}` would shadow it — `ShopRoute` already carries a comment
+about this exact trap (*"/orders/all must be registered before /orders/{id}"*). Rooting
+them at `/api/shop/users/...` avoids the ordering hazard entirely rather than relying on
+registration order.
+
+`shop` has no `/internal/**` convention yet; follow `profile`'s — a
+`.pathMatchers("/api/shop/internal/**").hasAuthority("SCOPE_internal")` rule in
+`ShopSec`, matching `ProfileSec:55`. The gateway needs no new route: `/api/shop/**` is
+already proxied, and auth-server calls shop cluster-internally rather than through it.
+
+```
+DELETE /api/admin/users/{id}
+  1. block first  (enabled = false) — closes most of the race window below
+  2. GET shop /api/shop/internal/users/{username}/purge-eligibility
+       -> { eligible: true, orderIds: [...] }        (no SUCCEEDED/REFUNDED payments)
+       -> { eligible: false, paidOrderCount: 9 }     (soft delete instead)
+  3a. eligible  -> hard delete + cascade the listed orders (§5.1)
+  3b. otherwise -> soft delete + anonymise
+```
+
+**The race.** A user could place an order between the check and the delete. Blocking
+first shrinks it to the access-token window (~5 min, D2), and the Phase 5 orphan sweep
+catches anything that slips through. Worth knowing rather than engineering away — the
+cost of a miss is one orphaned order row, not lost money.
+
+**Note this reintroduces a synchronous internal client in auth-server**, which Phase 5 of
+the notification work deliberately removed. That is not a reversal: what was removed was
+HTTP used for fire-and-forget *notifications*, which is the wrong shape for that job.
+"How many paid orders does this user have?" is a genuine query that needs an answer
+before a decision can be made — the case where request/response is right.
+
+### 3.1 Rejected alternative: hard delete of *everything*, unconditionally
+
+Considered and dropped — deleting a user's orders *regardless* of payment history.
+Recorded because it is the obvious first instinct, and the reasons it fails are not
+visible until you look at the data. (The narrower, conditional version in §3.2 is what
+was adopted.)
 
 **What killed it: the payments.** Deleting a user's orders means deleting the payment and
 refund rows behind them — but Stripe keeps its side regardless, and we cannot delete it.
