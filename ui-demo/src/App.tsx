@@ -10,6 +10,8 @@ import { AccountLayout } from './components/AccountLayout';
 import { Home } from './pages/Home';
 import { ProductPage } from './pages/ProductPage';
 import { AdminPage } from './pages/AdminPage';
+import { UsersManagementPage } from './pages/UsersManagementPage';
+import { UserProfileViewPage } from './pages/UserProfileViewPage';
 import { CheckoutPage } from './pages/CheckoutPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { PasswordPage } from './pages/PasswordPage';
@@ -45,6 +47,8 @@ export default function App() {
               <Route index element={<Home />} />
               <Route path="products/:id" element={<ProductPage />} />
               <Route path="admin" element={<AdminPage />} />
+              <Route path="admin/users" element={<UsersManagementPage />} />
+              <Route path="admin/users/:username" element={<UserProfileViewPage />} />
               <Route path="checkout" element={<CheckoutPage />} />
               <Route element={<RequireAuth />}>
                 <Route element={<AccountLayout />}>
