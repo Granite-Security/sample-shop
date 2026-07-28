@@ -34,7 +34,7 @@ patches:
 images:
   - name: granite-auth-server
     newName: docker.io/moldovean/granite-auth-server
-    newTag: e373372e4a2f8937c5d50b49aa5477039f709ebc
+    newTag: 7eb14521f1bbce665b5532f49b98d991724aa7cb
   - name: granite-gateway
     newName: docker.io/moldovean/granite-gateway
     newTag: e60b12369dbae871f61688d269d772ffaebaeaaf
@@ -52,16 +52,16 @@ images:
     newTag: e2ec7ca971ac69aee5f029ce928910fabf0a655b
   - name: granite-profile
     newName: docker.io/moldovean/granite-profile
-    newTag: dbbadf99b0ff31cae6be9532e3068319e05da90c
+    newTag: 7eb14521f1bbce665b5532f49b98d991724aa7cb
   - name: granite-delivery
     newName: docker.io/moldovean/granite-delivery
     newTag: eda3bbc203a193027b913d5eea340c093fde89ef
   - name: granite-ui-shop
     newName: docker.io/moldovean/granite-ui-shop
-    newTag: eda3bbc203a193027b913d5eea340c093fde89ef
+    newTag: 7eb14521f1bbce665b5532f49b98d991724aa7cb
   - name: granite-ui-demo
     newName: docker.io/moldovean/granite-ui-demo
-    newTag: f0a8e225c5cade70e046e790183a6ede63de3fb3
+    newTag: 7eb14521f1bbce665b5532f49b98d991724aa7cb
   - name: granite-storage
     newName: docker.io/moldovean/granite-storage
-    newTag: fda933c3c38bf0a23ddfacac9855da35ca6090a2
+    newTag: 7eb14521f1bbce665b5532f49b98d991724aa7cb
