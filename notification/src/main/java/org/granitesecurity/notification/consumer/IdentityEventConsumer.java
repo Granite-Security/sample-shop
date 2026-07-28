@@ -46,7 +46,7 @@ public class IdentityEventConsumer {
         this.notificationLogRepository = notificationLogRepository;
     }
 
-    @KafkaListener(topics = "notifications.events", groupId = "notification.notifications.events.consumer")
+    @KafkaListener(topics = "identity.events", groupId = "notification.identity.events.consumer")
     public void consume(String message) {
         try {
             @SuppressWarnings("unchecked")

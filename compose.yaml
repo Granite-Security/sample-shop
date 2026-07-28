@@ -270,6 +270,7 @@ services:
       - PROFILE_JDBC_PASSWORD=secret
       - AUTH_ISSUER_URI=http://gateway:8080/auth
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       # Phase 4 flip: RESEND_API_KEY removed — profile no longer sends mail.
     depends_on:
       gateway:

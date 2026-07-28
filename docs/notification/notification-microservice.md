@@ -40,8 +40,8 @@ Yes to both halves of the idea, and they are independent:
 | Port | **8066** (8060–8065 taken: greetings, shop, payment, delivery, profile, storage) |
 | Image | `moldovean/granite-notification` |
 | Database | `notificationdb` |
-| Kafka topic | `notifications.events` — **plural**, matching `orders.events` / `payments.events` in `docs/events/events.md` |
-| Consumer group | `notification.notifications.events.consumer` |
+| Kafka topic | `identity.events` — named for the **producing domain**, matching `orders.events` / `payments.events` in `docs/events/events.md`. Originally `notifications.events`; renamed once `profile` became a second consumer, since a topic named for one consumer is a misnomer the moment there are two. |
+| Consumer groups | `notification.identity.events.consumer`, `profile.identity.events.consumer` |
 
 ## 2. Delivery guarantees — decided
 
@@ -75,7 +75,7 @@ Independent of how the producer writes: Kafka consumers are at-least-once, and a
 ## 3. Target architecture
 
 ```
-auth-server ──→ fire-and-forget produce ──→ Kafka `notifications.events`
+auth-server ──→ fire-and-forget produce ──→ Kafka `identity.events`
                                                      ↓
 shop / payment / delivery ──→ (existing outboxes, unchanged) ──→ orders.events
                                                                  payments.events
@@ -113,13 +113,13 @@ Only the outbound calls are authenticated; nothing inbound is.
 
 ### Events
 
-**New topic `notifications.events`** — auth-server identity events only:
+**Topic `identity.events`** — auth-server identity facts. Consumed by `notification` (email) and `profile` (profile provisioning):
 
 | Event type | Payload |
 |---|---|
 | `PasswordChanged` | `username`, `email`, `changedAt` |
 | `PasswordResetRequested` | `username`, `email`, `resetToken`, `expiresAt` |
-| `UserRegistered` | `username`, `email`, `registeredAt` |
+| `UserRegistered` | `username`, `email`, `firstName`, `lastName`, `occurredAt` |
 
 Key = `username`, so all messages for one user stay ordered in one partition. `partitions=3`, `replication.factor=1` in dev.
 
@@ -226,7 +226,7 @@ These solve different problems and neither substitutes for the other.
 
 Nothing in this repo currently configures retention. Neither `compose.yaml` nor `k8s/base/kafka.yaml` sets any `KAFKA_LOG_RETENTION_*`, and topics are auto-created, so **every existing topic inherits the broker default of 7 days**. (`docs/events/events.md` documents 7 days for `orders.events` et al. — that happens to be true, but by default, not by configuration.)
 
-For `notifications.events`, create the topic **explicitly** with:
+For `identity.events`, create the topic **explicitly** with:
 
 | Config | Value | Why |
 |---|---|---|
@@ -241,7 +241,7 @@ Create it via a `NewTopic` bean in `notification` (so the config is versioned in
 ```java
 @Bean
 NewTopic notificationsEvents() {
-    return TopicBuilder.name("notifications.events")
+    return TopicBuilder.name("identity.events")
             .partitions(3)
             .replicas(1)
             .config(TopicConfig.RETENTION_MS_CONFIG, "3600000")
@@ -284,11 +284,11 @@ Goal: a running, deployable, empty-but-healthy service.
 
 1. **No `spring-boot-starter-oauth2-client` yet — deferred to Phase 4.** Two reasons. It has no user until Phase 4's `RecipientResolver` calls profile; and more importantly, pulling Spring Security onto the classpath *without* a `SecurityWebFilterChain` bean triggers Boot's default lockdown, which would require authentication on every endpoint including anything used for probes. Adding the starter therefore also forces a permit-all chain to be written and maintained — config that guards nothing, for a capability nothing uses yet. `InternalClientConfig` and the auth-server `notification-client` `RegisteredClient` move to Phase 4 with it. **Phase 1 touches no existing service's code at all** — only infra files.
 2. **No actuator, no health probes.** The plan's "done when `/actuator/health` responds" does not match this repo: no service has the actuator dependency and `k8s/base/*.yaml` defines no `livenessProbe`/`readinessProbe` anywhere. Matched the existing convention rather than making `notification` the odd one out. Adding actuator across all services is a reasonable separate change, but not this one's job.
-3. **The `NewTopic` bean shipped in Phase 1, not Phase 3.** Strictly safer: if anything auto-creates `notifications.events` first, it gets the broker's 7-day default and `KafkaAdmin` will *not* retroactively fix it (§4.1). Creating it before any producer exists removes that race.
+3. **The `NewTopic` bean shipped in Phase 1, not Phase 3.** Strictly safer: if anything auto-creates `identity.events` first, it gets the broker's 7-day default and `KafkaAdmin` will *not* retroactively fix it (§4.1). Creating it before any producer exists removes that race.
 4. **Kafka consumer settings live in `application.yaml`**, not a copied `KafkaConfig` class. Boot's auto-configuration covers what `shop/config/KafkaConfig.java` does by hand, so the only Java config is the topic bean.
 5. Uses the Boot 4 starter `spring-boot-starter-kafka` rather than shop's `org.springframework.kafka:spring-kafka` coordinate.
 
-**Verified:** `./gradlew build -x test` succeeds; the service starts on 8066; Liquibase runs both changesets against `notificationdb`; `kafka-topics --describe` reports `notifications.events` with `retention.ms=3600000, segment.ms=600000, cleanup.policy=delete` across 3 partitions. `kubectl kustomize k8s/base` and `docker compose config` both render.
+**Verified:** `./gradlew build -x test` succeeds; the service starts on 8066; Liquibase runs both changesets against `notificationdb`; `kafka-topics --describe` reports `identity.events` with `retention.ms=3600000, segment.ms=600000, cleanup.policy=delete` across 3 partitions. `kubectl kustomize k8s/base` and `docker compose config` both render.
 
 1. `notification/` directory: Gradle wrapper, `build.gradle.kts` based on `profile` (WebFlux, R2DBC, Postgres driver, Liquibase, `spring-boot-starter-kafka`, Lombok). **No OAuth2 starter of either kind** (§3 "Security posture" + deviation 1).
 2. `application.yaml`: `server.port: ${NOTIFICATION_SERVER_PORT:8066}`, R2DBC + JDBC (Liquibase) URLs for `notificationdb`, `spring.kafka.*` consumer settings, and the `resend.*` block copied from `profile/src/main/resources/application.yaml:52-55` (left blank so `EmailService` will log-and-skip until Phase 2). **No `jwt.trusted-issuers` / `jwk-set-uri`** — nothing inbound is validated.
@@ -304,7 +304,7 @@ Goal: a running, deployable, empty-but-healthy service.
    - CI (`.github/workflows/ci.yml`) diffs changed directories, so it should pick the service up automatically — confirm the matrix doesn't hardcode a service list.
    - `k8s/base/kafka-ui.yaml`: Deployment + Service for `kafbat/kafka-ui`, pointed at `kafka:29092`. **No `HTTPRoute` in any overlay** (§6.1) — reached via `kubectl -n granite port-forward deploy/kafka-ui 8090:8080`. Clears the pending item in `k8s/todo.md` and makes Phases 3–5 far easier to observe.
 
-**Done when:** the service starts against `notificationdb`, Liquibase creates both tables, and `notifications.events` exists with the right retention — all confirmed above.
+**Done when:** the service starts against `notificationdb`, Liquibase creates both tables, and `identity.events` exists with the right retention — all confirmed above.
 
 ---
 
@@ -347,14 +347,14 @@ Goal: the new service can send email; profile still does too. No producer change
 Goal: auth-server publishes events *in addition to* calling profile over HTTP. Small, reversible.
 
 1. Add `spring-kafka` to auth-server. Producer config: `acks=all`, `enable.idempotence=true`, **`max.block.ms=2000`**, short `delivery.timeout.ms`. `KafkaTemplate<String, String>`, String serdes — same as `shop/config/KafkaConfig.java` minus the consumer half. No `@EnableScheduling`, no outbox table, no relay.
-2. Rename `ProfileNotificationClient` → `NotificationEventPublisher` and swap the transport: `RestClient.post()...` becomes `kafkaTemplate.send("notifications.events", username, payloadJson)`. **Keep `@Async`, keep the try/catch-and-log** — the failure semantics stay exactly as they are today (§2).
+2. Rename `ProfileNotificationClient` → `NotificationEventPublisher` and swap the transport: `RestClient.post()...` becomes `kafkaTemplate.send("identity.events", username, payloadJson)`. **Keep `@Async`, keep the try/catch-and-log** — the failure semantics stay exactly as they are today (§2).
 3. Guard on a null/absent `KafkaTemplate` like the existing relays do, so auth-server still boots without a broker.
 4. Call sites keep their `afterCommit` transaction synchronizations unchanged:
    - `PasswordChangeService.changePassword` → `PasswordChanged`
    - `PasswordResetService.requestReset` → `PasswordResetRequested`
    - `PasswordResetService.confirmReset` → `PasswordChanged`
    - `UserRegistrationService` → `UserRegistered` (new capability — no email was sent here before)
-5. Create `notifications.events` explicitly via the `NewTopic` bean in §4.1 — `retention.ms=1h` **and** `segment.ms=10min`. Do not let it auto-create; auto-creation silently gives it the broker default of 7 days.
+5. Create `identity.events` explicitly via the `NewTopic` bean in §4.1 — `retention.ms=1h` **and** `segment.ms=10min`. Do not let it auto-create; auto-creation silently gives it the broker default of 7 days.
 6. Keep the `ProfileNotificationClient` HTTP calls in place alongside. Both paths fire; only the HTTP one actually sends mail so far.
 
 **Deviation:** none of substance. `ProfileNotificationClient` was **kept** rather than renamed — the new `NotificationEventPublisher` sits alongside it, since Phase 3 is explicitly a dual-write and Phase 5 deletes the old class outright. Renaming a class that is about to be deleted would only churn the diff.
@@ -367,7 +367,7 @@ A useful accident during verification: profile was not running, so the old HTTP 
 
 ### Phase 4 — `notification` consumes; flip the sender — ✅ DONE (identity events; commerce deferred)
 
-1. `IdentityEventConsumer` — `@KafkaListener(topics = "notifications.events", groupId = "notification.notifications.events.consumer")`. Parse JSON, dedupe on event id against `processed_events`, dispatch to `NotificationService`, record the outcome. Modelled on `delivery/consumer/PaymentEventConsumer.java` for the parse/error idiom, but with the dedupe insert as the commit gate.
+1. `IdentityEventConsumer` — `@KafkaListener(topics = "identity.events", groupId = "notification.identity.events.consumer")`. Parse JSON, dedupe on event id against `processed_events`, dispatch to `NotificationService`, record the outcome. Modelled on `delivery/consumer/PaymentEventConsumer.java` for the parse/error idiom, but with the dedupe insert as the commit gate.
 2. Idempotency contract: insert into `processed_events` **before** sending, in the transaction that claims the event; a duplicate-key violation means "already handled, skip".
    - Apply the §4.1 staleness check first, before dedupe and rendering: too-old events are logged `DROPPED_STALE`, committed, and never retried.
 3. Flip via config, so it reverts without redeploying auth-server:
@@ -399,7 +399,7 @@ Status shows `SKIPPED_DISABLED` locally because `RESEND_API_KEY` is unset — th
 
 1. **auth-server:** delete the `profile-client` registration in `ProfileClientConfig`, the `MICROSERVICES_PROFILE_URI` env in `compose.yaml` and k8s, and the client-credentials `RegisteredClient` in `SecurityConfig` (~line 326) **if nothing else uses it** — check first; `profile` has its own `InternalClientConfig` and a `StorageClient`.
 2. **profile:** delete the `notification/` package, `InternalNotificationHandler`, `PasswordChangedNotifyRequest`, `PasswordResetRequestedNotifyRequest`, the two `/api/profiles/internal/{username}/notify/**` routes in `ProfileRoute`, and the `RESEND_*` env from its deployment and `compose.yaml`. **Keep** the `SCOPE_internal` matcher in `ProfileSec` — the internal addresses route still needs it, and `notification` now calls the internal profile lookup.
-3. **Docs:** `README.md` (ports, env vars, event flow), `docs/events/events.md` (add `notifications.events` + payloads + the 1h retention note), `docs/architecture/microservices.puml` (component + edges), `CLAUDE.md` (layout table + architecture section, including the explicit note that auth-server produces fire-and-forget and deliberately has no outbox).
+3. **Docs:** `README.md` (ports, env vars, event flow), `docs/events/events.md` (add `identity.events` + payloads + the 1h retention note), `docs/architecture/microservices.puml` (component + edges), `CLAUDE.md` (layout table + architecture section, including the explicit note that auth-server produces fire-and-forget and deliberately has no outbox).
 
 ---
 
@@ -433,7 +433,7 @@ kubectl -n granite port-forward deploy/kafka-ui 8090:8080   # → http://localho
 
 `kafka-ui` ships with **no authentication** and full **read + write** access. A public hostname would mean anyone who finds it can:
 
-- **Read every message on every topic.** After this refactor `notifications.events` carries password reset tokens (D2). Polling that topic yields account takeover for any user — including `admin` and `manager` — before the real user sees their email. The 1-hour retention (§4.1) does not help: a poller sees everything inside the window.
+- **Read every message on every topic.** After this refactor `identity.events` carries password reset tokens (D2). Polling that topic yields account takeover for any user — including `admin` and `manager` — before the real user sees their email. The 1-hour retention (§4.1) does not help: a poller sees everything inside the window.
 - **Produce forged events.** Hand-produce a `PaymentReceived` onto `payments.events` and shop's `EventConsumer` moves the order to `PAID` with no Stripe involvement. Consumers parse untrusted JSON off the bus with no provenance check — correct while the bus is internal, catastrophic once it is not.
 - **Delete topics**, unless read-only is set.
 
@@ -453,12 +453,12 @@ kubectl config current-context                     # always confirm first — mu
 # watch the topic
 kubectl -n granite exec -it deploy/kafka -- \
   kafka-console-consumer --bootstrap-server localhost:29092 \
-    --topic notifications.events --from-beginning
+    --topic identity.events --from-beginning
 
 # hand-produce an event (Phase 4 — exercises the consumer without touching auth-server)
 kubectl -n granite exec -it deploy/kafka -- \
   kafka-console-producer --bootstrap-server localhost:29092 \
-    --topic notifications.events --property parse.key=true --property key.separator=:
+    --topic identity.events --property parse.key=true --property key.separator=:
 > ada:{"type":"PasswordChanged","username":"ada","email":"you@example.com","occurredAt":"2026-07-28T10:15:00Z"}
 ```
 
@@ -470,7 +470,7 @@ With `kafka-ui` deployed (§6.1) or locally via compose, the same thing is point
 |---|---|
 | 1 | `kubectl -n granite get pods` shows `notification` Running; `kubectl -n granite logs deploy/notification` shows Liquibase ran both changesets and Netty started on 8066 (no actuator in this repo — logs are the health signal) |
 | 2 | Deploys and starts with `RESEND_API_KEY` set. No send path yet — nothing to trigger |
-| 3 | Change a password in the UI → message appears on `notifications.events` in the console consumer, **and** the email still arrives via the old profile path |
+| 3 | Change a password in the UI → message appears on `identity.events` in the console consumer, **and** the email still arrives via the old profile path |
 | 4 | Hand-produce as above → email arrives, `notification_log` has one row. Then repeat the same message → second one is deduped, **no** second email. Then produce one with a stale `occurredAt` → logged `DROPPED_STALE`, no email |
 | 5 | Full flows once more after deletion: change password, reset password, register. Watch `kubectl -n granite logs deploy/profile` to confirm profile sends nothing |
 
@@ -481,7 +481,7 @@ With `kafka-ui` deployed (§6.1) or locally via compose, the same thing is point
 ```bash
 kubectl -n granite exec deploy/kafka -- \
   kafka-log-dirs --bootstrap-server localhost:29092 --describe \
-    --topic-list notifications.events
+    --topic-list identity.events
 ```
 
 Segments should be rolling and old ones ageing out, not one ever-growing active segment.
@@ -506,3 +506,46 @@ Mustache's `{{ }}` auto-escaping replaces the hand-rolled `escapeHtml` (Phase 2.
 | Someone "fixes" auth-server's fire-and-forget into an outbox | Documented as a deliberate decision here and in `CLAUDE.md` (Phase 5.3) |
 | `GenericNotification` escape hatch becomes the default, degrading the design into a dumb send-pipe | Keep it explicitly marked and rare; review any new producer that reaches for it instead of a typed event (§3) |
 | Producer adds a template field mid-rolling-deploy | Mustache renders absent keys as empty, so extra/missing optional fields are backward-compatible; missing **required** fields fail loudly and land in `notification_log` rather than sending half-rendered |
+
+---
+
+## 8. Follow-up: profile provisioning (shipped after Phases 1–4)
+
+**Problem found in production.** A newly registered user's "My Profile" page showed no
+email and no name. Pre-existing and unrelated to this refactor: `ProfileService`
+lazily created `new UserProfile(username, null, null, null)` on first visit, and
+nothing had ever told `profile` who a registered user was. auth-server collects email
+and name on the registration form and writes them to `authdb`; that data never reached
+`profiledb`, and it is not in the JWT either (the token customizer adds only `roles`).
+
+**Fix.** `profile` became a **second consumer** of `UserRegistered` — the fan-out this
+design was built for. auth-server's only change was carrying `firstName`/`lastName` on
+the event it already published.
+
+Provisioning **only fills fields that are currently null, and never overwrites**:
+
+- Handles the race where the user opens "My Profile" before the event is consumed —
+  the lazy stub already exists, and provisioning fills the blanks instead of fighting it.
+- Makes redelivery a no-op, so no dedupe table is needed (unlike `notification`, where
+  a duplicate means a duplicate email).
+- A user who has since edited their details keeps them.
+
+**Topic renamed `notifications.events` → `identity.events`.** The original name was a
+misnomer: these are identity domain facts, and `docs/events/events.md` names topics for
+the producing domain (`orders.events`, `payments.events`), not for a consumer. That was
+tolerable with one consumer and actively confusing with two.
+
+**Verified locally with both services running against one broker:**
+
+| Check | Result |
+|---|---|
+| One `UserRegistered` | notification rendered the welcome mail **and** profile provisioned the row, independently |
+| Provisioned row | `davide / davide@example.com / Davide / Rossi` |
+| User edits name, event redelivered | edit preserved — `EditedByUser` not clobbered |
+| Username-only stub, then event | blanks filled in |
+
+**Not backfilled.** Existing users — including the `davide` account that surfaced this —
+keep their stub rows: their `UserRegistered` was published to the old topic name and has
+since aged out under the 1-hour retention. They either fill the form in once, or get a
+one-off backfill from `authdb`. Everyone registering from now on is provisioned
+automatically.

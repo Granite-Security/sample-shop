@@ -75,6 +75,45 @@ public class ProfileService {
         return trimmed;
     }
 
+    /**
+     * Creates or completes a profile from a UserRegistered event.
+     *
+     * <p>Only fills fields that are currently null, never overwrites. That matters for
+     * the race where the user opens "My Profile" before the event is consumed: the
+     * lazy {@link #createProfile} has already written a username-only stub, and this
+     * fills in the blanks rather than fighting it. It equally means a user who has
+     * since edited their details keeps them if the event is ever redelivered.
+     */
+    public Mono<UserProfile> provisionFromRegistration(String username, String email,
+                                                       String firstName, String lastName) {
+        return userProfileRepository.findByUsername(username)
+                .switchIfEmpty(Mono.defer(() -> createProfile(username)))
+                .flatMap(profile -> {
+                    boolean changed = false;
+                    if (isBlank(profile.getEmail()) && !isBlank(email)) {
+                        profile.setEmail(email);
+                        changed = true;
+                    }
+                    if (isBlank(profile.getFirstName()) && !isBlank(firstName)) {
+                        profile.setFirstName(firstName);
+                        changed = true;
+                    }
+                    if (isBlank(profile.getLastName()) && !isBlank(lastName)) {
+                        profile.setLastName(lastName);
+                        changed = true;
+                    }
+                    if (!changed) {
+                        return Mono.just(profile);
+                    }
+                    profile.setUpdatedAt(Instant.now());
+                    return userProfileRepository.save(profile);
+                });
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
     private Mono<UserProfile> createProfile(String username) {
         UserProfile profile = new UserProfile(username, null, null, null);
         profile.setCreatedAt(Instant.now());

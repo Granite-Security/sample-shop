@@ -118,7 +118,12 @@ public class NotificationService {
         return frontendOrigin + "/reset-password/confirm?token=" + (token == null ? "" : token);
     }
 
+    /** Prefer the real first name when the event carries one — "Hi Davide", not "Hi davide". */
     private static String displayName(NotificationEvent event) {
+        Object firstName = event.raw().get("firstName");
+        if (firstName != null && !firstName.toString().isBlank()) {
+            return firstName.toString();
+        }
         String username = event.username();
         return username == null || username.isBlank() ? "there" : username;
     }

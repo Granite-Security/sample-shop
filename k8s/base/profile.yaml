@@ -97,6 +97,13 @@ spec:
             # Phase 4 flip: RESEND_API_KEY deliberately removed. EmailService
             # log-and-skips while it is blank, so profile no longer sends mail —
             # the notification service does. The code goes in Phase 5.
+            #
+            # Consumes UserRegistered off identity.events to provision profiles.
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
 ---
 apiVersion: v1
 kind: Service

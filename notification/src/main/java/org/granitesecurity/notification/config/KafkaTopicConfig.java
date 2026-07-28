@@ -25,8 +25,8 @@ public class KafkaTopicConfig {
      * it or fix it once with {@code kafka-configs --alter}.
      */
     @Bean
-    NewTopic notificationsEvents() {
-        return TopicBuilder.name("notifications.events")
+    NewTopic identityEvents() {
+        return TopicBuilder.name("identity.events")
                 .partitions(3)
                 .replicas(1)
                 .config(TopicConfig.RETENTION_MS_CONFIG, "3600000")

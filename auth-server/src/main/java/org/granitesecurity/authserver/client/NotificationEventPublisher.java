@@ -14,8 +14,13 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Publishes identity events to {@code notifications.events} for the notification
- * service to turn into email (or, later, SMS/WhatsApp).
+ * Publishes identity domain facts to {@code identity.events}.
+ *
+ * <p>The topic is named for the producing domain, matching {@code orders.events} /
+ * {@code payments.events}, because these are facts rather than send-an-email commands:
+ * {@code notification} turns them into mail, and {@code profile} provisions a user
+ * profile from the same {@code UserRegistered}. Neither consumer is this class's
+ * concern.
  *
  * <p><strong>Deliberately fire-and-forget, with no outbox.</strong> Unlike shop,
  * payment and delivery, this producer accepts message loss. The three events here are
@@ -43,7 +48,7 @@ import java.util.UUID;
 public class NotificationEventPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(NotificationEventPublisher.class);
-    private static final String TOPIC = "notifications.events";
+    private static final String TOPIC = "identity.events";
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final KafkaTemplate<String, String> kafkaTemplate;
@@ -72,8 +77,17 @@ public class NotificationEventPublisher {
     }
 
     @Async
-    public void publishUserRegistered(String username, String email) {
-        publish("UserRegistered", username, email, Map.of());
+    public void publishUserRegistered(String username, String email, String firstName, String lastName) {
+        Map<String, Object> extra = new HashMap<>();
+        // Carried so profile can provision a complete row; it has no other way to
+        // learn these, and they are not in the JWT.
+        if (firstName != null) {
+            extra.put("firstName", firstName);
+        }
+        if (lastName != null) {
+            extra.put("lastName", lastName);
+        }
+        publish("UserRegistered", username, email, extra);
     }
 
     private void publish(String type, String username, String email, Map<String, Object> extra) {
