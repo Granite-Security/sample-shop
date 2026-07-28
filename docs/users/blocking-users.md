@@ -1,6 +1,14 @@
 # Blocking and deleting users (admin)
 
-Status: **plan / not started**
+Status: **implemented** — phases 1–6 shipped in #64; phase 7 not started.
+
+This document is the *design rationale*: the production findings, the decisions and the
+alternatives that were rejected. For the shape of what was actually built — endpoints,
+sequences, guard rails, config and known gaps — see
+[`blocking-users-implementation.md`](blocking-users-implementation.md).
+
+Where the two disagree, the implementation doc wins and records why (§6 there lists four
+deliberate or accidental deviations from this plan).
 
 ## 1. Goal
 
