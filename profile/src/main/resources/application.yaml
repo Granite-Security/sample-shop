@@ -44,6 +44,20 @@ spring:
             authorization-grant-type: client_credentials
             scope: internal
             provider: auth-server
+          shop-client:
+            client-id: ${INTERNAL_CLIENT_ID:internal-service}
+            client-secret: ${INTERNAL_CLIENT_SECRET:internal-secret}
+            authorization-grant-type: client_credentials
+            scope: internal
+            provider: auth-server
+          # Separate credentials from the two above, held only by profile:
+          # this is the one registration that can administer identities.
+          identity-admin-client:
+            client-id: ${IDENTITY_ADMIN_CLIENT_ID:identity-admin}
+            client-secret: ${IDENTITY_ADMIN_CLIENT_SECRET:identity-admin-secret}
+            authorization-grant-type: client_credentials
+            scope: identity.admin
+            provider: auth-server
         provider:
           auth-server:
             token-uri: ${AUTH_SERVER_TOKEN_URI:http://localhost:9090/auth/oauth2/token}
@@ -55,6 +69,17 @@ jwt:
 microservices:
   storage:
     uri: ${MICROSERVICES_STORAGE_URI:http://localhost:8065}
+  shop:
+    uri: ${MICROSERVICES_SHOP_URI:http://localhost:8061}
+  payment:
+    uri: ${MICROSERVICES_PAYMENT_URI:http://localhost:8062}
+  delivery:
+    uri: ${MICROSERVICES_DELIVERY_URI:http://localhost:8063}
+  auth-server:
+    # Its own variable, not the shared MICROSERVICES_AUTH_SERVER_URI: that one
+    # is auth-server's *origin* (gateway uses it that way), while these calls
+    # need the /auth context path auth-server actually serves under.
+    uri: ${IDENTITY_ADMIN_BASE_URI:http://localhost:9090/auth}
 
 storage:
   public-base-url: ${STORAGE_PUBLIC_BASE_URL:http://product-media.localhost:3902}

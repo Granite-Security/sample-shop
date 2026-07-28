@@ -14,6 +14,8 @@ public class DeliveryRoute {
     @Bean
     public RouterFunction<ServerResponse> deliveryRoutes(DeliveryHandler deliveryHandler) {
         return route()
+                // Before the {orderId} routes: "internal" is not an order id.
+                .GET("/api/delivery/internal/order-ids", deliveryHandler::getOrderIds)
                 .GET("/api/delivery", deliveryHandler::list)
                 .GET("/api/delivery/{orderId}", deliveryHandler::getByOrderId)
                 .GET("/api/delivery/{orderId}/tracking", deliveryHandler::getTracking)

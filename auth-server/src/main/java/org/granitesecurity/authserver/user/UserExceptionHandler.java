@@ -44,6 +44,18 @@ public class UserExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
     }
 
+    @ExceptionHandler(UserNotFoundException.class)
+    public ProblemDetail handleUserNotFound(UserNotFoundException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+    // Not a silent success: unblocking an active user means the admin acted on a
+    // stale list (docs/users/blocking-users.md §7).
+    @ExceptionHandler(UserNotBlockedException.class)
+    public ProblemDetail handleUserNotBlocked(UserNotBlockedException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
     @ExceptionHandler(InvalidResetTokenException.class)
     public ProblemDetail handleInvalidResetToken(InvalidResetTokenException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());

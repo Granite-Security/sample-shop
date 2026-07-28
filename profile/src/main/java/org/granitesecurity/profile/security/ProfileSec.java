@@ -57,6 +57,12 @@ public class ProfileSec {
                         // valid value for {username}, so without this rule first,
                         // GET/PUT /api/profiles/me would require ROLE_ADMIN.
                         .pathMatchers("/api/profiles/me", "/api/profiles/me/**").authenticated()
+                        // This is where blocking and deleting users is actually
+                        // authorized — auth-server's internal API is scope-gated
+                        // only (docs/users/blocking-users.md D4). Must also
+                        // precede the {username} rule below, since "admin" is a
+                        // valid value for {username}.
+                        .pathMatchers("/api/profiles/admin/**").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.GET, "/api/profiles", "/api/profiles/{username}").hasRole("ADMIN")
                         .pathMatchers("/api/profiles/**").authenticated()
                         .anyExchange().permitAll()

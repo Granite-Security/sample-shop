@@ -7,3 +7,5 @@ databaseChangeLog:
       file: db/changelog/003-user-cabinet.sql
   - include:
       file: db/changelog/004-user-file-content-hash.sql
+  - include:
+      file: db/changelog/005-admin-action.sql

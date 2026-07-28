@@ -11,6 +11,12 @@ export const ordersApi = {
   placeOrder: (body: PlaceOrderRequest) =>
     request<OrderResponse>('/api/shop/orders', { method: 'POST', body: JSON.stringify(body) }),
 
+  // Admin only. Rooted at /users/, not /orders/, because "{id}" under /orders
+  // is an order id and a username segment there would shadow it.
+  getOrdersByUsername: (username: string, page = 0, size = 20) =>
+    request<PagedResult<OrderResponse>>(
+      `/api/shop/users/${encodeURIComponent(username)}/orders?page=${page}&size=${size}`),
+
   refundOrder: (orderId: number) =>
     request<OrderResponse>(`/api/shop/orders/${orderId}/refund`, { method: 'POST' }),
 };

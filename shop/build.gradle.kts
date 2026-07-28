@@ -23,6 +23,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation("org.springframework.boot:spring-boot-starter-data-r2dbc")
     implementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
+    // shop is now also an OAuth2 *client*: it mints an internal-scope token to
+    // ask payment whether a user's orders ever moved money (purge eligibility).
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
     implementation("org.springframework.boot:spring-boot-starter-liquibase")
     implementation("org.springdoc:springdoc-openapi-starter-webflux-ui:3.0.1") //3.0.3
     implementation("org.springframework.kafka:spring-kafka")

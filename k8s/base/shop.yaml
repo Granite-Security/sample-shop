@@ -87,6 +87,15 @@ spec:
                 configMapKeyRef:
                   name: granite-config
                   key: PAYMENT_SERVICE_URI
+            # shop mints an internal-scope token to ask payment whether a
+            # user's orders ever moved money (purge eligibility).
+            - name: AUTH_SERVER_TOKEN_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: AUTH_SERVER_TOKEN_URI
+            - name: INTERNAL_CLIENT_ID
+              value: "internal-service"
 ---
 apiVersion: v1
 kind: Service

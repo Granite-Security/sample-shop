@@ -26,6 +26,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -65,6 +66,51 @@ public class PaymentService {
                 .flatMap(payment -> refundRepository.findByOrderId(orderId)
                         .map(refund -> toResponse(payment, toRefundInfo(refund)))
                         .defaultIfEmpty(toResponse(payment, null)));
+    }
+
+    /**
+     * Payment status per order id, for shop's purge-eligibility check. Orders
+     * with no payment row are simply absent from the result — shop treats a
+     * missing entry as "no money moved", which is what it means.
+     */
+    public Mono<Map<Long, String>> statusesByOrderIds(Collection<Long> orderIds) {
+        if (orderIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+        return paymentRepository.findByOrderIdIn(orderIds)
+                .collectMap(Payment::getOrderId, Payment::getStatus);
+    }
+
+    /**
+     * Drops this service's rows for orders that shop has purged. Keyed by
+     * order_id — payment has no username to match on, which is why shop
+     * resolves the mapping and publishes the ids (docs/users/blocking-users.md
+     * §6).
+     *
+     * <p>Idempotent by construction: deleting rows that are already gone is a
+     * no-op, so an at-least-once redelivery needs no dedupe table.
+     *
+     * <p><b>stripe_event is deliberately left alone.</b> It is the webhook
+     * dedupe log — clearing it would let already-processed Stripe webhooks
+     * replay against a payment that no longer exists.
+     */
+    public Mono<Void> purgeOrders(Collection<Long> orderIds) {
+        if (orderIds.isEmpty()) {
+            return Mono.empty();
+        }
+        // Refunds first: they reference the payment. A purgeable user cannot
+        // have a REFUNDED payment (§4.2 blocks that), but a refund row in a
+        // non-terminal state can still exist, and leaving it would orphan it.
+        return refundRepository.deleteByOrderIdIn(orderIds)
+                .then(paymentRepository.deleteByOrderIdIn(orderIds))
+                .doOnSuccess(deleted -> log.info("Purged {} payment row(s) for {} order(s)",
+                        deleted, orderIds.size()))
+                .then();
+    }
+
+    /** The order ids we hold payment rows for — orphan sweep (§8 Phase 6). */
+    public Mono<java.util.List<Long>> distinctOrderIds() {
+        return paymentRepository.findDistinctOrderIds().collectList();
     }
 
     public static CreatePaymentIntentResponse toResponse(Payment payment, CreatePaymentIntentResponse.RefundInfo refund) {

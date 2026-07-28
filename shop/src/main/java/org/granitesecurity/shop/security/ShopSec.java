@@ -57,6 +57,12 @@ public class ShopSec {
                                 "/api/shop/greetings/**").permitAll()
                         .pathMatchers("/v3/api-docs/**", "/swagger-ui/**",
                                 "/swagger-ui.html", "/webjars/swagger-ui/**").permitAll()
+                        // Service-to-service only, mirroring ProfileSec's
+                        // "/api/profiles/internal/**" rule. Must precede the
+                        // /api/shop/users/** admin rule below, since "internal"
+                        // is not a username but would match {username}.
+                        .pathMatchers("/api/shop/internal/**").hasAuthority("SCOPE_internal")
+                        .pathMatchers(HttpMethod.GET, "/api/shop/users/*/orders").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.GET, "/api/shop/orders/all")
                                 .hasAnyRole("ADMIN", "MANAGER")
                         .pathMatchers(HttpMethod.GET, "/api/shop/orders",

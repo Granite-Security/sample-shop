@@ -7,7 +7,9 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Component
 public class OrderEventConsumer {
@@ -25,6 +27,23 @@ public class OrderEventConsumer {
     public void consume(String message) {
         try {
             Map<String, Object> data = MAPPER.readValue(message, Map.class);
+
+            // Carries "orderIds" (plural) and no "orderId"/"address", so it has
+            // to be handled before the checks below reject it as malformed.
+            if ("OrdersPurged".equals(data.get("eventType"))) {
+                List<Long> orderIds = parseOrderIds(data.get("orderIds"));
+                if (orderIds.isEmpty()) {
+                    log.warn("OrdersPurged event with no orderIds: {}", message);
+                    return;
+                }
+                deliveryService.purgeOrders(orderIds)
+                        .subscribe(ignored -> { },
+                                err -> log.error("Failed to purge deliveries for {} order(s): {}",
+                                        orderIds.size(), err.getMessage()),
+                                () -> log.info("Purged deliveries for {} order(s)", orderIds.size()));
+                return;
+            }
+
             Long orderId = parseOrderId(data.get("orderId"));
             if (orderId == null) {
                 log.warn("Order event missing orderId: {}", message);
@@ -55,6 +74,13 @@ public class OrderEventConsumer {
         } catch (Exception e) {
             log.error("Failed to process order event: {}", message, e);
         }
+    }
+
+    private static List<Long> parseOrderIds(Object value) {
+        if (!(value instanceof List<?> list)) {
+            return List.of();
+        }
+        return list.stream().map(OrderEventConsumer::parseOrderId).filter(Objects::nonNull).toList();
     }
 
     private static Long parseOrderId(Object value) {

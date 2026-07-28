@@ -49,6 +49,12 @@ public class UserEntity {
     @Column(name = "provider_id", length = 255)
     private String providerId;
 
+    @Column(name = "blocked_at")
+    private OffsetDateTime blockedAt;
+
+    @Column(name = "blocked_by", length = 64)
+    private String blockedBy;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -86,6 +92,12 @@ public class UserEntity {
 
     public String getProviderId() { return providerId; }
     public void setProviderId(String providerId) { this.providerId = providerId; }
+
+    public OffsetDateTime getBlockedAt() { return blockedAt; }
+    public void setBlockedAt(OffsetDateTime blockedAt) { this.blockedAt = blockedAt; }
+
+    public String getBlockedBy() { return blockedBy; }
+    public void setBlockedBy(String blockedBy) { this.blockedBy = blockedBy; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }

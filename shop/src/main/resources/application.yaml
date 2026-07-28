@@ -32,6 +32,21 @@ spring:
       properties:
         enable.idempotence: true
 
+  security:
+    oauth2:
+      client:
+        registration:
+          # shop → payment, for the purge-eligibility check only.
+          payment-client:
+            client-id: ${INTERNAL_CLIENT_ID:internal-service}
+            client-secret: ${INTERNAL_CLIENT_SECRET:internal-secret}
+            authorization-grant-type: client_credentials
+            scope: internal
+            provider: auth-server
+        provider:
+          auth-server:
+            token-uri: ${AUTH_SERVER_TOKEN_URI:http://localhost:9090/auth/oauth2/token}
+
 jwt:
   jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:9090/auth/oauth2/jwks}
   trusted-issuers: ${TRUSTED_JWT_ISSUERS:http://localhost:8080/auth}

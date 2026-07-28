@@ -9,6 +9,7 @@ import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -35,6 +36,24 @@ public class PaymentHandler {
         return paymentService.getPaymentByOrderId(orderId)
                 .flatMap(response -> ServerResponse.ok().bodyValue(response))
                 .switchIfEmpty(ServerResponse.notFound().build());
+    }
+
+    // Internal, SCOPE_internal only. shop asks this before purging a user's
+    // orders, because order status cannot tell you whether money moved
+    // (docs/users/blocking-users.md §2.3).
+    public Mono<ServerResponse> getStatusesByOrderIds(ServerRequest request) {
+        return request.bodyToMono(OrderIdsRequest.class)
+                .map(req -> req.orderIds() == null ? List.<Long>of() : req.orderIds())
+                .flatMap(paymentService::statusesByOrderIds)
+                .flatMap(statuses -> ServerResponse.ok().bodyValue(statuses));
+    }
+
+    public record OrderIdsRequest(List<Long> orderIds) {}
+
+    // Orphan sweep (docs/users/blocking-users.md §8 Phase 6), read-only.
+    public Mono<ServerResponse> getOrderIds(ServerRequest request) {
+        return paymentService.distinctOrderIds()
+                .flatMap(orderIds -> ServerResponse.ok().bodyValue(orderIds));
     }
 
     public Mono<ServerResponse> retryPaymentIntent(ServerRequest request) {

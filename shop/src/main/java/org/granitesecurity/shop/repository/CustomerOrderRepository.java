@@ -18,4 +18,16 @@ public interface CustomerOrderRepository extends ReactiveCrudRepository<Customer
 
     @Query("SELECT * FROM customer_order ORDER BY id DESC LIMIT :size OFFSET :offset")
     Flux<CustomerOrder> findAllPaged(@Param("size") int size, @Param("offset") long offset);
+
+    Mono<Long> deleteByIdIn(java.util.Collection<Long> ids);
+
+    // Orphan sweep (docs/users/blocking-users.md §8 Phase 6): who owns orders,
+    // so the caller can diff that against the users that actually exist.
+    @Query("SELECT username, count(*) AS order_count FROM customer_order GROUP BY username")
+    Flux<OrderOwner> findOrderOwners();
+
+    @Query("SELECT id FROM customer_order WHERE id IN (:ids)")
+    Flux<Long> findExistingIds(@Param("ids") java.util.Collection<Long> ids);
+
+    record OrderOwner(String username, long orderCount) {}
 }

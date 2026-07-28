@@ -92,6 +92,11 @@ public class SecurityConfig {
     @Value("${app.oauth2.internal-service.secret:{noop}internal-secret}")
     private String internalClientSecret;
 
+    // Explicit env var rather than relaxed binding on the property name:
+    // "identity-admin" would relax to IDENTITYADMIN, which nobody guesses.
+    @Value("${IDENTITY_ADMIN_CLIENT_SECRET_ENCODED:{noop}identity-admin-secret}")
+    private String identityAdminClientSecret;
+
     @Value("${GOOGLE_CLIENT_ID:google-client-id}")
     private String googleClientId;
 
@@ -165,8 +170,29 @@ public class SecurityConfig {
         return http.build();
     }
 
+    // The internal user-administration API, called only by profile (which is
+    // where ROLE_ADMIN is actually enforced — see docs/users/blocking-users.md
+    // §3/§D4). auth-server understands no roles here on purpose: its JWT chains
+    // install no JwtAuthenticationConverter, so hasRole('ADMIN') would silently
+    // deny everyone. The gate is the dedicated identity.admin scope, which only
+    // the identity-admin client can obtain; a SCOPE_internal token must get 403.
     @Bean
     @Order(3)
+    public SecurityFilterChain internalUserApiSecurityFilterChain(HttpSecurity http, JwtDecoder jwtDecoder)
+            throws Exception {
+        http
+                .securityMatcher("/api/internal/users/**")
+                .csrf(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(authorize -> authorize
+                        .anyRequest().hasAuthority("SCOPE_identity.admin"))
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.decoder(jwtDecoder)));
+
+        return http.build();
+    }
+
+    @Bean
+    @Order(4)
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http, GoogleOidcUserService googleOidcUserService)
             throws Exception {
         http
@@ -285,8 +311,23 @@ public class SecurityConfig {
                 .scope("internal")
                 .build();
 
+        // Deliberately NOT the internal-service client above. "internal" is a
+        // shared identity — profile uses it for storage, and anything else that
+        // needs service-to-service access can too. Letting it also mean "delete
+        // this user" would put the identity store in the blast radius of any
+        // leak of those credentials. Only profile holds these.
+        // See docs/users/blocking-users.md §3.1.
+        RegisteredClient identityAdminClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId("identity-admin")
+                .clientSecret(identityAdminClientSecret)
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .scope("identity.admin")
+                .build();
+
         return new InMemoryRegisteredClientRepository(
-                oidcClient, spaClientShop, spaClientChocolate, externalClient, internalClient);
+                oidcClient, spaClientShop, spaClientChocolate, externalClient, internalClient,
+                identityAdminClient);
     }
 
     @Bean

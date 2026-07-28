@@ -151,6 +151,8 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - SERVER_PORT=9090
       - AUTH_SERVER_TOKEN_URI=http://auth-server:9090/auth/oauth2/token
+      # Must match IDENTITY_ADMIN_CLIENT_SECRET on profile, the only holder.
+      - IDENTITY_ADMIN_CLIENT_SECRET_ENCODED={noop}identity-admin-secret
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
     healthcheck:
       test: ["CMD", "wget", "--spider", "http://localhost:9090/auth/login"]
@@ -213,6 +215,11 @@ services:
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - PAYMENT_SERVICE_URI=http://payment:8062
+      # shop mints an internal-scope token to ask payment about purge
+      # eligibility; direct to auth-server, not through the gateway.
+      - AUTH_SERVER_TOKEN_URI=http://auth-server:9090/auth/oauth2/token
+      - INTERNAL_CLIENT_ID=internal-service
+      - INTERNAL_CLIENT_SECRET=internal-secret
     depends_on:
       gateway:
         condition: service_started
@@ -270,6 +277,16 @@ services:
       - AUTH_ISSUER_URI=http://gateway:8080/auth
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - AUTH_SERVER_TOKEN_URI=http://auth-server:9090/auth/oauth2/token
+      - MICROSERVICES_SHOP_URI=http://shop:8061
+      - MICROSERVICES_PAYMENT_URI=http://payment:8062
+      - MICROSERVICES_DELIVERY_URI=http://delivery:8063
+      - IDENTITY_ADMIN_BASE_URI=http://auth-server:9090/auth
+      - INTERNAL_CLIENT_ID=internal-service
+      - INTERNAL_CLIENT_SECRET=internal-secret
+      # Held only by profile — see docs/users/blocking-users.md §3.1.
+      - IDENTITY_ADMIN_CLIENT_ID=identity-admin
+      - IDENTITY_ADMIN_CLIENT_SECRET=identity-admin-secret
     depends_on:
       gateway:
         condition: service_started

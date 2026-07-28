@@ -11,3 +11,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/004-password-reset.sql
       relativeToChangelogFile: false
+  - include:
+      file: db/changelog/005-user-blocking.sql
+      relativeToChangelogFile: false

@@ -10,4 +10,6 @@ import java.util.UUID;
 @Repository
 public interface DeliveryTrackingRepository extends R2dbcRepository<DeliveryTracking, UUID> {
     Flux<DeliveryTracking> findByDeliveryIdOrderByTimestampDesc(UUID deliveryId);
+
+    reactor.core.publisher.Mono<Long> deleteByDeliveryIdIn(java.util.Collection<UUID> deliveryIds);
 }
