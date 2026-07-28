@@ -111,6 +111,13 @@ spec:
                 configMapKeyRef:
                   name: granite-config
                   key: AUTH_SERVER_TOKEN_URI
+            # Fire-and-forget producer for notifications.events. auth-server has no
+            # outbox and no relay by design — see NotificationEventPublisher.
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
           readinessProbe:
             httpGet:
               path: /auth/login

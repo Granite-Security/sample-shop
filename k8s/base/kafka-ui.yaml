@@ -1,0 +1,56 @@
+---
+# Kafka topic browser for development and debugging.
+#
+# DELIBERATELY NOT EXPOSED: there is no HTTPRoute for this Service in any overlay,
+# and there must not be one. kafka-ui ships with no authentication and allows
+# writes by default, so a public hostname would let anyone read password reset
+# tokens off notifications.events (account takeover) and hand-produce a forged
+# PaymentReceived onto payments.events, which shop's EventConsumer would happily
+# transition to PAID. See docs/notification/notification-microservice.md §6.1.
+#
+# Reach it with:
+#   kubectl -n granite port-forward deploy/kafka-ui 8090:8080
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-ui
+  labels:
+    tier: tooling
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-ui
+  template:
+    metadata:
+      labels:
+        app: kafka-ui
+        tier: tooling
+    spec:
+      containers:
+        - name: kafka-ui
+          # kafbat/kafka-ui is the maintained community continuation of the
+          # now-inactive provectuslabs/kafka-ui that compose.yaml still uses.
+          image: kafbat/kafka-ui:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: KAFKA_CLUSTERS_0_NAME
+              value: granite
+            - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            - name: DYNAMIC_CONFIG_ENABLED
+              value: "false"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-ui
+spec:
+  ports:
+    - port: 8080
+  selector:
+    app: kafka-ui

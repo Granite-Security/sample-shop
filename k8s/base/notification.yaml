@@ -1,0 +1,88 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification
+  labels:
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification
+  template:
+    metadata:
+      labels:
+        app: notification
+        tier: backend
+    spec:
+      # Unlike the other backend services there is no wait-for-issuer initContainer:
+      # notification is not an OAuth2 resource server and fetches no JWKS at startup,
+      # so it has nothing to block on. See docs/notification/notification-microservice.md
+      # §3 "Security posture".
+      containers:
+        - name: notification
+          image: granite-notification:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8066
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "notification"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://tempo.infra-global-observability.svc.cluster.local:4318"
+            - name: NOTIFICATION_SERVER_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: NOTIFICATION_PORT
+            - name: NOTIFICATION_R2DBC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: NOTIFICATION_R2DBC_URL
+            - name: NOTIFICATION_JDBC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: NOTIFICATION_JDBC_URL
+            - name: NOTIFICATION_R2DBC_USERNAME
+              value: myuser
+            - name: NOTIFICATION_R2DBC_PASSWORD
+              value: secret
+            - name: NOTIFICATION_JDBC_USERNAME
+              value: myuser
+            - name: NOTIFICATION_JDBC_PASSWORD
+              value: secret
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            - name: RESEND_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: resend-api-key
+            - name: RESEND_FROM
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: RESEND_FROM
+            # Used to build the password-reset link from the token on the event,
+            # so auth-server never needs to know the frontend URL shape (D3).
+            - name: FRONTEND_ORIGIN
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: FRONTEND_ORIGIN
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification
+spec:
+  ports:
+    - port: 8066
+  selector:
+    app: notification

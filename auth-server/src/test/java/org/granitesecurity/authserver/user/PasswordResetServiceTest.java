@@ -1,5 +1,6 @@
 package org.granitesecurity.authserver.user;
 
+import org.granitesecurity.authserver.client.NotificationEventPublisher;
 import org.granitesecurity.authserver.client.ProfileNotificationClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,6 +44,9 @@ class PasswordResetServiceTest {
     @Mock
     private ProfileNotificationClient profileNotificationClient;
 
+    @Mock
+    private NotificationEventPublisher notificationEventPublisher;
+
     private final PasswordEncoder passwordEncoder = PasswordEncoderFactories.createDelegatingPasswordEncoder();
 
     private PasswordResetService service;
@@ -50,7 +54,7 @@ class PasswordResetServiceTest {
     @BeforeEach
     void setUp() {
         service = new PasswordResetService(userRepository, passwordResetTokenRepository, passwordEncoder,
-                profileNotificationClient, FRONTEND_ORIGIN);
+                profileNotificationClient, notificationEventPublisher, FRONTEND_ORIGIN);
         TransactionSynchronizationManager.initSynchronization();
     }
 

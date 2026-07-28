@@ -1,0 +1,10 @@
+services:
+  notification-postgres:
+    image: 'postgres:latest'
+    container_name: 'notification-postgres'
+    environment:
+      - 'POSTGRES_DB=notificationdb'
+      - 'POSTGRES_PASSWORD=secret'
+      - 'POSTGRES_USER=myuser'
+    ports:
+      - '5437:5432'

@@ -51,6 +51,16 @@ services:
     ports:
       - '5436:5432'
 
+  notification-postgres:
+    image: 'postgres:latest'
+    container_name: 'notification-postgres'
+    environment:
+      - 'POSTGRES_DB=notificationdb'
+      - 'POSTGRES_PASSWORD=secret'
+      - 'POSTGRES_USER=myuser'
+    ports:
+      - '5437:5432'
+
   garage:
     image: dxflrs/garage:v2.3.0
     container_name: garage
@@ -142,6 +152,7 @@ services:
       - SERVER_PORT=9090
       - MICROSERVICES_PROFILE_URI=http://profile:8064
       - AUTH_SERVER_TOKEN_URI=http://auth-server:9090/auth/oauth2/token
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
     healthcheck:
       test: ["CMD", "wget", "--spider", "http://localhost:9090/auth/login"]
       interval: 10s
@@ -259,12 +270,37 @@ services:
       - PROFILE_JDBC_PASSWORD=secret
       - AUTH_ISSUER_URI=http://gateway:8080/auth
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
-      - RESEND_API_KEY=${RESEND_API_KEY}
-      - RESEND_FROM=Granite Security <no-reply@notify.granite-security.org>
+      # Phase 4 flip: RESEND_API_KEY removed — profile no longer sends mail.
     depends_on:
       gateway:
         condition: service_started
       profile-postgres:
+        condition: service_started
+    restart: on-failure
+
+  notification:
+    build:
+      context: ./notification
+    container_name: notification
+    ports:
+      - "8066:8066"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - NOTIFICATION_SERVER_PORT=8066
+      - NOTIFICATION_R2DBC_URL=r2dbc:postgresql://notification-postgres:5432/notificationdb
+      - NOTIFICATION_R2DBC_USERNAME=myuser
+      - NOTIFICATION_R2DBC_PASSWORD=secret
+      - NOTIFICATION_JDBC_URL=jdbc:postgresql://notification-postgres:5432/notificationdb
+      - NOTIFICATION_JDBC_USERNAME=myuser
+      - NOTIFICATION_JDBC_PASSWORD=secret
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - RESEND_FROM=Granite Security <no-reply@notify.granite-security.org>
+      - FRONTEND_ORIGIN=http://localhost:5173
+    depends_on:
+      kafka:
+        condition: service_healthy
+      notification-postgres:
         condition: service_started
     restart: on-failure
 
