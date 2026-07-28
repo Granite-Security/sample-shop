@@ -171,6 +171,63 @@ RegisteredClient internalClient = RegisteredClient.withId(UUID.randomUUID().toSt
 `SCOPE_internal` then falls out of the standard `JwtGrantedAuthoritiesConverter`
 already wired in every service — no converter change anywhere.
 
+#### How an internal token differs from a user token
+
+Resource servers don't distinguish grants. Every service's decoder checks the
+same three things — signature against auth-server's JWKS, timestamps, and `iss`
+in the trusted-issuers allow-list. What differs is the token's *contents*:
+
+| | user token (authorization_code) | internal token (client_credentials) |
+| --- | --- | --- |
+| `sub` | the username | `internal-service` (the client id) |
+| `roles` claim | the user's roles → `ROLE_ADMIN`… | **empty** |
+| `scope` | `openid profile email` | `internal` → `SCOPE_internal` |
+
+The empty `roles` is structural, not a bug: `jwtTokenCustomizer`
+(`SecurityConfig.java:363`) copies the *principal's* authorities, and for
+client_credentials the principal is the client, which has none. That is why
+`ProfileSec.java:55` guards internal routes with `hasAuthority("SCOPE_internal")`
+— a `hasRole` check could never match an internal token.
+
+**Implementation consequence:** `jwt.getSubject()` on an internal call returns
+`"internal-service"`, not a user. Every internal route must therefore take the
+username as an explicit path variable — as the existing
+`/api/profiles/internal/{username}/addresses/{id}` (`ProfileRoute.java:25`)
+already does — and must never reuse `ProfileHandler.getUsername(request)`.
+
+#### Who gets to be a client
+
+Being an internal client is about making **outbound** calls, not receiving them.
+Register only the services that call out:
+
+| Service | Internal client? | Calls |
+| --- | --- | --- |
+| `profile` | yes | → storage (presign/delete) |
+| `auth-server` | yes | → profile (password-changed notify) |
+| `shop` | yes | → storage (media cleanup on product delete — see [`../products/delete-item.md`](../products/delete-item.md)) |
+| `gateway` | no | relays the user's own JWT |
+| `greetings`, `payment`, `delivery` | no | no cross-service calls today (`delivery` is the likely future consumer of the address endpoint) |
+
+**One shared `internal-service` client** for all three, matching how
+`external-service` already works. Accepted trade-off: any service holding that
+secret can reach *any* `SCOPE_internal` endpoint anywhere, so compromising the
+least-protected service grants the whole internal surface. When that stops being
+acceptable, the upgrade is per-caller clients with narrower scopes
+(`internal.storage.write`, `internal.profile.notify`) rather than one blanket
+`internal` — worth naming scopes that way from the start even while a single
+client uses them.
+
+#### Gotcha: auth-server restarts invalidate cached tokens
+
+auth-server regenerates its RSA keypair on every startup, so a cached
+client-credentials token outlives the key that signed it and starts failing
+validation downstream. Spring's authorized-client manager caches until expiry and
+does **not** refetch on a 401. Every internal client therefore needs a retry that
+**evicts the cached authorized client and re-fetches once** on a 401 — otherwise
+each auth-server restart breaks internal calls until the token expires on its
+own. Implement it once in `InternalClientConfig` and copy that config to the
+other two services.
+
 ### 3c. `profile`: cabinet API
 
 New files: `domain/UserFile.java`, `repository/UserFileRepository.java`
