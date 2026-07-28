@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router';
 import { api, ApiError } from '../api';
 
 const inputStyle =
@@ -95,6 +96,11 @@ export function PasswordPage() {
             {busy ? 'Changing…' : 'Change Password'}
           </button>
         </form>
+        <p className="mt-6 text-sm text-cocoa/60">
+          <Link to="/reset-password" className="text-cocoa underline decoration-gold underline-offset-4 hover:text-terracotta">
+            Forgot your password?
+          </Link>
+        </p>
       </section>
     </div>
   );
