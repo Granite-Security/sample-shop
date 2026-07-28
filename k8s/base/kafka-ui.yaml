@@ -4,7 +4,7 @@
 # DELIBERATELY NOT EXPOSED: there is no HTTPRoute for this Service in any overlay,
 # and there must not be one. kafka-ui ships with no authentication and allows
 # writes by default, so a public hostname would let anyone read password reset
-# tokens off notifications.events (account takeover) and hand-produce a forged
+# tokens off identity.events (account takeover) and hand-produce a forged
 # PaymentReceived onto payments.events, which shop's EventConsumer would happily
 # transition to PAID. See docs/notification/notification-microservice.md §6.1.
 #

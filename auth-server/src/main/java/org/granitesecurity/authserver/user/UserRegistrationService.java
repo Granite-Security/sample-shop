@@ -57,7 +57,8 @@ public class UserRegistrationService {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    notificationEventPublisher.publishUserRegistered(username, email);
+                    notificationEventPublisher.publishUserRegistered(
+                            username, email, request.firstName(), request.lastName());
                 }
             });
 
