@@ -155,14 +155,22 @@ export function Header() {
               )}
             </div>
           ) : (
-            <button
-              className="flex items-center gap-2 p-2 transition-colors hover:text-gold"
-              aria-label="Sign in"
-              onClick={login}
-            >
-              <AccountIcon />
-              <span className="hidden sm:inline text-xs tracking-[0.14em] uppercase">Sign in</span>
-            </button>
+            <>
+              <Link
+                to="/register"
+                className="hidden p-2 text-xs uppercase tracking-[0.14em] transition-colors hover:text-gold sm:inline-block"
+              >
+                Register
+              </Link>
+              <button
+                className="flex items-center gap-2 p-2 transition-colors hover:text-gold"
+                aria-label="Sign in"
+                onClick={login}
+              >
+                <AccountIcon />
+                <span className="hidden sm:inline text-xs tracking-[0.14em] uppercase">Sign in</span>
+              </button>
+            </>
           )}
           <button className="relative p-2 transition-colors hover:text-gold" aria-label="Wishlist">
             <HeartIcon />
@@ -200,6 +208,13 @@ export function Header() {
             <li>
               <Link to="/admin" className="block py-1 text-gold" onClick={() => setMenuOpen(false)}>
                 Admin
+              </Link>
+            </li>
+          )}
+          {!isAuthenticated && (
+            <li>
+              <Link to="/register" className="block py-1" onClick={() => setMenuOpen(false)}>
+                Register
               </Link>
             </li>
           )}
