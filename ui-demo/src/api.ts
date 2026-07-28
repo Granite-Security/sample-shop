@@ -103,6 +103,9 @@ export const api = {
   placeOrder: (body: PlaceOrderRequest) =>
     request<OrderResponse>('/api/shop/orders', { method: 'POST', body: JSON.stringify(body) }),
 
+  getOrders: (page = 0, size = 20) =>
+    request<PagedResult<OrderResponse>>(`/api/shop/orders?page=${page}&size=${size}`),
+
   getOrder: (id: number) => request<OrderResponse>(`/api/shop/orders/${id}`),
 
   getPaymentIntent: (orderId: number) =>

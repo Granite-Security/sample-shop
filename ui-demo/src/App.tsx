@@ -14,6 +14,8 @@ import { ProfilePage } from './pages/ProfilePage';
 import { PasswordPage } from './pages/PasswordPage';
 import { FilesPage } from './pages/FilesPage';
 import { AddressesPage } from './pages/AddressesPage';
+import { OrdersPage } from './pages/OrdersPage';
+import { OrderDetailPage } from './pages/OrderDetailPage';
 import { Register } from './pages/Register';
 import { ResetPasswordRequest } from './pages/ResetPasswordRequest';
 import { ResetPasswordConfirm } from './pages/ResetPasswordConfirm';
@@ -48,6 +50,8 @@ export default function App() {
                 <Route path="profile/password" element={<PasswordPage />} />
                 <Route path="profile/files" element={<FilesPage />} />
                 <Route path="profile/addresses" element={<AddressesPage />} />
+                <Route path="profile/orders" element={<OrdersPage />} />
+                <Route path="profile/orders/:id" element={<OrderDetailPage />} />
               </Route>
               <Route path="register" element={<Register />} />
               <Route path="reset-password" element={<ResetPasswordRequest />} />
