@@ -202,8 +202,8 @@ No orders route — not in scope (see decisions table above).
 ## Out of scope
 
 - Adding order history to `ui-demo`.
-- A persistent account sub-nav/tab bar (worth a future revisit, not part of
-  this refactor).
+- ~~A persistent account sub-nav/tab bar~~ — now **Phase 2** below, once the
+  split has landed.
 - Any change to `api.ts`/`api/*.ts`, `types.ts`, or any backend/infra —
   every new page reuses the exact same API calls the inline sections already
   make today.
@@ -222,3 +222,155 @@ No orders route — not in scope (see decisions table above).
   missed auth guard breaks, and no build or type-check will catch it.
 - Confirm no page fires an authenticated API call before the guard resolves —
   watch the network tab while loading each route logged out.
+- Order history landed separately for `ui-demo` (`OrdersPage.tsx`/
+  `OrderDetailPage.tsx`, nested under `/profile/orders`) once it was noticed
+  missing — see Phase 2/3 below, both of which fold Orders into the same
+  account area.
+
+---
+
+# Phase 2 — replace Quick Links with a persistent account sidebar (`ui-shop`)
+
+Status: **shipped** · Follows the split above, which shipped in PR #54.
+
+## Why
+
+The split left `Profile.tsx:66-72` as a stack of four full-width centred
+buttons under a "Quick Links" heading. It works, but it's a dead-end hub: from
+`/profile/files` there is no way to reach `/profile/password` without going back
+to `/profile` first, and no page indicates where you are in the account area.
+Deferring this was right for the split itself; now that the pages exist, the hub
+is the weakest part of the result.
+
+A left-hand nav, persistent across every account page, fixes both — and it is
+**not a new UI concept in this app**.
+
+## The precedent to copy
+
+`CategorySidebar.tsx` + `.catalog-page { display: flex; gap: 1.5rem }` +
+`.category-sidebar { width: 200px; flex-shrink: 0 }` (`index.css:94-112`) is
+already exactly this layout, including a `button.active` rule for the current
+selection. `AccountNav` is that component with `NavLink`s instead of buttons and
+`isActive` driving the same `.active` class — roughly 20 lines, and the CSS is a
+near-copy of the existing block under a new `.account-nav` selector.
+
+## Shape
+
+New `src/components/AccountNav.tsx` (the nav) and
+`src/components/AccountLayout.tsx`:
+
+```tsx
+export default function AccountLayout() {
+  return (
+    <div className="page account-page">
+      <AccountNav />
+      <div className="account-content"><Outlet /></div>
+    </div>
+  );
+}
+```
+
+`src/App.tsx` — nest the account routes inside it, still under `RequireAuth`:
+
+```tsx
+<Route element={<RequireAuth />}>
+  <Route element={<AccountLayout />}>
+    <Route path="profile" element={<Profile />} />
+    <Route path="profile/password" element={<Password />} />
+    <Route path="profile/files" element={<Files />} />
+    <Route path="addresses" element={<Addresses />} />
+    <Route path="orders" element={<Orders />} />
+    <Route path="orders/:id" element={<OrderDetail />} />
+  </Route>
+</Route>
+```
+
+`Profile.tsx` loses the entire Quick Links block (`:64-72`, including the `<hr>`
+and the now-unused `Link` import) and goes back to being just the details form.
+
+## Two costs, decide before starting
+
+1. **Every account page renders its own `<div className="page">` wrapper.** That
+   wrapper belongs to `AccountLayout` now, so `Profile.tsx`, `Password.tsx`,
+   `Files.tsx`, `Addresses.tsx` (and `Orders.tsx`, if pulled in) each need it
+   stripped — including `Profile.tsx`'s `maxWidth: 600` inline style and the
+   loading-spinner early return, which also wraps in `.page`. Mechanical, but
+   it's five or six files, not one.
+2. **Orders is the odd one out.** `/orders` is top-level and, unlike
+   `/addresses`, sits **outside** `RequireAuth` (`App.tsx:37`) with its own
+   inline `isAuthenticated` check (`Orders.tsx:14`). Either pull it into the
+   account layout — which also closes that guard inconsistency and lets the
+   inline check go — or leave "My Orders" out of the sidebar and lose a link the
+   hub has today. **Recommend pulling it in**, along with `orders/:id`;
+   `orders/:id/pay` is a checkout-ish flow and can stay outside.
+
+## Deliberately not in this phase
+
+- **Mobile.** A 200px sidebar beside content needs a breakpoint, and
+  `index.css` currently has **no `@media` rules at all** — the existing
+  `.catalog-page` sidebar has the same limitation. So this is no regression, but
+  don't treat it as the moment to fix responsiveness; that's a separate pass
+  across the whole app.
+- **`ui-demo`.** Its account pages use Tailwind and a different page shell, so
+  the same idea needs its own markup. Worth doing, but as its own phase — the
+  two apps share no CSS.
+
+## Verification
+
+- Every account page shows the nav, with exactly one item marked active, and the
+  active item matches the URL (including on a hard refresh and on back/forward).
+- Navigating between account pages never passes through `/profile`.
+- Signed out, the whole group still redirects to `/login` — `AccountLayout` sits
+  *inside* `RequireAuth`, so nesting must not reorder those two.
+- `npx tsc -b && npm run build` clean, with no leftover `.page` wrappers
+  double-padding the content.
+
+Shipped as: new `src/components/AccountNav.tsx` (`NavLink`s + `.active` class,
+`Profile`/`Password`/`Files`/`Addresses`/`Orders`) and `AccountLayout.tsx`
+(`.page account-page` wrapper + `.account-nav`/`.account-content` split,
+mirroring `.catalog-page`/`.category-sidebar`). `App.tsx`'s `orders`/
+`orders/:id` routes moved inside `RequireAuth` + `AccountLayout` (closing the
+guard inconsistency called out above); `orders/:id/pay` (`RetryPayment`)
+stayed outside, per the recommendation. `Profile.tsx`, `Password.tsx`,
+`Files.tsx`, `Addresses.tsx`, `Orders.tsx`, `OrderDetail.tsx` all had their
+`.page` wrapper (and, for `Orders.tsx`, the now-redundant inline
+`isAuthenticated` check) stripped — `AccountLayout` owns that now.
+
+---
+
+# Phase 3 — the same sidebar for `ui-demo`
+
+Status: **shipped**.
+
+`ui-demo`'s account pages use Tailwind + the cocoa design system rather than
+`ui-shop`'s plain CSS, so this is a parallel implementation of the same idea,
+not a port of Phase 2's code:
+
+- New `src/components/AccountNav.tsx` — a `<nav>` of `NavLink`s (`Profile`,
+  `Orders`, `Password`, `Files`, `Addresses`), active state via
+  `bg-cocoa text-ivory` vs. `text-cocoa hover:bg-cocoa/10`, laid out as a
+  horizontal scroll row on narrow viewports (`flex-row overflow-x-auto`) and
+  a vertical column at `lg:` — the one concession to mobile this phase makes,
+  since `ui-demo` (unlike `ui-shop`) already has real `lg:`/`sm:` breakpoints
+  throughout.
+- New `src/components/AccountLayout.tsx` — owns the `bg-ivory pt-28 lg:pt-32`
+  / `mx-auto max-w-5xl px-5 pb-24 lg:px-8` shell that used to be duplicated in
+  every account page, plus the `flex flex-col lg:flex-row` sidebar/content
+  split.
+- `App.tsx`: `profile`, `profile/password`, `profile/files`,
+  `profile/addresses`, `profile/orders`, `profile/orders/:id` all nested
+  inside `RequireAuth` → `AccountLayout`.
+- `ProfilePage.tsx` lost its Quick Links section entirely (the sidebar
+  replaces it) along with the now-unused `Link` import; `PasswordPage.tsx`,
+  `FilesPage.tsx`, `AddressesPage.tsx`, `OrdersPage.tsx`,
+  `OrderDetailPage.tsx` all had their own `bg-ivory`/`mx-auto` wrapper divs
+  stripped down to a single plain `<div>`, keeping each page's own eyebrow +
+  `<h1>` (matching how `ui-shop`'s pages kept theirs).
+
+## Verification
+
+- Same checklist as Phase 2's, applied to `ui-demo`: nav shows exactly one
+  active item matching the URL, navigating between account pages never
+  bounces through `/profile`, signed out still shows the "Your Account
+  Awaits" CTA (not a 500 or blank sidebar).
+- `cd ui-demo && npx tsc -b && npm run build` clean.

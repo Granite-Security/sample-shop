@@ -89,14 +89,14 @@ export default function OrderDetail() {
   }, [id, authLoading]);
 
   if (authLoading || loading) return (
-    <div className="page" style={{ textAlign: 'center', paddingTop: '3rem' }}>
+    <div style={{ textAlign: 'center', paddingTop: '3rem' }}>
       <div className="spinner" style={{ margin: '0 auto 1rem' }} />
       <p>Loading order...</p>
     </div>
   );
-  if (notFound) return <div className="page"><p>Order not found.</p></div>;
+  if (notFound) return <p>Order not found.</p>;
   if (!order) return (
-    <div className="page">
+    <div>
       <p>Couldn't load this order{loadError ? `: ${loadError}` : ''}.</p>
       <button className="btn" onClick={() => fetchRef.current()}>Retry</button>
     </div>
@@ -119,7 +119,7 @@ export default function OrderDetail() {
   };
 
   return (
-    <div className="page order-detail-page">
+    <div className="order-detail-page">
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <h1 style={{ margin: 0 }}>Order #{order.id}</h1>
         <span className={statusClass}>{order.status}</span>

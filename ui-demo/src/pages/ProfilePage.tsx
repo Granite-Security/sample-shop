@@ -1,34 +1,18 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link } from 'react-router';
 import { api } from '../api';
 import type { ProfileResponse } from '../types';
 
 const inputStyle =
   'w-full border border-cocoa/20 bg-white/70 px-4 py-3 text-sm text-cocoa placeholder:text-cocoa/40 focus:border-gold focus:outline-none';
 
-const quickLinkStyle =
-  'block border border-cocoa px-8 py-3 text-center text-xs uppercase tracking-[0.18em] text-cocoa transition-colors duration-300 hover:bg-cocoa hover:text-ivory';
-
 export function ProfilePage() {
   return (
-    <div className="bg-ivory pt-28 lg:pt-32">
-      <div className="mx-auto max-w-3xl px-5 pb-24 lg:px-8">
-        <p className="text-xs uppercase tracking-[0.3em] text-terracotta">Your Account</p>
-        <h1 className="mt-3 font-display text-[36px] leading-tight text-cocoa lg:text-[48px]">My Profile</h1>
+    <div>
+      <p className="text-xs uppercase tracking-[0.3em] text-terracotta">Your Account</p>
+      <h1 className="mt-3 font-display text-[36px] leading-tight text-cocoa lg:text-[48px]">My Profile</h1>
 
-        <div className="mt-10 space-y-14">
-          <ProfileDetails />
-
-          <section aria-label="Quick links">
-            <h2 className="font-display text-[24px] text-cocoa">Quick Links</h2>
-            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Link to="/profile/orders" className={quickLinkStyle}>Orders</Link>
-              <Link to="/profile/password" className={quickLinkStyle}>Password</Link>
-              <Link to="/profile/files" className={quickLinkStyle}>Files</Link>
-              <Link to="/profile/addresses" className={quickLinkStyle}>Addresses</Link>
-            </div>
-          </section>
-        </div>
+      <div className="mt-10">
+        <ProfileDetails />
       </div>
     </div>
   );

@@ -65,10 +65,10 @@ export default function Addresses() {
     load();
   };
 
-  if (loading) return <div className="page"><div className="spinner" style={{ margin: '0 auto' }} /></div>;
+  if (loading) return <div className="spinner" style={{ margin: '0 auto' }} />;
 
   return (
-    <div className="page">
+    <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 style={{ margin: 0 }}>My Addresses</h1>
         <button className="btn btn-primary" onClick={() => { resetForm(); setShowForm(true); }}>

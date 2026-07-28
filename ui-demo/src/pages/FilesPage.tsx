@@ -74,76 +74,74 @@ export function FilesPage() {
   };
 
   return (
-    <div className="bg-ivory pt-28 lg:pt-32">
-      <div className="mx-auto max-w-3xl px-5 pb-24 lg:px-8">
-        <p className="text-xs uppercase tracking-[0.3em] text-terracotta">Your Account</p>
-        <h1 className="mt-3 font-display text-[36px] leading-tight text-cocoa lg:text-[48px]">Files</h1>
+    <div>
+      <p className="text-xs uppercase tracking-[0.3em] text-terracotta">Your Account</p>
+      <h1 className="mt-3 font-display text-[36px] leading-tight text-cocoa lg:text-[48px]">Files</h1>
 
-        <section aria-label="Files" className="mt-10">
-          <p className="text-sm text-cocoa/60">
-            Uploaded files are public — anyone with the link can open them. Don't upload sensitive documents here.
+      <section aria-label="Files" className="mt-10">
+        <p className="text-sm text-cocoa/60">
+          Uploaded files are public — anyone with the link can open them. Don't upload sensitive documents here.
+        </p>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={ALLOWED_FILE_TYPES.join(',')}
+          onChange={handleFileSelected}
+          disabled={uploading}
+          className="mt-4 text-sm text-cocoa/70"
+        />
+        {uploading && <p className="mt-2 text-sm text-cocoa/60">Uploading…</p>}
+        {fileError && (
+          <p className="mt-2 border-l-2 border-terracotta bg-terracotta/10 px-4 py-3 text-sm text-terracotta">
+            {fileError}
           </p>
+        )}
+        {duplicateFile && (
+          <p className="mt-2 border-l-2 border-terracotta bg-terracotta/10 px-4 py-3 text-sm text-terracotta">
+            You've already uploaded this file as{' '}
+            <a href={duplicateFile.url} target="_blank" rel="noreferrer" className="underline">
+              {duplicateFile.fileName}
+            </a>{' '}
+            on {new Date(duplicateFile.createdAt).toLocaleDateString()}.
+          </p>
+        )}
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={ALLOWED_FILE_TYPES.join(',')}
-            onChange={handleFileSelected}
-            disabled={uploading}
-            className="mt-4 text-sm text-cocoa/70"
-          />
-          {uploading && <p className="mt-2 text-sm text-cocoa/60">Uploading…</p>}
-          {fileError && (
-            <p className="mt-2 border-l-2 border-terracotta bg-terracotta/10 px-4 py-3 text-sm text-terracotta">
-              {fileError}
-            </p>
-          )}
-          {duplicateFile && (
-            <p className="mt-2 border-l-2 border-terracotta bg-terracotta/10 px-4 py-3 text-sm text-terracotta">
-              You've already uploaded this file as{' '}
-              <a href={duplicateFile.url} target="_blank" rel="noreferrer" className="underline">
-                {duplicateFile.fileName}
-              </a>{' '}
-              on {new Date(duplicateFile.createdAt).toLocaleDateString()}.
-            </p>
-          )}
-
-          {loading ? (
-            <p className="mt-4 text-sm text-cocoa/50">Loading files…</p>
-          ) : files.length === 0 ? (
-            <p className="mt-4 text-sm text-cocoa/50">No files uploaded yet.</p>
-          ) : (
-            <ul className="mt-4 divide-y divide-cocoa/10 border-y border-cocoa/10">
-              {files.map((file) => (
-                <li key={file.id} className="flex items-center justify-between gap-4 py-4">
-                  <div className="min-w-0">
-                    <a href={file.url} target="_blank" rel="noreferrer" className="text-cocoa hover:text-terracotta">
-                      {file.fileName}
-                    </a>
-                    <p className="mt-1 text-sm text-cocoa/50">
-                      {formatSize(file.sizeBytes)} · {new Date(file.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 gap-4">
-                    <button
-                      onClick={() => handleCopyLink(file.url)}
-                      className="text-xs uppercase tracking-[0.14em] text-cocoa underline decoration-gold underline-offset-4 hover:text-terracotta"
-                    >
-                      Copy link
-                    </button>
-                    <button
-                      onClick={() => handleDeleteFile(file.id)}
-                      className="text-xs uppercase tracking-[0.14em] text-terracotta/80 underline underline-offset-4 hover:text-terracotta"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
+        {loading ? (
+          <p className="mt-4 text-sm text-cocoa/50">Loading files…</p>
+        ) : files.length === 0 ? (
+          <p className="mt-4 text-sm text-cocoa/50">No files uploaded yet.</p>
+        ) : (
+          <ul className="mt-4 divide-y divide-cocoa/10 border-y border-cocoa/10">
+            {files.map((file) => (
+              <li key={file.id} className="flex items-center justify-between gap-4 py-4">
+                <div className="min-w-0">
+                  <a href={file.url} target="_blank" rel="noreferrer" className="text-cocoa hover:text-terracotta">
+                    {file.fileName}
+                  </a>
+                  <p className="mt-1 text-sm text-cocoa/50">
+                    {formatSize(file.sizeBytes)} · {new Date(file.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-4">
+                  <button
+                    onClick={() => handleCopyLink(file.url)}
+                    className="text-xs uppercase tracking-[0.14em] text-cocoa underline decoration-gold underline-offset-4 hover:text-terracotta"
+                  >
+                    Copy link
+                  </button>
+                  <button
+                    onClick={() => handleDeleteFile(file.id)}
+                    className="text-xs uppercase tracking-[0.14em] text-terracotta/80 underline underline-offset-4 hover:text-terracotta"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

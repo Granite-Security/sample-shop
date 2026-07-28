@@ -96,12 +96,11 @@ export function AddressesPage() {
   };
 
   return (
-    <div className="bg-ivory pt-28 lg:pt-32">
-      <div className="mx-auto max-w-3xl px-5 pb-24 lg:px-8">
-        <p className="text-xs uppercase tracking-[0.3em] text-terracotta">Your Account</p>
-        <h1 className="mt-3 font-display text-[36px] leading-tight text-cocoa lg:text-[48px]">Addresses</h1>
+    <div>
+      <p className="text-xs uppercase tracking-[0.3em] text-terracotta">Your Account</p>
+      <h1 className="mt-3 font-display text-[36px] leading-tight text-cocoa lg:text-[48px]">Addresses</h1>
 
-        <section aria-label="Address book" className="mt-10">
+      <section aria-label="Address book" className="mt-10">
           <h2 className="font-display text-[24px] text-cocoa">
             {editingId !== null ? 'Edit Address' : 'Add an Address'}
           </h2>
@@ -259,7 +258,6 @@ export function AddressesPage() {
             Back to the Boutique
           </Link>
         </section>
-      </div>
     </div>
   );
 }

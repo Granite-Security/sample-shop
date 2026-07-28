@@ -6,6 +6,7 @@ import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
 import RequireAuth from './components/RequireAuth';
+import { AccountLayout } from './components/AccountLayout';
 import { Home } from './pages/Home';
 import { ProductPage } from './pages/ProductPage';
 import { AdminPage } from './pages/AdminPage';
@@ -46,12 +47,14 @@ export default function App() {
               <Route path="admin" element={<AdminPage />} />
               <Route path="checkout" element={<CheckoutPage />} />
               <Route element={<RequireAuth />}>
-                <Route path="profile" element={<ProfilePage />} />
-                <Route path="profile/password" element={<PasswordPage />} />
-                <Route path="profile/files" element={<FilesPage />} />
-                <Route path="profile/addresses" element={<AddressesPage />} />
-                <Route path="profile/orders" element={<OrdersPage />} />
-                <Route path="profile/orders/:id" element={<OrderDetailPage />} />
+                <Route element={<AccountLayout />}>
+                  <Route path="profile" element={<ProfilePage />} />
+                  <Route path="profile/password" element={<PasswordPage />} />
+                  <Route path="profile/files" element={<FilesPage />} />
+                  <Route path="profile/addresses" element={<AddressesPage />} />
+                  <Route path="profile/orders" element={<OrdersPage />} />
+                  <Route path="profile/orders/:id" element={<OrderDetailPage />} />
+                </Route>
               </Route>
               <Route path="register" element={<Register />} />
               <Route path="reset-password" element={<ResetPasswordRequest />} />

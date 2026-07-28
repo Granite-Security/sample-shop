@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
 import { api } from '../api';
 import type { ProfileResponse } from '../types';
 
@@ -32,10 +31,10 @@ export default function Profile() {
     setEditing(false);
   };
 
-  if (loading) return <div className="page"><div className="spinner" style={{ margin: '0 auto' }} /></div>;
+  if (loading) return <div className="spinner" style={{ margin: '0 auto' }} />;
 
   return (
-    <div className="page" style={{ maxWidth: 600 }}>
+    <div>
       <h1>My Profile</h1>
 
       {profile ? (
@@ -60,16 +59,6 @@ export default function Profile() {
               <button className="btn" style={{ marginTop: 8 }} onClick={() => setEditing(true)}>Edit Profile</button>
             </div>
           )}
-
-          <hr style={{ margin: '24px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
-
-          <h2>Quick Links</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-            <Link to="/profile/password" className="btn" style={{ textAlign: 'center' }}>Password</Link>
-            <Link to="/profile/files" className="btn" style={{ textAlign: 'center' }}>Files</Link>
-            <Link to="/orders" className="btn" style={{ textAlign: 'center' }}>My Orders</Link>
-            <Link to="/addresses" className="btn" style={{ textAlign: 'center' }}>My Addresses</Link>
-          </div>
         </div>
       ) : (
         <p>Could not load profile.</p>
