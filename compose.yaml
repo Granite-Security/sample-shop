@@ -152,6 +152,7 @@ services:
       - SERVER_PORT=9090
       - MICROSERVICES_PROFILE_URI=http://profile:8064
       - AUTH_SERVER_TOKEN_URI=http://auth-server:9090/auth/oauth2/token
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
     healthcheck:
       test: ["CMD", "wget", "--spider", "http://localhost:9090/auth/login"]
       interval: 10s
@@ -269,8 +270,7 @@ services:
       - PROFILE_JDBC_PASSWORD=secret
       - AUTH_ISSUER_URI=http://gateway:8080/auth
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
-      - RESEND_API_KEY=${RESEND_API_KEY}
-      - RESEND_FROM=Granite Security <no-reply@notify.granite-security.org>
+      # Phase 4 flip: RESEND_API_KEY removed — profile no longer sends mail.
     depends_on:
       gateway:
         condition: service_started
@@ -294,8 +294,9 @@ services:
       - NOTIFICATION_JDBC_USERNAME=myuser
       - NOTIFICATION_JDBC_PASSWORD=secret
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      # RESEND_API_KEY intentionally unset until Phase 2 — EmailService logs and
-      # skips while it is blank, so this service sends nothing yet.
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - RESEND_FROM=Granite Security <no-reply@notify.granite-security.org>
+      - FRONTEND_ORIGIN=http://localhost:5173
     depends_on:
       kafka:
         condition: service_healthy

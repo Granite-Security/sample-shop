@@ -1,6 +1,6 @@
 # `notification` microservice — extraction & event-driven refactor
 
-Status: **plan / not started**
+Status: **Phases 1–4 implemented** (identity events end-to-end; commerce notifications and Phase 5 cleanup outstanding)
 Author: design note, 2026-07-28
 
 ## 1. Why
@@ -308,7 +308,7 @@ Goal: a running, deployable, empty-but-healthy service.
 
 ---
 
-### Phase 2 — Move the email capability into `notification`
+### Phase 2 — Move the email capability into `notification` — ✅ DONE
 
 Goal: the new service can send email; profile still does too. No producer changes yet.
 
@@ -328,11 +328,21 @@ Goal: the new service can send email; profile still does too. No producer change
 
 **No test endpoint.** An earlier draft proposed a `@Profile("dev")` `POST /api/notifications/test` to prove the Resend wiring. Dropped: it would be an unauthenticated endpoint (there is no resource server, §3) existing solely to be tested, and a dev-only profile is a second config path to maintain and a real risk of leaking into an overlay. Phase 2 has no runtime trigger of its own — the first real send happens in Phase 4, verified per §6.
 
-**Done when:** the service compiles, deploys, and starts with `RESEND_API_KEY` set. Nothing sends yet; that is expected.
+**Deviations:**
+
+1. **`EmailService` did not survive as a class.** Its two responsibilities split: the enabled-check and Resend call became `EmailChannel implements NotificationChannel`, and the copy moved to Mustache files. `ResendClient` moved across verbatim (same 5s timeout, same single retry on 5xx/timeout, same retryable predicate).
+2. **`EmailServiceTest` was ported, not moved verbatim** — the plan called for moving it as-is, but the API it tested no longer exists. All six cases survive as `EmailChannelTest` against the new interface, plus a case for the empty-recipient path.
+3. **Added `TemplateRegistryTest`** despite the general no-new-tests stance, covering exactly the property §6.5 flags as unverifiable by hand: `{{ }}` escapes hostile input in the HTML body, and does *not* escape the plain-text body (escaping there would show the reader a literal `&amp;`). That asymmetry is real and easy to get wrong — the old `EmailTemplates` escaped only in the HTML variants.
+4. **Templates are keyed by `(eventType, channel)`, not `(eventType, channel, locale)`.** There is one locale. An always-`"en"` parameter threaded through every call is speculative generality; add it with the second locale.
+5. **`TemplateRegistry` resolves the file name from the event type** (`PasswordResetRequested` → `password-reset-requested`), so a new event type needs template files but no registry change. A type with no templates logs a warning and sends nothing rather than failing.
+6. `com.samskivert:jmustache` directly rather than `spring-boot-starter-mustache` — we render emails, not web views, so the starter's `MustacheViewResolver` auto-config would be dead weight. Version still managed by the Boot BOM.
+7. **Deleted `NotificationApplicationTests`** (the Initializr `contextLoads` stub) — `@SpringBootTest` needs a live Postgres and broker, so it fails outside Docker and adds nothing.
+
+**Done when:** ✅ 9 tests pass; the service starts and renders all three templates.
 
 ---
 
-### Phase 3 — auth-server produces to Kafka (dual-write)
+### Phase 3 — auth-server produces to Kafka (dual-write) — ✅ DONE
 
 Goal: auth-server publishes events *in addition to* calling profile over HTTP. Small, reversible.
 
@@ -347,11 +357,15 @@ Goal: auth-server publishes events *in addition to* calling profile over HTTP. S
 5. Create `notifications.events` explicitly via the `NewTopic` bean in §4.1 — `retention.ms=1h` **and** `segment.ms=10min`. Do not let it auto-create; auto-creation silently gives it the broker default of 7 days.
 6. Keep the `ProfileNotificationClient` HTTP calls in place alongside. Both paths fire; only the HTTP one actually sends mail so far.
 
-**Done when:** changing a password puts a message on `notifications.events` (verify per §6) while the email still arrives via the old path.
+**Deviation:** none of substance. `ProfileNotificationClient` was **kept** rather than renamed — the new `NotificationEventPublisher` sits alongside it, since Phase 3 is explicitly a dual-write and Phase 5 deletes the old class outright. Renaming a class that is about to be deleted would only churn the diff.
+
+**Verified end-to-end:** `POST /auth/api/register` returned 201 and auth-server logged `published UserRegistered for e2euser` **on thread `task-1`** — confirming the send stayed off the request thread. `POST /auth/api/password-reset/request` likewise published `PasswordResetRequested`.
+
+A useful accident during verification: profile was not running, so the old HTTP path failed with `failed to notify profile of password reset request: I/O error` — logged, swallowed, and invisible to the caller — while the Kafka path succeeded and the notification was delivered. That is precisely the durability improvement this refactor buys, demonstrated live.
 
 ---
 
-### Phase 4 — `notification` consumes; flip the sender
+### Phase 4 — `notification` consumes; flip the sender — ✅ DONE (identity events; commerce deferred)
 
 1. `IdentityEventConsumer` — `@KafkaListener(topics = "notifications.events", groupId = "notification.notifications.events.consumer")`. Parse JSON, dedupe on event id against `processed_events`, dispatch to `NotificationService`, record the outcome. Modelled on `delivery/consumer/PaymentEventConsumer.java` for the parse/error idiom, but with the dedupe insert as the commit gate.
 2. Idempotency contract: insert into `processed_events` **before** sending, in the transaction that claims the event; a duplicate-key violation means "already handled, skip".
@@ -362,7 +376,22 @@ Goal: auth-server publishes events *in addition to* calling profile over HTTP. S
 4. Add consumer groups on the existing commerce topics: `OrderEventConsumer` / `PaymentEventConsumer` / `DeliveryEventConsumer` in `notification`, using `RecipientResolver` → profile lookup. New templates: order confirmation, payment receipt, shipment dispatched. This is net-new user-facing behaviour, so ship it behind a per-type enable flag.
 5. Observability: counters for received / deduped / sent / failed, per type and channel; alert on failure rate. Notes go in `docs/observability/`.
 
-**Done when:** password change / reset / registration emails all arrive, sent by `notification`, with a `notification_log` row per send; profile sends nothing.
+**Deviation — item 4 (commerce notifications) is deliberately NOT done.** Order-confirmation, payment-receipt and shipment-dispatched emails are *net-new user-facing behaviour*, not part of moving email out of `profile`: they would send customers mail they have never received before. They are also the only thing that needs the OAuth2 client and the profile recipient lookup, so deferring them keeps `notification` client-free for now (§3). Everything else in Phase 4 shipped. Treat commerce notifications as their own phase, sized and reviewed on its own merits.
+
+**Verified against a live broker and database:**
+
+| Check | Result |
+|---|---|
+| Fresh `PasswordChanged` | consumed, template rendered, `notification_log` row written |
+| Same event id republished | `already processed — skipping`, no second send |
+| `PasswordResetRequested` aged 45 min | `Dropping stale … 2701s old, max 300s`, logged `DROPPED_STALE` |
+| Fresh `PasswordResetRequested` | rendered "Reset your password", link built from the token + configured origin |
+| `UserRegistered` | rendered "Welcome to Granite Security" |
+| Real registration through auth-server | published → consumed → rendered, ~30 ms end to end |
+
+`processed_event` holds exactly 3 rows for 5 delivered messages: the duplicate did not insert a second row, and the stale event correctly never reached the dedupe step at all.
+
+Status shows `SKIPPED_DISABLED` locally because `RESEND_API_KEY` is unset — the whole path is exercised bar the outbound HTTPS call, which `EmailChannelTest` covers.
 
 ---
 

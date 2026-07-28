@@ -25,6 +25,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-liquibase")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation("org.springframework:spring-jdbc")
+    // JMustache directly rather than spring-boot-starter-mustache: we render email
+    // bodies, not web views, so the starter's MustacheViewResolver auto-config would
+    // be dead weight. Version is still managed by the Spring Boot BOM.
+    implementation("com.samskivert:jmustache")
     compileOnly("org.projectlombok:lombok")
 //    developmentOnly("org.springframework.boot:spring-boot-docker-compose")
     runtimeOnly("org.postgresql:postgresql")

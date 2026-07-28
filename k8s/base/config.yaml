@@ -54,6 +54,7 @@ data:
   NOTIFICATION_JDBC_URL: "jdbc:postgresql://postgres-notification:5432/notificationdb"
   # Non-secret — the actual key is resend-api-key in granite-secrets.
   RESEND_FROM: "Granite Security <no-reply@notify.granite-security.org>"
+  FRONTEND_ORIGIN: "https://granite-security.org"
 
   # ── Delivery ─────────────────────────────────────────
   DELIVERY_PORT: "8063"

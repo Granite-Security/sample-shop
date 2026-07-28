@@ -34,8 +34,16 @@ spring:
       properties:
         isolation.level: read_committed
 
-# Email sending is disabled while resend.api-key is blank — EmailService logs and
-# skips. Phase 2 moves the real key here from the profile deployment.
+notification:
+  send:
+    # The Phase 4 flip: set false to stop this service sending without redeploying
+    # auth-server. Independent of resend.api-key, which disables the email channel
+    # specifically.
+    enabled: ${NOTIFICATION_SEND_ENABLED:true}
+  # Used to build the password-reset link from the token carried on the event, so
+  # auth-server never needs to know the frontend URL shape.
+  frontend-origin: ${FRONTEND_ORIGIN:http://localhost:5173}
+
 resend:
   api-key: ${RESEND_API_KEY:}
   from: ${RESEND_FROM:Granite Security <no-reply@notify.granite-security.org>}

@@ -1,5 +1,6 @@
 package org.granitesecurity.authserver.user;
 
+import org.granitesecurity.authserver.client.NotificationEventPublisher;
 import org.granitesecurity.authserver.client.ProfileNotificationClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,13 +31,17 @@ class PasswordChangeServiceTest {
     @Mock
     private ProfileNotificationClient profileNotificationClient;
 
+    @Mock
+    private NotificationEventPublisher notificationEventPublisher;
+
     private final PasswordEncoder passwordEncoder = PasswordEncoderFactories.createDelegatingPasswordEncoder();
 
     private PasswordChangeService service;
 
     @BeforeEach
     void setUp() {
-        service = new PasswordChangeService(userRepository, passwordEncoder, profileNotificationClient);
+        service = new PasswordChangeService(userRepository, passwordEncoder, profileNotificationClient,
+                notificationEventPublisher);
         // changePassword registers an afterCommit synchronization for the
         // notify hop; without an active synchronization scope that call
         // throws, so simulate one the way a real @Transactional method would.

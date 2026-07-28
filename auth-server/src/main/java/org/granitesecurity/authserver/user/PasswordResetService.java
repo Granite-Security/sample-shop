@@ -1,5 +1,6 @@
 package org.granitesecurity.authserver.user;
 
+import org.granitesecurity.authserver.client.NotificationEventPublisher;
 import org.granitesecurity.authserver.client.ProfileNotificationClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -26,6 +27,7 @@ public class PasswordResetService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final ProfileNotificationClient profileNotificationClient;
+    private final NotificationEventPublisher notificationEventPublisher;
     private final String frontendOrigin;
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -33,6 +35,7 @@ public class PasswordResetService {
                                  PasswordResetTokenRepository passwordResetTokenRepository,
                                  PasswordEncoder passwordEncoder,
                                  ProfileNotificationClient profileNotificationClient,
+                                 NotificationEventPublisher notificationEventPublisher,
                                  @Value("${app.oauth2.spa-client-shop.post-logout-redirect-uri:"
                                          + "${app.oauth2.spa-client.post-logout-redirect-uri:http://localhost:5173}}")
                                  String frontendOrigin) {
@@ -40,6 +43,7 @@ public class PasswordResetService {
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.profileNotificationClient = profileNotificationClient;
+        this.notificationEventPublisher = notificationEventPublisher;
         this.frontendOrigin = frontendOrigin;
     }
 
@@ -62,13 +66,18 @@ public class PasswordResetService {
 
             String username = user.getUsername();
             String resetLink = frontendOrigin + "/reset-password/confirm?token=" + rawToken;
+            java.time.Instant expiresAt = token.getExpiresAt().toInstant();
 
             // Only email the link once the token row has actually committed —
             // same reasoning as PasswordChangeService's afterCommit notify.
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
+                    // Dual-write during the migration. Note the event carries the raw
+                    // token rather than the rendered link — the notification service
+                    // builds the URL from its own frontend origin (D3).
                     profileNotificationClient.notifyPasswordResetRequested(username, email, resetLink);
+                    notificationEventPublisher.publishPasswordResetRequested(username, email, rawToken, expiresAt);
                 }
             });
         });
@@ -98,6 +107,7 @@ public class PasswordResetService {
             @Override
             public void afterCommit() {
                 profileNotificationClient.notifyPasswordChanged(username, email);
+                notificationEventPublisher.publishPasswordChanged(username, email);
             }
         });
     }

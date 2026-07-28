@@ -59,8 +59,23 @@ spec:
                 configMapKeyRef:
                   name: granite-config
                   key: KAFKA_BOOTSTRAP_SERVERS
-            # RESEND_API_KEY is intentionally absent until Phase 2 — while it is
-            # unset EmailService logs and skips, so this service sends nothing.
+            - name: RESEND_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: resend-api-key
+            - name: RESEND_FROM
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: RESEND_FROM
+            # Used to build the password-reset link from the token on the event,
+            # so auth-server never needs to know the frontend URL shape (D3).
+            - name: FRONTEND_ORIGIN
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: FRONTEND_ORIGIN
 ---
 apiVersion: v1
 kind: Service
