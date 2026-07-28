@@ -59,14 +59,16 @@ public class AdminUserService {
     /**
      * The admin list, built from auth-server users and enriched with profile
      * data — never from profiles, which are a different set (§2.1, D3).
+     *
+     * <p>Only the profile side is buffered (it is the lookup table of the
+     * join); auth users stream through it and each view is emitted as its
+     * user arrives.
      */
     public Flux<AdminUserView> listUsers() {
-        return identityAdminClient.listUsers()
-                .collectList()
-                .flatMapMany(authUsers -> userProfileRepository.findAll()
-                        .collectMap(UserProfile::getUsername, Function.identity())
-                        .flatMapMany(profiles -> Flux.fromIterable(authUsers)
-                                .map(user -> toView(user, profiles))));
+        return userProfileRepository.findAll()
+                .collectMap(UserProfile::getUsername, Function.identity())
+                .flatMapMany(profiles -> identityAdminClient.listUsers()
+                        .map(user -> toView(user, profiles)));
     }
 
     private AdminUserView toView(AuthUser user, Map<String, UserProfile> profiles) {

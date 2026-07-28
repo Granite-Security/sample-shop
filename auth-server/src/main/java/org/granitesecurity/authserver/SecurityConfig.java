@@ -254,7 +254,9 @@ public class SecurityConfig {
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
                 .scope(StandardClaimNames.EMAIL)
-                .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
+                // First-party client: no consent screen, the requested scopes
+                // (openid/profile/email) are granted on login.
+                .clientSettings(ClientSettings.builder().requireAuthorizationConsent(false).build())
                 .build();
 
         // Two SPA clients, not one client with two redirect URIs: each domain's
@@ -272,7 +274,7 @@ public class SecurityConfig {
                 .scope(OidcScopes.PROFILE)
                 .scope(StandardClaimNames.EMAIL)
                 .clientSettings(ClientSettings.builder()
-                        .requireAuthorizationConsent(true)
+                        .requireAuthorizationConsent(false)
                         .requireProofKey(true)
                         .build())
                 .build();
@@ -288,7 +290,7 @@ public class SecurityConfig {
                 .scope(OidcScopes.PROFILE)
                 .scope(StandardClaimNames.EMAIL)
                 .clientSettings(ClientSettings.builder()
-                        .requireAuthorizationConsent(true)
+                        .requireAuthorizationConsent(false)
                         .requireProofKey(true)
                         .build())
                 .build();
