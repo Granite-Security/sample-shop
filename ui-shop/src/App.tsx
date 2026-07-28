@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router'
 import Layout from './components/Layout'
 import RequireAuth from './components/RequireAuth'
+import AccountLayout from './components/AccountLayout'
 import Home from './pages/Home'
 import Catalog from './pages/Catalog'
 import ProductDetail from './pages/ProductDetail'
@@ -34,14 +35,16 @@ export default function App() {
         <Route path="catalog/:id" element={<ProductDetail />} />
         <Route path="cart" element={<Cart />} />
         <Route path="checkout" element={<Checkout />} />
-        <Route path="orders" element={<Orders />} />
-        <Route path="orders/:id" element={<OrderDetail />} />
         <Route path="orders/:id/pay" element={<RetryPayment />} />
         <Route element={<RequireAuth />}>
-          <Route path="profile" element={<Profile />} />
-          <Route path="profile/password" element={<Password />} />
-          <Route path="profile/files" element={<Files />} />
-          <Route path="addresses" element={<Addresses />} />
+          <Route element={<AccountLayout />}>
+            <Route path="profile" element={<Profile />} />
+            <Route path="profile/password" element={<Password />} />
+            <Route path="profile/files" element={<Files />} />
+            <Route path="addresses" element={<Addresses />} />
+            <Route path="orders" element={<Orders />} />
+            <Route path="orders/:id" element={<OrderDetail />} />
+          </Route>
         </Route>
         <Route path="admin" element={<Admin />} />
         <Route path="admin/products" element={<ProductsManagement />} />

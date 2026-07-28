@@ -111,6 +111,25 @@ h3 { font-size: 1.1rem; }
 .category-sidebar button:hover { background: var(--bg-secondary); }
 .category-sidebar button.active { background: var(--primary); color: #fff; }
 
+/* Account */
+.account-page { display: flex; gap: 1.5rem; }
+.account-nav { width: 200px; flex-shrink: 0; }
+.account-nav h3 { margin-bottom: 0.75rem; }
+.account-nav ul { list-style: none; }
+.account-nav li { margin-bottom: 0.25rem; }
+.account-nav a {
+  display: block;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  text-decoration: none;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.account-nav a:hover { background: var(--bg-secondary); }
+.account-nav a.active { background: var(--primary); color: #fff; }
+.account-content { flex: 1; min-width: 0; }
+
 .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; flex: 1; }
 
 /* Product Card */

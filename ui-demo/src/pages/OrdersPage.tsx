@@ -41,53 +41,51 @@ export function OrdersPage() {
   }, []);
 
   return (
-    <div className="bg-ivory pt-28 lg:pt-32">
-      <div className="mx-auto max-w-3xl px-5 pb-24 lg:px-8">
-        <p className="text-xs uppercase tracking-[0.3em] text-terracotta">Your Account</p>
-        <h1 className="mt-3 font-display text-[36px] leading-tight text-cocoa lg:text-[48px]">My Orders</h1>
+    <div>
+      <p className="text-xs uppercase tracking-[0.3em] text-terracotta">Your Account</p>
+      <h1 className="mt-3 font-display text-[36px] leading-tight text-cocoa lg:text-[48px]">My Orders</h1>
 
-        <section aria-label="Orders" className="mt-10">
-          {loading ? (
-            <p className="text-sm text-cocoa/50">Loading…</p>
-          ) : error ? (
-            <p className="border-l-2 border-terracotta bg-terracotta/10 px-4 py-3 text-sm text-terracotta">{error}</p>
-          ) : orders.length === 0 ? (
-            <>
-              <p className="text-sm text-cocoa/50">No orders yet.</p>
-              <Link
-                to="/#bestsellers"
-                className="mt-6 inline-block border border-cocoa px-8 py-3 text-xs uppercase tracking-[0.18em] text-cocoa transition-colors duration-300 hover:bg-cocoa hover:text-ivory"
-              >
-                Browse the Collection
-              </Link>
-            </>
-          ) : (
-            <ul className="divide-y divide-cocoa/10 border-y border-cocoa/10">
-              {orders.map((order) => (
-                <li key={order.id} className="flex items-center justify-between gap-4 py-4">
-                  <div>
-                    <p className="text-cocoa">
-                      Order <span className="font-display">#{order.id}</span>
-                    </p>
-                    <p className="mt-1 text-sm text-cocoa/50">
-                      {new Date(order.createdAt).toLocaleDateString()} · {formatPrice(order.total)}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-4">
-                    <StatusBadge status={order.status} />
-                    <Link
-                      to={`/profile/orders/${order.id}`}
-                      className="text-xs uppercase tracking-[0.14em] text-cocoa underline decoration-gold underline-offset-4 hover:text-terracotta"
-                    >
-                      View
-                    </Link>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
+      <section aria-label="Orders" className="mt-10">
+        {loading ? (
+          <p className="text-sm text-cocoa/50">Loading…</p>
+        ) : error ? (
+          <p className="border-l-2 border-terracotta bg-terracotta/10 px-4 py-3 text-sm text-terracotta">{error}</p>
+        ) : orders.length === 0 ? (
+          <>
+            <p className="text-sm text-cocoa/50">No orders yet.</p>
+            <Link
+              to="/#bestsellers"
+              className="mt-6 inline-block border border-cocoa px-8 py-3 text-xs uppercase tracking-[0.18em] text-cocoa transition-colors duration-300 hover:bg-cocoa hover:text-ivory"
+            >
+              Browse the Collection
+            </Link>
+          </>
+        ) : (
+          <ul className="divide-y divide-cocoa/10 border-y border-cocoa/10">
+            {orders.map((order) => (
+              <li key={order.id} className="flex items-center justify-between gap-4 py-4">
+                <div>
+                  <p className="text-cocoa">
+                    Order <span className="font-display">#{order.id}</span>
+                  </p>
+                  <p className="mt-1 text-sm text-cocoa/50">
+                    {new Date(order.createdAt).toLocaleDateString()} · {formatPrice(order.total)}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-4">
+                  <StatusBadge status={order.status} />
+                  <Link
+                    to={`/profile/orders/${order.id}`}
+                    className="text-xs uppercase tracking-[0.14em] text-cocoa underline decoration-gold underline-offset-4 hover:text-terracotta"
+                  >
+                    View
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

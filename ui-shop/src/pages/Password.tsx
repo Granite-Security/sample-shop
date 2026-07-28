@@ -50,7 +50,7 @@ export default function Password() {
   };
 
   return (
-    <div className="page" style={{ maxWidth: 600 }}>
+    <div>
       <h1>Password</h1>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 320, marginTop: 16 }}>
         <input

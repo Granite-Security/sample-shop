@@ -2,19 +2,13 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api';
 import type { DeliveryResponse, OrderResponse } from '../types';
-import { useAuth } from '../auth';
 
 export default function Orders() {
   const [orders, setOrders] = useState<OrderResponse[]>([]);
   const [deliveryMap, setDeliveryMap] = useState<Record<number, DeliveryResponse>>({});
   const [loading, setLoading] = useState(true);
-  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      setLoading(false);
-      return;
-    }
     Promise.all([
       api.orders.getOrders().then(r => r.items),
       api.delivery.getDeliveries().then(ds => {
@@ -26,22 +20,12 @@ export default function Orders() {
       setOrders(o);
       setDeliveryMap(dm);
     }).finally(() => setLoading(false));
-  }, [isAuthenticated]);
+  }, []);
 
-  if (!isAuthenticated) {
-    return (
-      <div className="page">
-        <h1>My Orders</h1>
-        <p>Please log in to view your orders.</p>
-        <Link to="/login" className="btn">Login</Link>
-      </div>
-    );
-  }
-
-  if (loading) return <div className="page"><p>Loading...</p></div>;
+  if (loading) return <p>Loading...</p>;
 
   return (
-    <div className="page orders-page">
+    <div className="orders-page">
       <h1>My Orders</h1>
       {orders.length === 0 ? (
         <p>No orders yet.</p>

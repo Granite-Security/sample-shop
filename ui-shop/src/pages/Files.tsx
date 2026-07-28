@@ -74,7 +74,7 @@ export default function Files() {
   };
 
   return (
-    <div className="page" style={{ maxWidth: 600 }}>
+    <div>
       <h1>Files</h1>
       <p style={{ fontSize: 14, color: 'var(--muted, #666)' }}>
         Uploaded files are public — anyone with the link can open them. Don't upload sensitive documents here.

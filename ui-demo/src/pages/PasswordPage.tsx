@@ -47,57 +47,55 @@ export function PasswordPage() {
   };
 
   return (
-    <div className="bg-ivory pt-28 lg:pt-32">
-      <div className="mx-auto max-w-3xl px-5 pb-24 lg:px-8">
-        <p className="text-xs uppercase tracking-[0.3em] text-terracotta">Your Account</p>
-        <h1 className="mt-3 font-display text-[36px] leading-tight text-cocoa lg:text-[48px]">Password</h1>
+    <div>
+      <p className="text-xs uppercase tracking-[0.3em] text-terracotta">Your Account</p>
+      <h1 className="mt-3 font-display text-[36px] leading-tight text-cocoa lg:text-[48px]">Password</h1>
 
-        <section aria-label="Password" className="mt-10">
-          {message && (
-            <p
-              role="status"
-              className={`mb-4 border-l-2 px-4 py-3 text-sm ${
-                message.kind === 'ok' ? 'border-sage bg-sage/10 text-cocoa' : 'border-terracotta bg-terracotta/10 text-terracotta'
-              }`}
-            >
-              {message.text}
-            </p>
-          )}
-          <form onSubmit={handleChangePassword} className="flex max-w-sm flex-col gap-4">
-            <input
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="Current password"
-              autoComplete="current-password"
-              className={inputStyle}
-            />
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="New password"
-              autoComplete="new-password"
-              className={inputStyle}
-            />
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Confirm new password"
-              autoComplete="new-password"
-              className={inputStyle}
-            />
-            <button
-              type="submit"
-              disabled={busy}
-              className="bg-cocoa px-8 py-3.5 text-xs uppercase tracking-[0.18em] text-ivory transition-colors duration-300 hover:bg-espresso disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {busy ? 'Changing…' : 'Change Password'}
-            </button>
-          </form>
-        </section>
-      </div>
+      <section aria-label="Password" className="mt-10">
+        {message && (
+          <p
+            role="status"
+            className={`mb-4 border-l-2 px-4 py-3 text-sm ${
+              message.kind === 'ok' ? 'border-sage bg-sage/10 text-cocoa' : 'border-terracotta bg-terracotta/10 text-terracotta'
+            }`}
+          >
+            {message.text}
+          </p>
+        )}
+        <form onSubmit={handleChangePassword} className="flex max-w-sm flex-col gap-4">
+          <input
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            placeholder="Current password"
+            autoComplete="current-password"
+            className={inputStyle}
+          />
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="New password"
+            autoComplete="new-password"
+            className={inputStyle}
+          />
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Confirm new password"
+            autoComplete="new-password"
+            className={inputStyle}
+          />
+          <button
+            type="submit"
+            disabled={busy}
+            className="bg-cocoa px-8 py-3.5 text-xs uppercase tracking-[0.18em] text-ivory transition-colors duration-300 hover:bg-espresso disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {busy ? 'Changing…' : 'Change Password'}
+          </button>
+        </form>
+      </section>
     </div>
   );
 }
