@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { api } from '../api';
 import { ApiError } from '../api/client';
 
@@ -80,6 +81,9 @@ export default function Password() {
         {passwordError && <p style={{ color: 'red' }}>{passwordError}</p>}
         {passwordSuccess && <p style={{ color: 'green' }}>{passwordSuccess}</p>}
       </div>
+      <p style={{ marginTop: 16 }}>
+        <Link to="/reset-password">Forgot your password?</Link>
+      </p>
     </div>
   );
 }
