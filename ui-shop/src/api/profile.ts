@@ -4,6 +4,8 @@ import type {
   AddressRequest,
   AddressResponse,
   AdminUserProfile,
+  AdminUserView,
+  DeleteUserResult,
   DuplicateFileCheckResponse,
   ProfileResponse,
   UpdateProfileRequest,
@@ -31,6 +33,25 @@ async function sha256Hex(file: File): Promise<string> {
 }
 
 export const profileApi = {
+  // The admin users list. Note this is NOT getProfiles() below — profiles are
+  // a different set from users (docs/users/blocking-users.md §2.1, D3).
+  getAdminUsers: () =>
+    request<AdminUserView[]>('/api/profiles/admin/users'),
+
+  blockUser: (username: string) =>
+    request<AdminUserView>(`/api/profiles/admin/users/${encodeURIComponent(username)}/block`,
+      { method: 'POST' }),
+
+  unblockUser: (username: string) =>
+    request<AdminUserView>(`/api/profiles/admin/users/${encodeURIComponent(username)}/unblock`,
+      { method: 'POST' }),
+
+  // Returns an outcome rather than throwing when the user cannot be deleted:
+  // BLOCKED_INSTEAD is a success, and the caller has to say so.
+  deleteUser: (username: string) =>
+    request<DeleteUserResult>(`/api/profiles/admin/users/${encodeURIComponent(username)}`,
+      { method: 'DELETE' }),
+
   getProfiles: () =>
     request<AdminUserProfile[]>('/api/profiles'),
 

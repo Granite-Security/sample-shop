@@ -94,6 +94,32 @@ spec:
                   key: AUTH_SERVER_TOKEN_URI
             - name: INTERNAL_CLIENT_ID
               value: "internal-service"
+            - name: MICROSERVICES_SHOP_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: MICROSERVICES_SHOP_URI
+            # Read-only, for the orphan sweep report.
+            - name: MICROSERVICES_PAYMENT_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: MICROSERVICES_PAYMENT_URI
+            - name: MICROSERVICES_DELIVERY_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: MICROSERVICES_DELIVERY_URI
+            # profile is the only holder of the identity-admin credentials —
+            # a SCOPE_internal token cannot administer identities
+            # (docs/users/blocking-users.md §3.1).
+            - name: IDENTITY_ADMIN_BASE_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: IDENTITY_ADMIN_BASE_URI
+            - name: IDENTITY_ADMIN_CLIENT_ID
+              value: "identity-admin"
             # profile sends no email — the notification service owns that entirely.
             # Consumes UserRegistered off identity.events to provision profiles.
             - name: KAFKA_BOOTSTRAP_SERVERS

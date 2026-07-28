@@ -221,3 +221,33 @@ export interface TrackingDetailResponse {
   estimatedDelivery: string | null;
   events: TrackingEvent[];
 }
+
+// ── Admin user management ───────────────────────────────────────────
+// Built from auth-server users, not profiles: the two are not the same
+// set — a profile row can belong to a Google subject or a service
+// account, and a real user may have no profile row at all.
+// See docs/users/blocking-users.md §2.1.
+export interface AdminUserView {
+  username: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  displayName: string | null;
+  enabled: boolean;
+  // LOCAL — form login. LINKED — registered locally, later signed in with
+  // Google; their password still works. GOOGLE — no password at all.
+  signInState: 'LOCAL' | 'LINKED' | 'GOOGLE';
+  roles: string[];
+  hasProfile: boolean;
+  blockedAt: string | null;
+  blockedBy: string | null;
+  profileCreatedAt: string | null;
+}
+
+export interface DeleteUserResult {
+  // BLOCKED_INSTEAD is a successful outcome, not a failure: a user with
+  // paid orders can only be blocked (docs/users/blocking-users.md D1).
+  outcome: 'DONE' | 'BLOCKED_INSTEAD';
+  paidOrderCount: number;
+  deletedOrderCount: number;
+}

@@ -19,6 +19,12 @@ public class DeliveryHandler {
         this.deliveryService = deliveryService;
     }
 
+    // Orphan sweep (docs/users/blocking-users.md §8 Phase 6), read-only.
+    public Mono<ServerResponse> getOrderIds(ServerRequest request) {
+        return deliveryService.distinctOrderIds()
+                .flatMap(orderIds -> ServerResponse.ok().bodyValue(orderIds));
+    }
+
     public Mono<ServerResponse> list(ServerRequest request) {
         Optional<String> status = request.queryParam("status");
         Optional<String> paymentStatus = request.queryParam("paymentStatus");

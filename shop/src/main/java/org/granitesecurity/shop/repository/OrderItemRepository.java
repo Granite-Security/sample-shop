@@ -6,4 +6,6 @@ import reactor.core.publisher.Flux;
 
 public interface OrderItemRepository extends ReactiveCrudRepository<OrderItem, Long> {
     Flux<OrderItem> findByOrderId(Long orderId);
+
+    reactor.core.publisher.Mono<Long> deleteByOrderIdIn(java.util.Collection<Long> orderIds);
 }

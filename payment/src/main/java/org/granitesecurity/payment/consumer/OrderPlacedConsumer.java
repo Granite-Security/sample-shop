@@ -8,7 +8,9 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Component
 public class OrderPlacedConsumer {
@@ -26,6 +28,19 @@ public class OrderPlacedConsumer {
     void onOrderPlaced(String message) {
         try {
             Map<String, Object> data = MAPPER.readValue(message, Map.class);
+            // Carries "orderIds" (plural) and no "orderId" — so it must be
+            // handled before the orderId lookup below, which would otherwise
+            // reject it as a malformed OrderPlaced.
+            if ("OrdersPurged".equals(data.get("eventType"))) {
+                List<Long> orderIds = parseLongList(data.get("orderIds"));
+                if (orderIds.isEmpty()) {
+                    log.warn("OrdersPurged event with no orderIds: {}", message);
+                    return;
+                }
+                log.info("Processing OrdersPurged event for {} order(s)", orderIds.size());
+                paymentService.purgeOrders(orderIds).block();
+                return;
+            }
             if ("RefundRequested".equals(data.get("eventType"))) {
                 Long refundOrderId = parseLong(data.get("orderId"));
                 if (refundOrderId == null) {
@@ -47,6 +62,13 @@ public class OrderPlacedConsumer {
         } catch (Exception e) {
             log.error("Failed to parse OrderPlaced event: {}", message, e);
         }
+    }
+
+    private static List<Long> parseLongList(Object value) {
+        if (!(value instanceof List<?> list)) {
+            return List.of();
+        }
+        return list.stream().map(OrderPlacedConsumer::parseLong).filter(Objects::nonNull).toList();
     }
 
     private static Long parseLong(Object value) {

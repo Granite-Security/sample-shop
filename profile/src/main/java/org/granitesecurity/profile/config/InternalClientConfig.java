@@ -40,4 +40,49 @@ public class InternalClientConfig {
                 .filter(oauth2)
                 .build();
     }
+
+    @Bean
+    public WebClient shopWebClient(ReactiveOAuth2AuthorizedClientManager authorizedClientManager,
+                                   @Value("${microservices.shop.uri}") String shopUri) {
+        var oauth2 = new ServerOAuth2AuthorizedClientExchangeFilterFunction(authorizedClientManager);
+        oauth2.setDefaultClientRegistrationId("shop-client");
+        return WebClient.builder()
+                .baseUrl(shopUri)
+                .filter(oauth2)
+                .build();
+    }
+
+    @Bean
+    public WebClient paymentWebClient(ReactiveOAuth2AuthorizedClientManager authorizedClientManager,
+                                      @Value("${microservices.payment.uri}") String paymentUri) {
+        var oauth2 = new ServerOAuth2AuthorizedClientExchangeFilterFunction(authorizedClientManager);
+        oauth2.setDefaultClientRegistrationId("shop-client");
+        return WebClient.builder().baseUrl(paymentUri).filter(oauth2).build();
+    }
+
+    @Bean
+    public WebClient deliveryWebClient(ReactiveOAuth2AuthorizedClientManager authorizedClientManager,
+                                       @Value("${microservices.delivery.uri}") String deliveryUri) {
+        var oauth2 = new ServerOAuth2AuthorizedClientExchangeFilterFunction(authorizedClientManager);
+        oauth2.setDefaultClientRegistrationId("shop-client");
+        return WebClient.builder().baseUrl(deliveryUri).filter(oauth2).build();
+    }
+
+    /**
+     * A separate registration from the two above on purpose: this one carries
+     * the identity-admin credentials, which only profile holds, and it is the
+     * only way to reach auth-server's user-administration API. Reusing
+     * internal-service here would put the identity store inside the blast
+     * radius of any internal-service leak (docs/users/blocking-users.md §3.1).
+     */
+    @Bean
+    public WebClient identityAdminWebClient(ReactiveOAuth2AuthorizedClientManager authorizedClientManager,
+                                            @Value("${microservices.auth-server.uri}") String authServerUri) {
+        var oauth2 = new ServerOAuth2AuthorizedClientExchangeFilterFunction(authorizedClientManager);
+        oauth2.setDefaultClientRegistrationId("identity-admin-client");
+        return WebClient.builder()
+                .baseUrl(authServerUri)
+                .filter(oauth2)
+                .build();
+    }
 }

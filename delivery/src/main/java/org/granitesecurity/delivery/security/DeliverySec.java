@@ -27,6 +27,9 @@ public class DeliverySec {
         return http
                 .securityMatcher(new PathPatternParserServerWebExchangeMatcher("/api/**"))
                 .authorizeExchange(exchanges -> exchanges
+                        // Service-to-service only, mirroring ProfileSec's
+                        // "/api/profiles/internal/**" rule.
+                        .pathMatchers("/api/delivery/internal/**").hasAuthority("SCOPE_internal")
                         .pathMatchers(HttpMethod.PUT, "/api/delivery/{orderId}/status").hasAnyRole("ADMIN", "MANAGER")
                         .anyExchange().authenticated()
                 )

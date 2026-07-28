@@ -54,6 +54,10 @@ public class PaymentSec {
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .cors(Customizer.withDefaults())
                 .authorizeExchange(exchange -> exchange
+                        // Must precede the /intent/** permitAll below only in
+                        // spirit — different path — but keep it first so the
+                        // internal surface is visibly the guarded one.
+                        .pathMatchers("/api/payments/internal/**").hasAuthority("SCOPE_internal")
                         .pathMatchers("/api/payments/webhook").permitAll()
                         .pathMatchers("/api/payments/intent/**").permitAll()
                         .pathMatchers("/actuator/health", "/actuator/health/**").permitAll()

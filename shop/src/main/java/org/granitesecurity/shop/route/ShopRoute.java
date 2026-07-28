@@ -10,6 +10,7 @@ import org.granitesecurity.shop.dto.PlaceOrderRequest;
 import org.granitesecurity.shop.handler.CatalogHandler;
 import org.granitesecurity.shop.handler.GreetingsHandler;
 import org.granitesecurity.shop.handler.OrderHandler;
+import org.granitesecurity.shop.handler.UserOrderHandler;
 import org.springdoc.core.annotations.RouterOperation;
 import org.springdoc.core.annotations.RouterOperations;
 import org.springframework.context.annotation.Bean;
@@ -129,11 +130,18 @@ public class ShopRoute {
             beanClass = OrderHandler.class,
             beanMethod = "refundOrder"
         ),
+        @RouterOperation(
+            path = "/api/shop/users/{username}/orders",
+            method = RequestMethod.GET,
+            beanClass = UserOrderHandler.class,
+            beanMethod = "getOrdersByUsername"
+        ),
     })
     public RouterFunction<ServerResponse> shopRoutes(
             GreetingsHandler greetingsHandler,
             CatalogHandler catalogHandler,
-            OrderHandler orderHandler) {
+            OrderHandler orderHandler,
+            UserOrderHandler userOrderHandler) {
         return RouterFunctions.route()
                 .GET("/api/shop/greetings", greetingsHandler::respondWithGreeting)
 
@@ -149,6 +157,16 @@ public class ShopRoute {
                 .GET("/api/shop/orders/all", orderHandler::getAllOrders)
                 .GET("/api/shop/orders/{id}", orderHandler::getOrder)
                 .POST("/api/shop/orders/{id}/refund", orderHandler::refundOrder)
+
+                // Orders by username — a separate root, because "{id}" under
+                // /orders is an order id and a "{username}" segment there would
+                // shadow it (same trap as "/orders/all" above)
+                .GET("/api/shop/users/{username}/orders", userOrderHandler::getOrdersByUsername)
+                .GET("/api/shop/internal/users/{username}/purge-eligibility",
+                        userOrderHandler::getPurgeEligibility)
+                .DELETE("/api/shop/internal/users/{username}/orders", userOrderHandler::purgeOrders)
+                .GET("/api/shop/internal/orders/owners", userOrderHandler::listOrderOwners)
+                .POST("/api/shop/internal/orders/unknown", userOrderHandler::findUnknownOrderIds)
 
                 // Admin — products
                 .POST("/api/shop/products", catalogHandler::createProduct)

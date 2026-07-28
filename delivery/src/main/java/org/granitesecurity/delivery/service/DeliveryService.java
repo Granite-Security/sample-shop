@@ -36,6 +36,37 @@ public class DeliveryService {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * Drops this service's rows for orders shop has purged. Keyed by order_id —
+     * delivery has no username to match on (docs/users/blocking-users.md §6).
+     *
+     * <p>delivery_tracking keys on delivery_id, not order_id, so the delivery
+     * ids have to be resolved first; deleting the deliveries alone would leave
+     * the tracking rows orphaned.
+     *
+     * <p>Idempotent: deleting rows that are already gone is a no-op, so a
+     * redelivered event needs no dedupe table. delivery_event is left alone —
+     * it is outbox plumbing, not user data.
+     */
+    public Mono<Void> purgeOrders(java.util.Collection<Long> orderIds) {
+        if (orderIds.isEmpty()) {
+            return Mono.empty();
+        }
+        return deliveryRepository.findByOrderIdIn(orderIds)
+                .map(Delivery::getId)
+                .collectList()
+                .flatMap(deliveryIds -> deliveryIds.isEmpty()
+                        ? Mono.just(0L)
+                        : trackingRepository.deleteByDeliveryIdIn(deliveryIds))
+                .then(deliveryRepository.deleteByOrderIdIn(orderIds))
+                .then();
+    }
+
+    /** The order ids we hold delivery rows for — orphan sweep (§8 Phase 6). */
+    public Mono<List<Long>> distinctOrderIds() {
+        return deliveryRepository.findDistinctOrderIds().collectList();
+    }
+
     public Mono<Delivery> createDelivery(Long orderId, String recipientName, String addressLine1,
                                           String addressLine2, String city, String state,
                                           String zipCode, String country, String items) {
