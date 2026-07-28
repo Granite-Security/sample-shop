@@ -5,38 +5,44 @@ Microservices demo platform with OAuth2/OIDC authentication, Spring Cloud Gatewa
 ## Architecture
 
 ```
-                            Stripe
-                              │
-                webhook ──────┤
-                              ▼
+                            Stripe                              Resend
+                              │                                   ▲
+                webhook ──────┤                                   │ email
+                              ▼                                   │
 Browser (5173) ── Gateway (8080) ──┬── Auth Server (9090) ── PostgreSQL (5432)
-     ui-shop      (Spring Cloud    │                          authdb
-     (React +      Gateway)        ├── Greetings (8060)
-     Stripe                        │
-     Elements)                     ├── Shop (8061) ────────── PostgreSQL (5433)
-                                    │    (WebFlux + R2DBC)     shopdb
-                                    │       │       ▲
-                                    │       │       │
-                                    │   ┌───▼───────┴────┐
-                                    │   │     Kafka        │
-                                    │   │ (orders.events,   │
-                                    │   │  payments.events) │
-                                    │   └─▲──┬──────┬────┘
-                                    │     │  │      │
-                                    │     │  ▼      ▼
-                                    ├── Payment (8062)   Delivery (8063)
-                                    │    (WebFlux + R2DBC  (WebFlux + R2DBC
-                                    │     + Stripe API)     + Kafka consumer)
-                                    │     │                 │
-                                    │     ▼                 ▼
-                                    │  PostgreSQL (5434)  PostgreSQL (5435)
-                                    │  paymentdb          deliverydb
-                                    │
-                                    ├── Profile (8064) ──── PostgreSQL (5436)
-                                    │    (WebFlux + R2DBC)    profiledb
-                                    │
-                                    └── Notification (8066) ─ PostgreSQL (5437)
-                                         (WebFlux + R2DBC)    notificationdb
+     ui-shop      (Spring Cloud    │    (OIDC provider)          authdb
+     (React +      Gateway)        │        │  produces identity.events
+     Stripe                        │        │  (fire-and-forget, no outbox)
+     Elements)                     │        │
+                                   ├── Greetings (8060)
+                                   │
+                                   ├── Shop (8061) ─────────── PostgreSQL (5433)
+                                   │    (WebFlux + R2DBC)       shopdb
+                                   │       │       ▲
+                                   │   ┌───▼───────┴───────────────┐
+                                   │   │           Kafka           │
+                                   │   │  orders.events            │
+                                   │   │  payments.events          │
+                                   │   │  identity.events  (1h TTL)│
+                                   │   └─▲──┬──────┬─────────┬─────┘
+                                   │     │  │      │         │
+                                   │     │  ▼      ▼         ▼
+                                   ├── Payment (8062)   Delivery (8063)
+                                   │    (WebFlux + R2DBC  (WebFlux + R2DBC
+                                   │     + Stripe API)     + Kafka consumer)
+                                   │     │                 │
+                                   │     ▼                 ▼
+                                   │  PostgreSQL (5434)  PostgreSQL (5435)
+                                   │  paymentdb          deliverydb
+                                   │
+                                   ├── Profile (8064) ─────── PostgreSQL (5436)
+                                   │    (WebFlux + R2DBC)      profiledb
+                                   │    consumes UserRegistered
+                                   │
+                                   └── Notification (8066) ── PostgreSQL (5437)
+                                        (WebFlux + R2DBC)      notificationdb
+                                        consumes identity.events,
+                                        sends email via Resend
 ```
 
 | Service | Port | Stack | Role |
@@ -179,10 +185,29 @@ Order placed ──► Outbox (shop DB) ──► Kafka (orders.events) ──�
 - **Frontend:** The React SPA polls for the `clientSecret`, then completes payment client-side with Stripe Elements. A sync endpoint (`POST /api/payments/intent/{orderId}/sync`) is used for local development when Stripe webhooks aren't available.
 - **Refunds:** `POST /api/shop/orders/{id}/refund` (shop) transitions the order to `RETURNED` and emits a `RefundRequested` event. The payment service consumes it, performs the Stripe refund, and emits `PaymentRefunded`; the shop then transitions the order `RETURNED → REIMBURSED`. No Stripe webhook is used — the sync endpoint above also reconciles refund state.
 
-| Kafka topic | Producer | Consumers |
-|-------------|----------|-----------|
-| `orders.events` | Shop (outbox) | Payment, Delivery |
-| `payments.events` | Payment (outbox) | Shop |
+### Identity events
+
+```
+Register / change password / request reset
+            │
+            ▼
+      auth-server ──► Kafka (identity.events) ──┬──► Notification ──► Resend (email)
+   (fire-and-forget,                            │
+    no outbox — see below)                      └──► Profile (provisions the profile row)
+```
+
+- **One fact, two independent consumers.** auth-server publishes `UserRegistered`, `PasswordChanged` and `PasswordResetRequested` and knows about neither consumer. `notification` turns them into email; `profile` uses `UserRegistered` to populate a user's profile with the email and name captured at registration.
+- **Producers never send rendered text.** All copy lives in `notification` as Mustache templates under `resources/templates/<channel>/`. That is what makes adding SMS or WhatsApp a matter of adding a channel plus templates, rather than touching every producer.
+- **`PasswordResetRequested` carries the raw token, not a link.** `notification` builds the URL from its own configured frontend origin, so auth-server never needs to know the frontend's URL shape.
+- **No outbox here, deliberately.** Unlike shop/payment/delivery, auth-server publishes fire-and-forget and accepts message loss: the courtesy mails are invisible when lost, and a lost reset link is recovered by requesting another. `max.block.ms=2000` so a dead broker can't pin an async worker. Don't "fix" this into the outbox pattern — the reasoning is in [`docs/notification/notification-microservice.md`](docs/notification/notification-microservice.md) §2.
+
+| Kafka topic | Producer | Consumers | Retention |
+|-------------|----------|-----------|-----------|
+| `orders.events` | Shop (outbox) | Payment, Delivery | 7 days (broker default) |
+| `payments.events` | Payment (outbox) | Shop | 7 days (broker default) |
+| `identity.events` | auth-server (fire-and-forget) | Notification, Profile | **1 hour** — it carries live password-reset tokens |
+
+> `identity.events` is declared explicitly with `segment.ms=600000` alongside `retention.ms=3600000`. Kafka only deletes *closed* segments and the default roll is 7 days, so on a low-volume topic `retention.ms` on its own deletes nothing.
 
 ## API routes
 
@@ -236,6 +261,11 @@ For local development without webhooks, the frontend calls `POST /api/payments/i
 | `STRIPE_CURRENCY` | `usd` | payment |
 | `DELIVERY_R2DBC_URL` | `r2dbc:postgresql://localhost:5435/deliverydb` | delivery |
 | `PROFILE_R2DBC_URL` | `r2dbc:postgresql://localhost:5436/profiledb` | profile |
+| `NOTIFICATION_R2DBC_URL` | `r2dbc:postgresql://localhost:5437/notificationdb` | notification |
+| `RESEND_API_KEY` | — (blank = log and skip, no mail sent) | notification |
+| `RESEND_FROM` | `Granite Security <no-reply@notify.granite-security.org>` | notification |
+| `FRONTEND_ORIGIN` | `http://localhost:5173` | notification (builds the password-reset link) |
+| `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | shop, payment, delivery, auth-server, notification, profile |
 
 ## Deploying to Kubernetes (Hetzner)
 
