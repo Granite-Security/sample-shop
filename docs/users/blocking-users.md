@@ -1,22 +1,23 @@
 # Blocking and deleting users (admin)
 
 Status: **plan / not started**
-Author: design note, 2026-07-28
 
 ## 1. Goal
 
 Let an admin block, unblock and delete users from `/admin/users`. Admin-only, enforced
 server-side (not just hidden in the UI).
 
+**Two outcomes only — there is no soft delete.** A user is either removed entirely or
+blocked. If their history makes deletion unsafe, they get blocked instead.
+
 ## 2. What the production data revealed
 
-Two findings that change the design — both pre-existing, neither caused by this feature.
+Findings that shaped the design. All pre-existing; none caused by this feature.
 
 ### 2.1 The admin page lists the wrong thing
 
-`UsersManagement.tsx` calls `api.profile.getProfiles()` → `GET /api/profiles` on the
-**profile** service. But the flag that blocks a login (`enabled`) lives on the **users**
-table in **auth-server**. The two sets do not match:
+`UsersManagement.tsx` calls `api.profile.getProfiles()` → `GET /api/profiles`. That
+returns **profiles**, which are not the same set as users:
 
 ```
 auth users (8):  admin adria davide iaka itiganas manager repro-test-1785224224 user
@@ -26,223 +27,19 @@ profiles   (9):  admin adria davide iaka itiganas manager user
 ```
 
 - **One human, two profile rows.** `iaka` has `provider_id = 102919241495532217479`, and
-  a *separate* profile row exists under that number with the same email
-  (`net.vrabie@gmail.com`). `profile` keys rows on the JWT `sub`, which is the username
-  for form login but the Google `sub` for federated login. Both identities have orders.
-- **A service account is listed as a user.** `external-service` obtained a profile row
-  by calling a `/me` endpoint with a client-credentials token.
-- **A real user is invisible.** `repro-test-1785224224` has no profile row, so the admin
-  page cannot see — or block — it.
+  a *separate* profile row exists under that number with the same email. `profile` keys
+  rows on the JWT `sub` — the username for form login, the Google `sub` for federated
+  login. Both identities have orders.
+- **A service account appears as a user.** `external-service` got a profile row by
+  calling a `/me` endpoint with a client-credentials token.
+- **A real user is invisible.** `repro-test-1785224224` has no profile row.
 
-"Block this row" is therefore ambiguous today: blocking `102919241495532217479` should
-block `iaka`, but no user row carries that username.
+So "block this row" is ambiguous today. **The list must be built from auth-server users**
+(D3), even though the page is served by profile.
 
-**Decision (D3): the page switches to listing auth-server users**, enriched with profile
-data. auth-server is the identity authority; profile is a projection.
+### 2.2 Identity states — `provider` alone does not mean "Google"
 
-### 2.2 Deleting a user is not a local operation
-
-**22 orders across 4 usernames.** Deleting a user with order history is routine, not
-hypothetical — and one of those four is the Google-sub identity above.
-
-## 3. Decisions
-
-| # | Decision | Resolution |
-|---|---|---|
-| D1 | What does "delete" do? | **Conditional.** Hard delete when the user has never moved money; soft delete + anonymise otherwise. See §3.2 — the condition is subtler than it looks. |
-| D2 | Does blocking kill live sessions? | **No — accept the token window.** `enabled=false` refuses new logins. An already-issued access token stays valid until it expires (~5 min, Spring Authorization Server default — no `TokenSettings` are configured). No session-revocation infrastructure. |
-| D3 | What does the admin page list? | **auth-server users**, via a new admin API, enriched with profile data (§2.1). |
-| D4 | Is a deleted username reusable? | **No.** The row is kept, so the unique constraint reserves the username forever. This prevents someone re-registering as a deleted account and inheriting its apparent history. |
-| D5 | Is a deleted email reusable? | **Yes**, as a consequence of scrubbing it — `existsByEmailIgnoreCase` stops matching, so the person can sign up again with a fresh account. This is intended, and worth stating because it follows from D1 rather than being chosen separately. |
-| D8 | Who decides hard vs soft? | **`shop`, asked synchronously by auth-server** (§3.2). auth-server has no concept of an order; shop already talks to payment. |
-| D6 | Audit trail? | **Yes, minimal.** An `admin_action` table recording who did what to whom and when. "Who blocked this customer?" is the first question anyone asks, and logs age out. |
-| D7 | Email the affected user? | **No.** A "you have been blocked" email is hostile and useful to nobody; a "your account was deleted" mail would go to an address we just scrubbed. `notification` stays uninvolved. |
-
-### 3.2 The hard-delete condition
-
-Hard delete is safe exactly when there is nothing to reconcile against Stripe. Two
-findings make the obvious rule wrong.
-
-**`CANCELLED` does not mean "no money".** `OrderStatus` allows `PAID → CANCELLED`
-(`OrderStatus.java:21`), so a cancelled order may have been paid and refunded. A rule
-that treats `CANCELLED` as safe would destroy real payment history — this is the trap to
-avoid.
-
-**`PENDING` orders already have Stripe objects.** Placing an order triggers a
-PaymentIntent, so `payment` holds a row in `CREATED` for every pending order (4 in
-production right now). No money has moved, but a Stripe object exists.
-
-So **order status is not a usable signal.** The source of truth is the payment:
-
-> **A user is hard-deletable iff none of their orders has a payment in `SUCCEEDED` or
-> `REFUNDED`.**
-
-Everything else — `PENDING` orders, `PAYMENT_FAILED`, payments still in `CREATED` — means
-no money ever moved, and those orders can be removed with the user.
-
-| Payment status | Money moved? | Effect |
-|---|---|---|
-| `CREATED` | no — uncaptured PaymentIntent | hard delete allowed |
-| `SUCCEEDED` | **yes** | forces soft delete |
-| `REFUNDED` | **yes** (both directions) | forces soft delete |
-
-**Leftover Stripe PaymentIntents.** Hard-deleting a user with `CREATED` payments leaves
-uncaptured PaymentIntents in Stripe with no local row. They expire on Stripe's side and
-never charged anyone, so this is untidy rather than harmful — but it is a real, permanent
-divergence and should be a known consequence, not a surprise. Cancelling them via the
-Stripe API during the purge is a reasonable refinement if it ever matters.
-
-**Resolving eligibility** (D8): `auth-server` asks `shop`; `shop` resolves the user's
-orders and consults `payment` (a call it already makes — `PAYMENT_SERVICE_URI` is already
-configured) to classify them. auth-server never learns what an order is.
-
-#### New shop endpoints — orders by user
-
-There is currently **no way to fetch one user's orders**. `GET /api/shop/orders` returns
-the *caller's* own; `GET /api/shop/orders/all` returns everything (admin);
-`GET /api/shop/orders/{id}` takes an **order** id. Using `/orders/all` and filtering in
-the browser would pull every order in the system to count one user's, and hand the admin
-UI every customer's order data to do it. Two endpoints instead:
-
-| Endpoint | Auth | Caller | Returns |
-|---|---|---|---|
-| `GET /api/shop/users/{username}/orders` | `ROLE_ADMIN` | admin UI | that user's orders, for display and the delete confirmation count |
-| `GET /api/shop/internal/users/{username}/purge-eligibility` | `SCOPE_internal` | auth-server | `{ eligible, orderIds[], paidOrderCount }` |
-
-**Do not put these under `/api/shop/orders/`.** `{id}` there is an order id, so
-`/api/shop/orders/{username}` would shadow it — `ShopRoute` already carries a comment
-about this exact trap (*"/orders/all must be registered before /orders/{id}"*). Rooting
-them at `/api/shop/users/...` avoids the ordering hazard entirely rather than relying on
-registration order.
-
-`shop` has no `/internal/**` convention yet; follow `profile`'s — a
-`.pathMatchers("/api/shop/internal/**").hasAuthority("SCOPE_internal")` rule in
-`ShopSec`, matching `ProfileSec:55`. The gateway needs no new route: `/api/shop/**` is
-already proxied, and auth-server calls shop cluster-internally rather than through it.
-
-```
-DELETE /api/admin/users/{id}
-  1. block first  (enabled = false) — closes most of the race window below
-  2. GET shop /api/shop/internal/users/{username}/purge-eligibility
-       -> { eligible: true, orderIds: [...] }        (no SUCCEEDED/REFUNDED payments)
-       -> { eligible: false, paidOrderCount: 9 }     (soft delete instead)
-  3a. eligible  -> hard delete + cascade the listed orders (§5.1)
-  3b. otherwise -> soft delete + anonymise
-```
-
-**The race.** A user could place an order between the check and the delete. Blocking
-first shrinks it to the access-token window (~5 min, D2), and the Phase 5 orphan sweep
-catches anything that slips through. Worth knowing rather than engineering away — the
-cost of a miss is one orphaned order row, not lost money.
-
-**Note this reintroduces a synchronous internal client in auth-server**, which Phase 5 of
-the notification work deliberately removed. That is not a reversal: what was removed was
-HTTP used for fire-and-forget *notifications*, which is the wrong shape for that job.
-"How many paid orders does this user have?" is a genuine query that needs an answer
-before a decision can be made — the case where request/response is right.
-
-### 3.1 Rejected alternative: hard delete of *everything*, unconditionally
-
-Considered and dropped — deleting a user's orders *regardless* of payment history.
-Recorded because it is the obvious first instinct, and the reasons it fails are not
-visible until you look at the data. (The narrower, conditional version in §3.2 is what
-was adopted.)
-
-**What killed it: the payments.** Deleting a user's orders means deleting the payment and
-refund rows behind them — but Stripe keeps its side regardless, and we cannot delete it.
-Shop and Stripe would diverge permanently for that customer, revenue reports would change
-retroactively (figures quoted last month would no longer reproduce), and a chargeback
-arriving weeks later would have no local order, payment or address to answer it with.
-There is also no undo short of a point-in-time restore across four databases.
-
-**It is also much harder to build than it looks**, because only `shop` knows which orders
-belong to a username:
-
-| Database | Table | Keyed by |
-|---|---|---|
-| shopdb | `customer_order` | **`username`** |
-| shopdb | `order_item` | `order_id` |
-| paymentdb | `payment` | `order_id` |
-| paymentdb | `refund` | `order_id`, `payment_id` |
-| deliverydb | `delivery` | `order_id` |
-| deliverydb | `delivery_tracking` | `delivery_id` |
-
-A "every service deletes its rows for this username" cascade **cannot work** — `payment`
-and `delivery` have no username to match on. It needs two hops (`UserDeleted` → shop
-resolves username → `OrdersPurged` → payment and delivery delete by `order_id`), and a
-lost event orphans financial rows belonging to a username that no longer exists to find
-them by. That in turn needs a tombstone, a retry path, and longer topic retention than
-`identity.events` can offer while it still carries reset tokens.
-
-Soft delete avoids all of it: order history stays intact and attributable, Stripe stays
-reconcilable, and a mistake is a flag flip rather than a restore.
-
-## 4. Target design
-
-```
-Admin UI (/admin/users)
-      │  GET  /auth/api/admin/users          (ROLE_ADMIN)
-      │  POST /auth/api/admin/users/{id}/block
-      │  POST /auth/api/admin/users/{id}/unblock
-      │  DELETE /auth/api/admin/users/{id}
-      ▼
-auth-server  ── identity authority: owns users, enabled, deleted_at
-      │
-      └──► identity.events ──┬──► notification  (no templates → sends nothing)
-                             └──► profile       (UserDeleted → scrub profile PII)
-```
-
-Blocking and deleting are **identity operations**, so they belong in auth-server, and
-they propagate the same way registration already does — as facts on `identity.events`.
-`profile` gains one more event type; no new integration, no new HTTP call between
-services. This is the fan-out the notification refactor was built for.
-
-### New events
-
-| Event | Payload | Consumed by |
-|---|---|---|
-| `UserBlocked` | `username`, `email`, `blockedBy`, `occurredAt` | (none yet — audit/analytics later) |
-| `UserUnblocked` | `username`, `blockedBy`, `occurredAt` | (none yet) |
-| `UserDeleted` | `username`, `deletedBy`, `occurredAt` | `profile` — scrubs profile PII |
-
-`notification` will consume these and find no template, log
-`No EMAIL template for UserDeleted — nothing sent`, and move on. That is the intended
-behaviour (D7), and it is already how `TemplateRegistry` handles unknown types.
-
-**Retention caveat:** `identity.events` keeps 1 hour. If `profile` is down for longer
-than that, a `UserDeleted` is lost and the profile keeps its PII. Mitigation is the
-reconciliation job in Phase 5 — do not skip it, because "we deleted the user but their
-name is still on the profile" is exactly the failure that matters here.
-
-## 5. Data model
-
-### Existing constraints on `users`
-
-| Constraint | Columns | Notes |
-|---|---|---|
-| `users_pkey` | `id` | primary key |
-| `users_username_key` | `username` | |
-| `users_email_key` | `email` | |
-| `uk_users_provider_id` | `(provider, provider_id)` | **partial** — `WHERE provider_id IS NOT NULL` |
-
-(Plus a redundant non-unique `idx_users_username`, already covered by the unique
-constraint.)
-
-These are what make the anonymisation below work, and one of them works for a
-non-obvious reason:
-
-- `username` unique → keeping the row reserves the name forever (D4).
-- `email` unique → the scrub value must be **unique per user**, hence
-  `deleted-user-{id}@invalid`. A constant placeholder would collide on the second
-  deletion.
-- `(provider, provider_id)` unique but **partial** → setting `provider_id = NULL`
-  removes the row from that index entirely, so the same Google account can link to a
-  fresh user later. Were the index not partial, a second deleted Google user would
-  collide on `(LOCAL, NULL)`.
-
-### Identity states — `provider` alone does not mean "Google"
-
-`FederatedUserProvisioningService` produces **three** states, not two:
+`FederatedUserProvisioningService` produces **three** states:
 
 | `provider` | `provider_id` | Meaning | Password? |
 |---|---|---|---|
@@ -250,186 +47,292 @@ non-obvious reason:
 | `LOCAL` | `<google sub>` | **Linked** — registered locally, later signed in with Google | yes, still works |
 | `GOOGLE` | `<google sub>` | Provisioned by Google sign-in | no (random unguessable value) |
 
-The middle state is deliberate: when a Google sign-in matches an existing user by email,
-provisioning keeps `provider = LOCAL` and only adds the subject, *"so the existing
-password still works; only link the Google subject so both login methods resolve to this
-row."* `iaka` is in exactly this state in production.
+The middle state is deliberate: a Google sign-in matching an existing user by email keeps
+`provider = LOCAL` and only adds the subject, *"so the existing password still works"*.
+`iaka` is in that state in production.
 
-Two consequences:
+- The admin list needs **three sign-in badges**, not a LOCAL/GOOGLE toggle.
+- **The password-change guard is correct as written.** `PasswordChangeService:31` rejects
+  `provider != LOCAL`, so linked accounts can still change their password — right,
+  because they have one. Do not "fix" it to test `provider_id`.
 
-- **The admin list must show three states**, not a `LOCAL`/`GOOGLE` toggle. Keying a
-  "Google" badge off `provider` alone would mislabel linked accounts as password-only;
-  keying it off `provider_id IS NOT NULL` alone would mislabel them as Google-only. Show
-  *Password* / *Password + Google* / *Google*.
-- **The password-change guard is correct as written.** `PasswordChangeService:31` and
-  `PasswordResetService:46` reject only `provider != LOCAL`, so a linked account can
-  still change its password — right, because it genuinely has one. Do not "fix" this to
-  test `provider_id` instead; that would lock linked users out of their own password.
+### 2.3 Order status cannot tell you whether money moved
 
-### auth-server (Liquibase changeset)
+- **`CANCELLED` does not mean "no money".** `OrderStatus` allows `PAID → CANCELLED`
+  (`OrderStatus.java:21`), so a cancelled order may have been paid and refunded.
+- **`PENDING` orders already have Stripe PaymentIntents.** `payment` holds a `CREATED`
+  row per pending order (4 in production). No money moved, but a Stripe object exists.
+
+So eligibility keys on **payment** status, never order status (§4.2).
+
+## 3. Architecture — profile orchestrates, auth-server executes
+
+The admin page is served by profile, and auth-server is an OIDC provider rather than a
+user-administration API. So **profile owns the operation**; auth-server exposes a narrow
+internal API that performs the identity change.
+
+```
+Admin UI  ──►  profile  ─────────────►  shop      "is this user purgeable?"
+ (JWT,        (ROLE_ADMIN               (SCOPE_internal)
+  ROLE_ADMIN)  enforced here)               │
+                   │                        └─► payment (already a shop dependency)
+                   │
+                   ├──►  auth-server   POST /api/internal/users/{id}/block
+                   │     (SCOPE_identity.admin)  /unblock, DELETE /{id}
+                   │
+                   └──►  own DB: delete profile row + addresses on hard delete
+```
+
+**Authorization lives in profile.** It is already a resource server with a working
+`roles` → `ROLE_*` converter (`ProfileSec:60` uses `hasRole("ADMIN")` today). auth-server
+does **not** need to understand roles for this — a welcome simplification, because its JWT
+chain installs no `JwtAuthenticationConverter`, so `hasRole('ADMIN')` there would silently
+deny everyone.
+
+### 3.1 auth-server's internal API must not accept `SCOPE_internal`
+
+`internal-service` is a **shared** client identity — profile already uses those exact
+credentials to call storage. If "delete this user" accepted `SCOPE_internal`, anything
+holding that token could delete users, and leaking one service's credentials would put
+the identity store in the blast radius.
+
+**Register a separate client for this**, held only by profile:
+
+| | |
+|---|---|
+| Client | `identity-admin` (new `RegisteredClient` in auth-server) |
+| Scope | `identity.admin` |
+| Guard | `.requestMatchers("/api/internal/users/**").hasAuthority("SCOPE_identity.admin")` |
+
+### 3.2 The dependency cycle is real but bounded
+
+auth-server → `identity.events` → profile → HTTP → auth-server is a cycle. It is
+acceptable because the directions carry different things and neither blocks the other:
+the event path is asynchronous facts, the HTTP path is an admin-initiated command that
+needs an answer. Stated explicitly so nobody "fixes" it by moving authorization back into
+auth-server.
+
+## 4. Decisions
+
+| # | Decision | Resolution |
+|---|---|---|
+| D1 | Delete semantics | **Hard delete or nothing.** No soft delete, no anonymisation. If the user cannot be hard-deleted they are **blocked** instead, and the admin is told why. |
+| D2 | When is hard delete allowed? | When **no order of theirs has a payment in `SUCCEEDED` or `REFUNDED`** (§4.2). Their unpaid orders are deleted with them. |
+| D3 | What does the admin page list? | **auth-server users**, fetched by profile and enriched with profile data (§2.1). |
+| D4 | Who authorizes? | **profile**, via `hasRole("ADMIN")`. auth-server's internal API is scope-gated only (§3.1). |
+| D5 | Blocking and live sessions | `enabled = false` refuses new logins. An already-issued access token works until it expires (~5 min — Spring Authorization Server default, no `TokenSettings` configured). Accepted; no session-revocation machinery. |
+| D6 | Audit trail | **Yes** — `admin_action` in profile: actor, action, target, order count, outcome (`DONE` / `BLOCKED_INSTEAD`), timestamp. |
+| D7 | Email the affected user? | **No.** `notification` stays uninvolved. |
+| D8 | Username / email reuse after delete | **Freed** — the row is gone. Safe, because hard delete only happens when there is no paid history to inherit. |
+
+### 4.1 Accepted consequence: paid users keep their PII forever
+
+With no soft delete, a customer who has ever paid can only be blocked. Their email and
+name remain in `authdb` and `profiledb` indefinitely, with no erasure path. That is a
+deliberate trade for simplicity and for keeping order history reconcilable against
+Stripe. If an erasure request ever has to be honoured it will need a new mechanism —
+anonymisation-in-place — designed then.
+
+### 4.2 The eligibility rule
+
+> **Hard-deletable iff no order of theirs has a payment in `SUCCEEDED` or `REFUNDED`.**
+
+| Payment status | Money moved? | Effect |
+|---|---|---|
+| `CREATED` | no — uncaptured PaymentIntent | delete allowed |
+| `SUCCEEDED` | **yes** | block instead |
+| `REFUNDED` | **yes** (both directions) | block instead |
+
+Order status is not consulted at all (§2.3).
+
+**Leftover Stripe PaymentIntents.** Deleting a user with `CREATED` payments leaves
+uncaptured PaymentIntents on Stripe with no local row. They expire and never charged
+anyone — untidy, permanent, harmless. Cancelling them via the Stripe API during the purge
+is a reasonable later refinement.
+
+**The race.** A user could place an order between the check and the delete. profile
+**blocks first, then checks, then deletes**, shrinking the window to the access-token
+lifetime (D5). The residual cost of a miss is one orphaned order row, caught by the
+Phase 6 sweep — not lost money.
+
+## 5. APIs
+
+### 5.1 New — profile (the admin surface)
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /api/profiles/admin/users` | `ROLE_ADMIN` | list auth users + profile data + sign-in state |
+| `POST /api/profiles/admin/users/{id}/block` | `ROLE_ADMIN` | block |
+| `POST /api/profiles/admin/users/{id}/unblock` | `ROLE_ADMIN` | unblock |
+| `DELETE /api/profiles/admin/users/{id}` | `ROLE_ADMIN` | block → check → delete, or report `BLOCKED_INSTEAD` |
+
+`DELETE` returns the outcome explicitly —
+`{ "outcome": "BLOCKED_INSTEAD", "paidOrderCount": 9 }` — so the UI can explain rather
+than appear to fail.
+
+### 5.2 New — auth-server (internal, executes only)
+
+| Endpoint | Auth |
+|---|---|
+| `GET /api/internal/users` | `SCOPE_identity.admin` |
+| `POST /api/internal/users/{id}/block` and `/unblock` | `SCOPE_identity.admin` |
+| `DELETE /api/internal/users/{id}` | `SCOPE_identity.admin` |
+
+No role logic, no order logic — it does what it is told and reports what happened.
+`authorities` and `password_reset_token` clear via the existing `ON DELETE CASCADE` FKs.
+
+### 5.3 New — shop (orders by user)
+
+There is **no way to fetch one user's orders** today: `GET /api/shop/orders` returns the
+caller's own, `/orders/all` returns everything, `/orders/{id}` takes an **order** id.
+Filtering `/orders/all` in the browser would pull every order in the system to count one
+user's, and hand the admin UI every customer's order data to do it.
+
+| Endpoint | Auth | Caller |
+|---|---|---|
+| `GET /api/shop/users/{username}/orders` | `ROLE_ADMIN` | admin UI — display + confirmation count |
+| `GET /api/shop/internal/users/{username}/purge-eligibility` | `SCOPE_internal` | profile — `{ eligible, orderIds[], paidOrderCount }` |
+| `DELETE /api/shop/internal/users/{username}/orders` | `SCOPE_internal` | profile — delete unpaid orders, publish `OrdersPurged` |
+
+**Do not root these under `/api/shop/orders/`** — `{id}` there is an order id, so a
+`{username}` segment would shadow it. `ShopRoute` already carries a comment about this
+trap for `/orders/all`. `shop` has no `/internal/**` convention yet; add one mirroring
+`ProfileSec:55`.
+
+## 6. Data model
+
+### profile (Liquibase)
 
 ```sql
-ALTER TABLE users ADD COLUMN deleted_at TIMESTAMPTZ;
-ALTER TABLE users ADD COLUMN blocked_at TIMESTAMPTZ;
-ALTER TABLE users ADD COLUMN blocked_by VARCHAR(64);
-
+-- The record of who did what. Lives with the orchestrator, not the executor.
 CREATE TABLE admin_action (
-    id           BIGSERIAL    PRIMARY KEY,
-    actor        VARCHAR(64)  NOT NULL,   -- admin username
-    action       VARCHAR(32)  NOT NULL,   -- BLOCK | UNBLOCK | DELETE
-    target_user  VARCHAR(64)  NOT NULL,
-    target_id    BIGINT,
-    reason       TEXT,
-    created_at   TIMESTAMPTZ  NOT NULL DEFAULT now()
+    id          BIGSERIAL    PRIMARY KEY,
+    actor       VARCHAR(64)  NOT NULL,   -- admin username from the JWT
+    action      VARCHAR(32)  NOT NULL,   -- BLOCK | UNBLOCK | DELETE
+    target_user VARCHAR(64)  NOT NULL,
+    outcome     VARCHAR(32)  NOT NULL,   -- DONE | BLOCKED_INSTEAD | FAILED
+    order_count INT,
+    reason      TEXT,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_admin_action_target ON admin_action(target_user);
 ```
 
-`enabled` already exists and already blocks login — `JpaUserDetailsService` maps it to
-`.disabled(!user.isEnabled())`. Blocking sets `enabled = false` and stamps
-`blocked_at`/`blocked_by`; the boolean stays the mechanism, the timestamps are for the
-UI and audit.
+### auth-server (Liquibase)
 
-`deleted_at` is separate from `enabled` on purpose: a deleted user is also disabled, but
-"blocked" and "deleted" must be distinguishable in the list, and unblocking a deleted
-user must not resurrect it.
+```sql
+ALTER TABLE users ADD COLUMN blocked_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN blocked_by VARCHAR(64);
+```
 
-### Anonymisation on delete
+No `deleted_at` — deletion removes the row (D1). `enabled` remains the block mechanism;
+`JpaUserDetailsService` already maps it to `.disabled(!user.isEnabled())`.
 
-| Field | After delete |
-|---|---|
-| `username` | **kept** — reserves the name (D4) |
-| `email` | `deleted-user-{id}@invalid` — frees the real address (D5) |
-| `first_name`, `last_name` | `NULL` |
-| `password` | random unguessable value (never a login path again) |
-| `provider_id` | `NULL` — unlinks any Google account (see below) |
-| `enabled` | `false` |
-| `deleted_at` | `now()` |
+### The cascade on hard delete
 
-**Deletion must not be reversible by signing in again.** `FederatedUserProvisioningService`
-resolves a returning Google user by `(provider, provider_id)` first, then falls back to
-matching on **email**. Scrubbing the email and nulling `provider_id` makes *both* lookups
-miss, so a returning user gets a fresh account rather than resurrecting the deleted one.
-That property depends on doing both — scrubbing the email alone would leave the
-provider-id path able to revive a deleted account on the next Google sign-in. Cover it
-with a test.
+Only `shop` knows which orders belong to a username — everything downstream keys on
+`order_id`:
 
-`profile` mirrors this for its own row on `UserDeleted`: `email`, `first_name`,
-`last_name`, `display_name` → `NULL`. Delivery addresses are deleted outright (pure PII,
-no reporting value). `customer_order` is untouched.
+| Database | Table | Keyed by |
+|---|---|---|
+| shopdb | `customer_order` | **`username`** |
+| shopdb | `order_item` | `order_id` |
+| paymentdb | `payment` | `order_id` |
+| deliverydb | `delivery` | `order_id` |
+| deliverydb | `delivery_tracking` | `delivery_id` |
 
-## 6. Security — three things that will not work by default
+So "each service deletes rows for this username" **cannot work** — payment and delivery
+have no username to match on. shop resolves the mapping and publishes
+`OrdersPurged { orderIds }` via its **existing outbox**; payment and delivery consume it
+and delete by `order_id`.
 
-**6.1 The `roles` claim is not mapped to authorities in auth-server.** This is the one
-that will silently fail. `accountApiSecurityFilterChain` (`/api/me/**`) authenticates
-JWTs but installs **no** `JwtAuthenticationConverter`, so Spring's default applies and
-maps only `scope`/`scp` → `SCOPE_*`. The custom `roles` claim is ignored, and
-`hasRole("ADMIN")` would deny everyone. `profile` gets this right
-(`ProfileSec.jwtAuthenticationConverter`); auth-server has no equivalent because nothing
-has needed roles there until now.
+Left alone deliberately: `paymentdb.stripe_event` (webhook dedupe — deleting it would let
+processed webhooks replay) and the `outbox` / `delivery_event` tables (plumbing, not user
+data).
 
-The new admin chain must install a converter mirroring `ProfileSec`'s: map `roles` →
-`ROLE_*` and merge with the scope authorities. **Write a test that a non-admin token
-gets 403** — a wrong converter fails open-looking (everyone denied) in dev but is easy
-to "fix" by loosening the matcher.
+## 7. Guard rails — enforced in profile, server-side
 
-**6.2 The admin chain needs its own `securityMatcher`.** `/api/me/**` is `@Order(2)`;
-add `/api/admin/**` as a sibling rather than widening the existing matcher, so account
-and admin endpoints keep separate rules.
+- An admin **cannot block or delete themselves** (compare against the JWT subject).
+- **The last enabled admin cannot be blocked or deleted.** Without this, one click locks
+  everyone out of the admin UI with no recovery short of SQL.
+- Unblocking a user who is not blocked, or deleting one who does not exist, is a **409**,
+  not a silent success.
 
-**6.3 Guard rails, enforced server-side:**
+## 8. Phases
 
-- An admin **cannot block or delete themselves** — compare the JWT subject to the target.
-- **The last enabled admin cannot be blocked or deleted.** Count remaining enabled users
-  holding `ROLE_ADMIN` and refuse if it would reach zero. Without this, one click can
-  lock everyone out of the admin UI with no recovery path short of SQL.
-- Deleting an already-deleted user, or unblocking one, is a **409**, not a silent no-op.
+### Phase 1 — auth-server: the internal execution API
+1. Liquibase: `blocked_at`, `blocked_by`.
+2. `identity-admin` `RegisteredClient` + scope `identity.admin` (§3.1).
+3. Filter chain for `/api/internal/users/**` gated on `SCOPE_identity.admin`.
+4. List / block / unblock / delete. Delete is a plain `DELETE` — FKs cascade.
+5. Tests: a token carrying only `SCOPE_internal` gets **403** — this is the security
+   property of §3.1 and must not regress. Delete removes authorities and reset tokens.
 
-## 7. Phases
+### Phase 2 — shop: orders by user
+1. `GET /api/shop/users/{username}/orders` (`ROLE_ADMIN`).
+2. `GET /api/shop/internal/users/{username}/purge-eligibility` (`SCOPE_internal`) —
+   classifies via **payment** status (§4.2), never order status.
+3. `DELETE /api/shop/internal/users/{username}/orders` → delete + publish `OrdersPurged`.
+4. `/api/shop/internal/**` security rule mirroring `ProfileSec:55`.
 
-Each phase is independently shippable.
+### Phase 3 — payment + delivery: consume `OrdersPurged`
+Delete by `order_id`. Idempotent by key, so no dedupe tables.
 
-### Phase 1 — auth-server: data model + admin API
+### Phase 4 — profile: the orchestrator
+1. `identity-admin` client registration; `AdminUserService` doing
+   block → check eligibility → delete-or-report.
+2. `admin_action` writes, including outcome and order count.
+3. Guard rails (§7).
+4. Hard delete also removes profile's own row and `delivery_address` entries.
+5. Tests: guard rails, and that a paid user comes back `BLOCKED_INSTEAD` rather than
+   being deleted.
 
-1. Liquibase changeset per §5.
-2. `AdminUserController` (`/api/admin/users`), `@PreAuthorize("hasRole('ADMIN')")`:
-   - `GET /api/admin/users` → id, username, email, provider, enabled, blockedAt,
-     blockedBy, deletedAt, createdAt, roles
-   - `POST /api/admin/users/{id}/block` (optional `reason`)
-   - `POST /api/admin/users/{id}/unblock`
-   - `DELETE /api/admin/users/{id}` — soft delete + anonymise
-3. `AdminUserService` with the §6.3 guard rails and the `admin_action` writes.
-4. New security filter chain for `/api/admin/**` **with the roles converter** (§6.1).
-5. Tests: guard rails, anonymisation, a non-admin token getting 403, and — importantly —
-   that a deleted Google user signing in again gets a **new** account rather than
-   resurrecting the old one (§5, both lookup paths must miss).
+### Phase 5 — the admin UI
+1. List from `GET /api/profiles/admin/users`, with Active / Blocked badges and the three
+   sign-in states (§2.2).
+2. Block / Unblock / Delete. **Delete asks for typed confirmation of the username** and
+   shows the order count first.
+3. When the result is `BLOCKED_INSTEAD`, say so plainly — "this user has 9 paid orders,
+   so they were blocked rather than deleted" — never a silent partial success.
+4. The current admin's own row has its actions disabled, with a tooltip explaining why.
 
-**Done when:** an admin token can block/unblock/delete via curl; a user token gets 403.
+### Phase 6 — orphan sweep
+A read-only report listing `customer_order` rows whose username has no user, and
+`payment` / `delivery` rows whose `order_id` has no order. Catches a half-completed
+cascade, which otherwise leaves no trace.
 
-### Phase 2 — publish the events
+### Phase 7 (separate) — duplicate-identity cleanup
+§2.1's Google-sub duplication is a pre-existing data bug. After D3 the admin page stops
+showing it, but the duplicate rows and their split order history remain. Fixing it means
+deciding whether `profile` should key on username rather than JWT `sub`, and migrating
+rows including order reassignment. Size it on its own.
 
-1. `NotificationEventPublisher` gains `publishUserBlocked` / `publishUserUnblocked` /
-   `publishUserDeleted`. Same discipline as the existing methods: `@Async`,
-   catch-and-log, fired from an `afterCommit` synchronization.
-2. Rename it to `IdentityEventPublisher` — it stopped being notification-specific the
-   moment `profile` became a consumer, and these events have no email at all.
+## 9. Rejected alternative: soft delete + anonymise
 
-**Done when:** blocking a user puts `UserBlocked` on `identity.events`; `notification`
-logs "no template, nothing sent" rather than erroring.
+Considered, and dropped in favour of "hard delete or block". It kept a scrubbed row so
+that any user — including paying customers — could be "deleted" while order history
+stayed intact.
 
-### Phase 3 — profile reacts to deletion
+Dropped because it doubles the state space (active / blocked / deleted, each needing UI
+treatment, list filtering, and rules like "unblocking a deleted user must not resurrect
+it") to serve a case that block already covers adequately. The cost is §4.1: paid users
+can never have their PII removed. Accepted deliberately.
 
-1. `UserRegisteredConsumer` becomes `IdentityEventConsumer` and also handles
-   `UserDeleted`: scrub profile PII, delete `delivery_address` rows.
-2. Idempotent — scrubbing twice is a no-op, so no dedupe table (same reasoning as
-   provisioning).
+The earlier variant of *unconditional* hard delete — cascading away paid orders too — was
+rejected for a different reason: Stripe keeps its records and cannot be told to forget,
+so shop and Stripe would diverge permanently, revenue reports would change retroactively,
+and a later chargeback would have no local order to answer with. §4.2 is what remains of
+that idea, narrowed to the cases where no money ever moved.
 
-**Done when:** deleting a user scrubs the profile row within seconds.
-
-### Phase 4 — the admin UI
-
-1. `api.admin.listUsers()` etc. against `/auth/api/admin/**` (the gateway already routes
-   `/auth/**`).
-2. `UsersManagement.tsx` lists **auth users** (§2.1) with status badges: Active /
-   Blocked / Deleted, plus a sign-in badge with the three states from §5:
-   *Password* / *Password + Google* / *Google*.
-3. Block / Unblock / Delete buttons. **Delete asks for typed confirmation of the
-   username** — it is irreversible in practice, and a misclick in a user list is easy.
-4. Deleted users render greyed with actions disabled; the current user's own row has
-   actions disabled with a tooltip explaining why (§6.3).
-5. Errors from guard rails surface as messages, not silent failures.
-
-### Phase 5 — reconciliation job
-
-A scheduled job in `profile` that finds profile rows whose auth user is deleted and
-scrubs them. Covers the 1-hour retention gap in §4. Small, and the thing that makes the
-event-driven path safe to rely on.
-
-### Phase 6 (follow-up, separate) — the duplicate-identity cleanup
-
-§2.1's Google-sub duplication is a **pre-existing data bug**, not caused by this work.
-After D3 the admin page stops showing it, but the duplicate rows and their split order
-history remain. Fixing it properly means deciding whether `profile` should key on
-username rather than JWT `sub`, and migrating existing rows — including reassigning
-orders. Size it on its own; do not bolt it onto this feature.
-
-## 8. Risks
+## 10. Risks
 
 | Risk | Mitigation |
 |---|---|
-| **Admin locks everyone out** by blocking the last admin | §6.3 last-admin guard, enforced server-side and tested |
-| `hasRole('ADMIN')` silently denies everyone because the `roles` claim is unmapped | §6.1 — install the converter, and test the 403 path explicitly |
-| Blocked user keeps working for a few minutes | Accepted (D2). Note refresh-grant behaviour needs verifying — see below |
-| `UserDeleted` lost to 1h retention → PII survives in profile | Phase 5 reconciliation job |
-| Soft-deleted users clutter the admin list | Filter deleted out by default, behind a "show deleted" toggle |
-| Orders point at an anonymised user | Intended (D1) — history stays intact and attributable to an id, just not to a person |
-| A deleted Google user is resurrected by signing in again | Scrub the email **and** null `provider_id` — provisioning falls back from `(provider, provider_id)` to email, so only doing one leaves a revival path (§5). Tested in Phase 1 |
-| Linked accounts (`LOCAL` + `provider_id`) mislabelled in the UI, or the password guard "fixed" to test `provider_id` | §5 — three states, and the existing guard is correct as written |
-
-**One thing to verify in Phase 1, not assume:** whether Spring Authorization Server
-re-checks `enabled` on the **refresh token** grant. If it does not, a blocked user could
-mint fresh access tokens until their refresh token expires (~60 min default), which is
-materially longer than the ~5 min window D2 accepts. If that turns out to be the case,
-the cheap fix is revoking the user's stored `OAuth2Authorization` rows on block — a much
-smaller change than full session revocation, and worth doing then rather than
-re-litigating D2.
+| **Admin locks everyone out** by blocking the last admin | §7 guard, server-side, tested |
+| **`SCOPE_internal` leak becomes user deletion** | §3.1 — dedicated `identity-admin` client and scope; Phase 1 tests the 403 |
+| Half-completed cascade orphans payments/deliveries | `OrdersPurged` rides shop's existing outbox (at-least-once); Phase 6 sweep |
+| A naive cascade misses payment/delivery entirely | They key on `order_id` — only shop resolves the mapping (§6) |
+| Paid users accumulate un-erasable PII | Accepted (§4.1) |
+| Leftover Stripe PaymentIntents after a purge | Accepted (§4.2); cancel via the Stripe API later if it matters |
+| Blocked user still works for a few minutes | Accepted (D5) |
+| Someone "fixes" the profile → auth-server cycle by moving authorization into auth-server | §3.2 — and auth-server has no roles converter, so `hasRole` there would deny everyone |
