@@ -71,6 +71,7 @@ greetings -[hidden]right- shop
 shop -[hidden]right- payment
 payment -[hidden]right- profile
 profile -[hidden]right- delivery
+delivery -[hidden]right- notification
 
 queue "Kafka" as kafka
 cloud "Resend\n(email provider)" as resend
@@ -120,6 +121,7 @@ dbauth -[hidden]right- dbshop
 dbshop -[hidden]right- dbpayment
 dbpayment -[hidden]right- dbprofile
 dbprofile -[hidden]right- dbdelivery
+dbdelivery -[hidden]right- dbnotification
 
 shop --> kafka : produce\norders.events
 payment --> kafka : produce\npayments.events
@@ -139,9 +141,17 @@ kafka --> profile : consume\nidentity.events
 notification --> resend : send email\n(HTTPS)
 
 note right of kafka
-  Each producer uses the
-  outbox pattern (OutboxRelay)
-  to publish events reliably.
+  shop / payment / delivery publish via
+  the outbox pattern (OutboxRelay) —
+  at-least-once, no message lost.
+
+  auth-server does NOT: identity.events
+  is fire-and-forget, at-most-once, by
+  design. A lost welcome or password-
+  changed mail is invisible; a lost reset
+  link is recovered by asking for another.
+  See docs/notification/
+  notification-microservice.md #2.
 end note
 
 note bottom of delivery
