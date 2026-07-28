@@ -63,6 +63,7 @@ package "Backend services" {
   component "payment" as payment
   component "profile" as profile
   component "delivery" as delivery
+  component "notification\n(email via Resend)" as notification
 }
 
 auth -[hidden]right- greetings
@@ -72,6 +73,7 @@ payment -[hidden]right- profile
 profile -[hidden]right- delivery
 
 queue "Kafka" as kafka
+cloud "Resend\n(email provider)" as resend
 
 cloud "Stripe" as stripe
 
@@ -79,6 +81,7 @@ database "postgres-auth" as dbauth
 database "postgres-shop" as dbshop
 database "postgres-payment" as dbpayment
 database "postgres-profile" as dbprofile
+database "postgres-notification" as dbnotification
 database "postgres-delivery" as dbdelivery
 
 browser --> uishop
@@ -110,6 +113,7 @@ auth --> dbauth
 shop --> dbshop
 payment --> dbpayment
 profile --> dbprofile
+notification --> dbnotification
 delivery --> dbdelivery
 
 dbauth -[hidden]right- dbshop
@@ -126,6 +130,13 @@ kafka --> delivery : consume\norders.events
 kafka --> delivery : consume\npayments.events
 kafka --> shop : consume\npayments.events
 kafka --> shop : consume\ndelivery.events
+
+' Identity facts: auth-server produces fire-and-forget (no outbox by design);
+' notification turns them into email, profile provisions the user's profile row.
+auth --> kafka : produce\nidentity.events
+kafka --> notification : consume\nidentity.events
+kafka --> profile : consume\nidentity.events
+notification --> resend : send email\n(HTTPS)
 
 note right of kafka
   Each producer uses the

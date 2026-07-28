@@ -15,6 +15,7 @@ granite-security/
 ├── payment/       (8062)  — Stripe payment intents + webhooks (WebFlux + R2DBC)
 ├── delivery/      (8063)  — Delivery tracking, Kafka consumer (WebFlux + R2DBC)
 ├── profile/       (8064)  — User profile & delivery addresses (WebFlux + R2DBC)
+├── notification/  (8066)  — Transactional email (Resend), Kafka consumer (WebFlux + R2DBC)
 ├── ui-shop/       (5173)  — React SPA storefront (Vite + oidc-client-ts + Stripe Elements)
 ├── ui-demo/                — Static/nginx-served demo frontend, alternate deployment target
 ├── demo-kot/               — Kotlin learning/demo service; excluded from Docker builds & deploys
@@ -31,7 +32,7 @@ granite-security/
 All commands run from a service's own directory.
 
 ```bash
-# JVM services (auth-server, gateway, greetings, shop, payment, delivery, profile, demo-kot)
+# JVM services (auth-server, gateway, greetings, shop, payment, delivery, profile, notification, demo-kot)
 ./gradlew build -x test     # CI's build step — compile without running tests
 ./gradlew test              # full test suite; repository tests use Testcontainers and need Docker
 ./gradlew bootRun           # run the service locally
@@ -44,7 +45,7 @@ CI (`.github/workflows/ci.yml`) only builds/pushes services whose directory chan
 
 ## Architecture
 
-Every service except `auth-server` is reactive end-to-end: Spring WebFlux for the HTTP layer, and R2DBC (not JDBC) for the four services that own a database (`shop`, `payment`, `delivery`, `profile`). `auth-server` is the one exception — Spring Authorization Server is servlet/MVC-based, so it uses `spring-boot-starter-data-jpa` (blocking JDBC) instead. Keep this in mind when adding code: don't introduce blocking calls (JDBC, blocking HTTP clients, `Thread.sleep`) inside the reactive services' request-handling paths, and don't expect R2DBC/reactive patterns to apply inside `auth-server`.
+Every service except `auth-server` is reactive end-to-end: Spring WebFlux for the HTTP layer, and R2DBC (not JDBC) for the five services that own a database (`shop`, `payment`, `delivery`, `profile`, `notification`). `auth-server` is the one exception — Spring Authorization Server is servlet/MVC-based, so it uses `spring-boot-starter-data-jpa` (blocking JDBC) instead. Keep this in mind when adding code: don't introduce blocking calls (JDBC, blocking HTTP clients, `Thread.sleep`) inside the reactive services' request-handling paths, and don't expect R2DBC/reactive patterns to apply inside `auth-server`.
 
 ### Request flow
 
@@ -71,6 +72,20 @@ Downstream services (greetings, shop, payment, delivery, profile) are OAuth2 res
 - Spring Cloud Gateway (WebFlux, reactive). Routes defined in `RouterConfig`; security policy in `GateSec`.
 - `/api/greetings/**` is permit-all, no token relay. Most other `/api/**` routes require an OAuth2 session and relay the JWT as a Bearer token to the downstream service.
 - OIDC provider URI defaults to `http://localhost:9090`, overridden via `OIDC_ISSUER_URI` in Docker/K8s.
+
+### notification
+
+- Owns **all** transactional messaging. Producers publish domain facts; they never send rendered text. All copy lives here as Mustache templates under `resources/templates/<channel>/`, keyed by event type — `{{ }}` auto-escaping is what keeps a hostile password-reset token from becoming markup.
+- Consumes `identity.events` (produced by auth-server). Idempotent: a `processed_event` row is inserted **before** sending, and every outcome lands in `notification_log`.
+- Events older than a per-type threshold are dropped as `DROPPED_STALE` and committed, never retried — Kafka retention deletes messages but does not stop a consumer acting on one still in the log, and a replayed reset event would mail an expired link.
+- **Not an OAuth2 resource server** — it has no inbound API, so it validates no tokens. Do not add a `SecurityWebFilterChain` guarding nothing. It gains one when the in-app inbox lands.
+- `kafka-ui` is deployed alongside it but has **no HTTPRoute in any overlay** and must not get one: the topic carries reset tokens and kafka-ui allows writes by default. Reach it with `kubectl -n granite port-forward deploy/kafka-ui 8090:8080`.
+
+### auth-server → identity.events
+
+auth-server publishes `PasswordChanged`, `PasswordResetRequested` and `UserRegistered` **fire-and-forget, with no outbox** — a deliberate departure from the outbox pattern used by shop/payment/delivery. Message loss is accepted: the courtesy mails are invisible when lost, and a lost reset link is recovered by the user requesting another. `max.block.ms=2000` so a dead broker cannot pin an `@Async` worker. Do not "fix" this into an outbox; see `docs/notification/notification-microservice.md` §2.
+
+`notification` (email) and `profile` (profile provisioning) both consume this topic independently.
 
 ### shop / payment / delivery / profile
 

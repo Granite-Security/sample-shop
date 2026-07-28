@@ -94,10 +94,7 @@ spec:
                   key: AUTH_SERVER_TOKEN_URI
             - name: INTERNAL_CLIENT_ID
               value: "internal-service"
-            # Phase 4 flip: RESEND_API_KEY deliberately removed. EmailService
-            # log-and-skips while it is blank, so profile no longer sends mail —
-            # the notification service does. The code goes in Phase 5.
-            #
+            # profile sends no email — the notification service owns that entirely.
             # Consumes UserRegistered off identity.events to provision profiles.
             - name: KAFKA_BOOTSTRAP_SERVERS
               valueFrom:

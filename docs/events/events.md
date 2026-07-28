@@ -287,3 +287,30 @@ Nested `data` payloads are **not** registered independently — they are embedde
   - `partitions=3`
   - `replication.factor=1` (single-broker dev; adjust for production)
   - `retention.ms=604800000` (7 days)
+
+---
+
+### `identity.events`
+
+Produced by `auth-server`. Consumed independently by `notification` (turns facts into
+email) and `profile` (provisions a user profile row).
+
+| Event | Key | Partitioning | Retention | Payload |
+|---|---|---|---|---|
+| `PasswordChanged` | username | hash(key) → partition | **1 hour** | `username`, `email`, `occurredAt` |
+| `PasswordResetRequested` | username | hash(key) → partition | **1 hour** | `username`, `email`, `resetToken`, `expiresAt`, `occurredAt` |
+| `UserRegistered` | username | hash(key) → partition | **1 hour** | `username`, `email`, `firstName`, `lastName`, `occurredAt` |
+
+Payloads are flat JSON (not the Avro envelope above), matching what the existing
+consumers actually parse. Every event carries `id` (UUID, for consumer dedupe) and
+`occurredAt`.
+
+**Retention is 1 hour, not the 7 days used elsewhere**, because `PasswordResetRequested`
+carries a live reset token. Note this topic is declared explicitly with
+`segment.ms=600000` alongside `retention.ms=3600000`: Kafka only deletes *closed*
+segments and the default roll is 7 days, so on a low-volume topic `retention.ms` alone
+deletes nothing. See `docs/notification/notification-microservice.md` §4.1.
+
+**Producer note.** Unlike `orders.events` / `payments.events`, auth-server publishes
+these **fire-and-forget with no outbox** — at-most-once, message loss accepted. The
+reasoning is in §2 of the notification design doc.

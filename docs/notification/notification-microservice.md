@@ -1,6 +1,6 @@
 # `notification` microservice — extraction & event-driven refactor
 
-Status: **Phases 1–4 implemented** (identity events end-to-end; commerce notifications and Phase 5 cleanup outstanding)
+Status: **Phases 1–5 implemented** (identity events end-to-end, old path deleted; commerce notifications outstanding)
 Author: design note, 2026-07-28
 
 ## 1. Why
@@ -395,11 +395,21 @@ Status shows `SKIPPED_DISABLED` locally because `RESEND_API_KEY` is unset — th
 
 ---
 
-### Phase 5 — Delete the old path
+### Phase 5 — Delete the old path — ✅ DONE
 
 1. **auth-server:** delete the `profile-client` registration in `ProfileClientConfig`, the `MICROSERVICES_PROFILE_URI` env in `compose.yaml` and k8s, and the client-credentials `RegisteredClient` in `SecurityConfig` (~line 326) **if nothing else uses it** — check first; `profile` has its own `InternalClientConfig` and a `StorageClient`.
 2. **profile:** delete the `notification/` package, `InternalNotificationHandler`, `PasswordChangedNotifyRequest`, `PasswordResetRequestedNotifyRequest`, the two `/api/profiles/internal/{username}/notify/**` routes in `ProfileRoute`, and the `RESEND_*` env from its deployment and `compose.yaml`. **Keep** the `SCOPE_internal` matcher in `ProfileSec` — the internal addresses route still needs it, and `notification` now calls the internal profile lookup.
 3. **Docs:** `README.md` (ports, env vars, event flow), `docs/events/events.md` (add `identity.events` + payloads + the 1h retention note), `docs/architecture/microservices.puml` (component + edges), `CLAUDE.md` (layout table + architecture section, including the explicit note that auth-server produces fire-and-forget and deliberately has no outbox).
+
+**What was checked before deleting, and what was kept:**
+
+- The `internal-service` **RegisteredClient** in `SecurityConfig` **stays** — `profile` still uses those credentials to call `storage`. Only the `profile-client` **ClientRegistration** went, which was auth-server acting *as* that client. Two different things with confusingly similar names; deleting the wrong one would have broken profile→storage.
+- `ProfileClientConfig` was deleted **whole**: nothing else in auth-server referenced `OAuth2AuthorizedClientManager` or `RestClient`, so all three of its beans were dead. auth-server is now an OAuth2 client of nothing.
+- `ProfileSec`'s `SCOPE_internal` matcher **stays** — the internal addresses route still needs it.
+- `frontendOrigin` / `resetLink` removed from `PasswordResetService`: dead once only the raw token goes on the event. This finishes D3 — auth-server no longer knows the frontend URL shape at all.
+- The two `verify(profileNotificationClient…)` assertions were **retargeted at the event publisher, not deleted** — "notify only after commit" is still the property worth holding.
+
+**Verified:** auth-server 41 tests, profile 20 (down from 26 — the six `EmailServiceTest` cases went with the deleted package), notification 9. All green.
 
 ---
 
