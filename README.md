@@ -32,8 +32,11 @@ Browser (5173) ── Gateway (8080) ──┬── Auth Server (9090) ── P
                                     │  PostgreSQL (5434)  PostgreSQL (5435)
                                     │  paymentdb          deliverydb
                                     │
-                                    └── Profile (8064) ──── PostgreSQL (5436)
-                                         (WebFlux + R2DBC)    profiledb
+                                    ├── Profile (8064) ──── PostgreSQL (5436)
+                                    │    (WebFlux + R2DBC)    profiledb
+                                    │
+                                    └── Notification (8066) ─ PostgreSQL (5437)
+                                         (WebFlux + R2DBC)    notificationdb
 ```
 
 | Service | Port | Stack | Role |
@@ -44,10 +47,12 @@ Browser (5173) ── Gateway (8080) ──┬── Auth Server (9090) ── P
 | `shop` | 8061 | Spring WebFlux + R2DBC | E-commerce catalog, orders |
 | `payment` | 8062 | Spring WebFlux + R2DBC + Stripe API | Payment intent creation, Stripe webhooks |
 | `delivery` | 8063 | Spring WebFlux + R2DBC + Kafka | Delivery tracking, consumes `orders.events` |
-| `profile` | 8064 | Spring WebFlux + R2DBC | User profile & delivery address management |
+| `profile` | 8064 | Spring WebFlux + R2DBC | User profile & delivery addresses; provisions profiles from `identity.events` |
+| `notification` | 8066 | Spring WebFlux + R2DBC + Kafka | Transactional email (Resend); consumes `identity.events` |
 | `ui-shop` | 5173 | React + Vite + oidc-client-ts | SPA storefront with Stripe Elements |
 | `postgres` | 5432 | PostgreSQL 17 | Auth server database |
 | `shop-postgres` | 5433 | PostgreSQL | Shop database |
+| `notification-postgres` | 5437 | PostgreSQL | Notification database |
 | `payment-postgres` | 5434 | PostgreSQL | Payment database |
 | `delivery-postgres` | 5435 | PostgreSQL | Delivery database |
 | `profile-postgres` | 5436 | PostgreSQL | Profile database |
@@ -133,6 +138,10 @@ cd delivery && ./gradlew bootRun
 
 # Profile (port 8064)
 cd profile && ./gradlew bootRun
+
+# Notification (port 8066) — email sending needs RESEND_API_KEY;
+# without it EmailChannel logs and skips, which is fine for local work.
+cd notification && RESEND_API_KEY=re_... ./gradlew bootRun
 
 # UI shop (port 5173)
 cd ui-shop && npm install && npm run dev

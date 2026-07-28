@@ -1,7 +1,6 @@
 package org.granitesecurity.authserver.user;
 
 import org.granitesecurity.authserver.client.NotificationEventPublisher;
-import org.granitesecurity.authserver.client.ProfileNotificationClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +22,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -33,16 +33,12 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class PasswordResetServiceTest {
 
-    private static final String FRONTEND_ORIGIN = "https://granite-security.org";
 
     @Mock
     private UserRepository userRepository;
 
     @Mock
     private PasswordResetTokenRepository passwordResetTokenRepository;
-
-    @Mock
-    private ProfileNotificationClient profileNotificationClient;
 
     @Mock
     private NotificationEventPublisher notificationEventPublisher;
@@ -54,7 +50,7 @@ class PasswordResetServiceTest {
     @BeforeEach
     void setUp() {
         service = new PasswordResetService(userRepository, passwordResetTokenRepository, passwordEncoder,
-                profileNotificationClient, notificationEventPublisher, FRONTEND_ORIGIN);
+                notificationEventPublisher);
         TransactionSynchronizationManager.initSynchronization();
     }
 
@@ -71,7 +67,8 @@ class PasswordResetServiceTest {
 
         verify(passwordResetTokenRepository, never()).save(any());
         runAfterCommitCallbacks();
-        verify(profileNotificationClient, never()).notifyPasswordResetRequested(any(), any(), any());
+        verify(notificationEventPublisher, never())
+                .publishPasswordResetRequested(any(), any(), any(), any());
     }
 
     @Test
@@ -85,7 +82,8 @@ class PasswordResetServiceTest {
 
         verify(passwordResetTokenRepository, never()).save(any());
         runAfterCommitCallbacks();
-        verify(profileNotificationClient, never()).notifyPasswordResetRequested(any(), any(), any());
+        verify(notificationEventPublisher, never())
+                .publishPasswordResetRequested(any(), any(), any(), any());
     }
 
     @Test
@@ -105,10 +103,13 @@ class PasswordResetServiceTest {
         assertThat(saved.getUsedAt()).isNull();
         assertThat(saved.getExpiresAt()).isAfter(OffsetDateTime.now());
 
-        verify(profileNotificationClient, never()).notifyPasswordResetRequested(any(), any(), any());
+        // The raw token goes on the event, not a rendered link — the notification
+        // service builds the URL from its own frontend origin (D3).
+        verify(notificationEventPublisher, never())
+                .publishPasswordResetRequested(any(), any(), any(), any());
         runAfterCommitCallbacks();
-        verify(profileNotificationClient).notifyPasswordResetRequested(eq("alice"), eq("alice@example.com"),
-                contains(FRONTEND_ORIGIN + "/reset-password/confirm?token="));
+        verify(notificationEventPublisher).publishPasswordResetRequested(
+                eq("alice"), eq("alice@example.com"), argThat(t -> t != null && !t.isBlank()), any());
     }
 
     @Test
@@ -165,9 +166,9 @@ class PasswordResetServiceTest {
         assertThat(token.getUsedAt()).isNotNull();
         verify(passwordResetTokenRepository).save(token);
 
-        verify(profileNotificationClient, never()).notifyPasswordChanged(any(), any());
+        verify(notificationEventPublisher, never()).publishPasswordChanged(any(), any());
         runAfterCommitCallbacks();
-        verify(profileNotificationClient).notifyPasswordChanged("alice", "alice@example.com");
+        verify(notificationEventPublisher).publishPasswordChanged("alice", "alice@example.com");
     }
 
     private static void runAfterCommitCallbacks() {

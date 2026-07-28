@@ -1,7 +1,6 @@
 package org.granitesecurity.authserver.user;
 
 import org.granitesecurity.authserver.client.NotificationEventPublisher;
-import org.granitesecurity.authserver.client.ProfileNotificationClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,9 +28,6 @@ class PasswordChangeServiceTest {
     private UserRepository userRepository;
 
     @Mock
-    private ProfileNotificationClient profileNotificationClient;
-
-    @Mock
     private NotificationEventPublisher notificationEventPublisher;
 
     private final PasswordEncoder passwordEncoder = PasswordEncoderFactories.createDelegatingPasswordEncoder();
@@ -40,8 +36,7 @@ class PasswordChangeServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new PasswordChangeService(userRepository, passwordEncoder, profileNotificationClient,
-                notificationEventPublisher);
+        service = new PasswordChangeService(userRepository, passwordEncoder, notificationEventPublisher);
         // changePassword registers an afterCommit synchronization for the
         // notify hop; without an active synchronization scope that call
         // throws, so simulate one the way a real @Transactional method would.
@@ -103,10 +98,10 @@ class PasswordChangeServiceTest {
 
         // Notification is deferred to an afterCommit synchronization, not
         // fired inline — simulate the commit to verify it's wired correctly.
-        verify(profileNotificationClient, never()).notifyPasswordChanged(any(), any());
+        verify(notificationEventPublisher, never()).publishPasswordChanged(any(), any());
         TransactionSynchronizationManager.getSynchronizations()
                 .forEach(TransactionSynchronization::afterCommit);
-        verify(profileNotificationClient).notifyPasswordChanged("alice", "alice@example.com");
+        verify(notificationEventPublisher).publishPasswordChanged("alice", "alice@example.com");
     }
 
     private UserEntity localUser(String username, String rawPassword) {

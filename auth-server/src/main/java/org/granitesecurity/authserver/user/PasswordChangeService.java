@@ -1,7 +1,6 @@
 package org.granitesecurity.authserver.user;
 
 import org.granitesecurity.authserver.client.NotificationEventPublisher;
-import org.granitesecurity.authserver.client.ProfileNotificationClient;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,15 +12,12 @@ public class PasswordChangeService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final ProfileNotificationClient profileNotificationClient;
     private final NotificationEventPublisher notificationEventPublisher;
 
     public PasswordChangeService(UserRepository userRepository, PasswordEncoder passwordEncoder,
-                                  ProfileNotificationClient profileNotificationClient,
                                   NotificationEventPublisher notificationEventPublisher) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
-        this.profileNotificationClient = profileNotificationClient;
         this.notificationEventPublisher = notificationEventPublisher;
     }
 
@@ -55,10 +51,6 @@ public class PasswordChangeService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                // Dual-write during the migration: the HTTP call is still what
-                // actually sends mail; the event is consumed once the notification
-                // service is switched on. Phase 5 deletes the former.
-                profileNotificationClient.notifyPasswordChanged(username, email);
                 notificationEventPublisher.publishPasswordChanged(username, email);
             }
         });

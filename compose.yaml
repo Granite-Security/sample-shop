@@ -150,7 +150,6 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - SERVER_PORT=9090
-      - MICROSERVICES_PROFILE_URI=http://profile:8064
       - AUTH_SERVER_TOKEN_URI=http://auth-server:9090/auth/oauth2/token
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
     healthcheck:
@@ -271,7 +270,6 @@ services:
       - AUTH_ISSUER_URI=http://gateway:8080/auth
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      # Phase 4 flip: RESEND_API_KEY removed — profile no longer sends mail.
     depends_on:
       gateway:
         condition: service_started
