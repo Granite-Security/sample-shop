@@ -25,10 +25,21 @@ public class StorageService {
 
     private static final String USER_FILES_SCOPE = "user-files";
 
+    private static final String AVATARS_SCOPE = "avatars";
+
+    // Scopes a plain logged-in user may sign and delete keys under. Everything
+    // else (today: "products") is ADMIN/MANAGER only.
+    private static final Set<String> SELF_SERVICE_SCOPES = Set.of(USER_FILES_SCOPE, AVATARS_SCOPE);
+
     private static final Map<String, Set<String>> ALLOWED_CONTENT_TYPES_BY_SCOPE = Map.of(
             "products", Set.of("image/jpeg", "image/png", "image/webp"),
             USER_FILES_SCOPE, Set.of("image/jpeg", "image/png", "image/webp",
-                    "application/pdf", "text/plain")
+                    "application/pdf", "text/plain"),
+            // Its own scope rather than a corner of user-files: an avatar in the
+            // file cabinet would be a stray image counting against the 50-file
+            // limit, and would inherit application/pdf and a 5 GB ceiling
+            // (docs/users/user-pic.md D2).
+            AVATARS_SCOPE, Set.of("image/jpeg", "image/png", "image/webp")
     );
 
     // Long enough for a multi-GB upload on a slow connection to finish before
@@ -65,13 +76,13 @@ public class StorageService {
                 throw new StorageException("contentType must be one of " + allowedContentTypes);
             }
 
-            // Only user-files gets a per-uploader folder — products has no
-            // per-admin ownership concept, so a username segment there would
+            // Only the per-user scopes get a per-uploader folder — products has
+            // no per-admin ownership concept, so a username segment there would
             // just be noise. The bucket is public, so this does mean a
             // user's own username is visible in their own file URLs; that's
             // an accepted, deliberate trade-off for browsable per-user
             // folders in Garage, not an oversight.
-            String prefix = USER_FILES_SCOPE.equals(scope) ? scope + "/" + sanitizeSegment(username) : scope;
+            String prefix = SELF_SERVICE_SCOPES.contains(scope) ? scope + "/" + sanitizeSegment(username) : scope;
             String key = prefix + "/" + UUID.randomUUID() + "/" + sanitize(fileName);
 
             PresignedPutObjectRequest presigned = s3Presigner.presignPutObject(PutObjectPresignRequest.builder()
@@ -116,9 +127,9 @@ public class StorageService {
             return;
         }
         // Any other authenticated caller (a plain logged-in user, not just an
-        // internal service) is confined to the user-files scope — only
+        // internal service) is confined to the self-service scopes — only
         // ADMIN/MANAGER may sign/delete product-media keys.
-        if (!USER_FILES_SCOPE.equals(scope)) {
+        if (!SELF_SERVICE_SCOPES.contains(scope)) {
             throw new StorageException(
                     "caller is not authorized to use scope: " + scope, HttpStatus.FORBIDDEN, "Forbidden");
         }

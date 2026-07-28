@@ -2,6 +2,7 @@ package org.granitesecurity.profile.route;
 
 import org.granitesecurity.profile.handler.AddressHandler;
 import org.granitesecurity.profile.handler.AdminUserHandler;
+import org.granitesecurity.profile.handler.AvatarHandler;
 import org.granitesecurity.profile.handler.ProfileHandler;
 import org.granitesecurity.profile.handler.UserFileHandler;
 import org.springframework.context.annotation.Bean;
@@ -18,10 +19,14 @@ public class ProfileRoute {
             ProfileHandler profileHandler,
             AddressHandler addressHandler,
             UserFileHandler userFileHandler,
+            AvatarHandler avatarHandler,
             AdminUserHandler adminUserHandler) {
         return RouterFunctions.route()
                 .GET("/api/profiles/me", profileHandler::getMe)
                 .PUT("/api/profiles/me", profileHandler::updateMe)
+                .PUT("/api/profiles/me/avatar", avatarHandler::register)
+                .PUT("/api/profiles/me/avatar/source", avatarHandler::setSource)
+                .DELETE("/api/profiles/me/avatar", avatarHandler::remove)
                 .GET("/api/profiles/me/addresses", addressHandler::listAddresses)
                 .POST("/api/profiles/me/addresses", addressHandler::createAddress)
                 .PUT("/api/profiles/me/addresses/{id}", addressHandler::updateAddress)

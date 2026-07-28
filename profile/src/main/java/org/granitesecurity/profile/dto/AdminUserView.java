@@ -23,6 +23,9 @@ public record AdminUserView(
         String signInState,
         List<String> roles,
         boolean hasProfile,
+        // The effective picture only — an admin list has no business offering
+        // the alternatives a user is choosing between.
+        String avatarUrl,
         OffsetDateTime blockedAt,
         String blockedBy,
         Instant profileCreatedAt) {

@@ -18,9 +18,12 @@ public class ProfileHandler {
         this.profileService = profileService;
     }
 
+    // The only endpoint that reads the `picture` claim: it is the one a signed-in
+    // user hits on every account page, which is what keeps the cached Google
+    // picture fresh without any polling (docs/users/user-pic.md D1).
     public Mono<ServerResponse> getMe(ServerRequest request) {
-        return getUsername(request)
-                .flatMap(profileService::getProfile)
+        return getJwt(request)
+                .flatMap(jwt -> profileService.getProfile(jwt.getSubject(), jwt.getClaimAsString("picture")))
                 .flatMap(profile -> ServerResponse.ok().bodyValue(profile));
     }
 
@@ -43,8 +46,12 @@ public class ProfileHandler {
     }
 
     private Mono<String> getUsername(ServerRequest request) {
+        return getJwt(request).map(Jwt::getSubject);
+    }
+
+    private Mono<Jwt> getJwt(ServerRequest request) {
         return request.principal()
                 .cast(Authentication.class)
-                .map(auth -> ((Jwt) auth.getCredentials()).getSubject());
+                .map(auth -> (Jwt) auth.getCredentials());
     }
 }

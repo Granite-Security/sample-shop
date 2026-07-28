@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router';
 import { useAuth } from '../auth';
 import { api } from '../api';
 import type { AdminUserProfile } from '../types';
+import Avatar from '../components/Avatar';
 
 export default function UserProfileView() {
   const { isAdmin } = useAuth();
@@ -41,6 +42,11 @@ export default function UserProfileView() {
           padding: 16, background: 'var(--surface)', borderRadius: 8,
           border: '1px solid var(--border)', maxWidth: 480,
         }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+            <Avatar src={profile.avatarUrl} name={profile.username} size={56} />
+            <strong>{profile.firstName} {profile.lastName}</strong>
+          </div>
+
           <dl style={{ margin: 0 }}>
             <dt style={{ fontWeight: 700, marginTop: 8 }}>Username</dt>
             <dd style={{ margin: '2px 0 0' }}>{profile.username}</dd>

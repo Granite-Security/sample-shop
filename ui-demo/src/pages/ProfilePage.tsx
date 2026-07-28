@@ -1,5 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { api } from '../api';
+import { Avatar } from '../components/Avatar';
 import type { ProfileResponse } from '../types';
 
 const inputStyle =
@@ -99,6 +100,8 @@ function ProfileDetails() {
             </p>
           )}
 
+          {profile && <AvatarPicker profile={profile} onChange={setProfile} />}
+
           {!profile ? (
             <p className="mt-4 text-sm text-cocoa/50">Could not load your profile.</p>
           ) : editing ? (
@@ -191,6 +194,100 @@ function ProfileDetails() {
         </>
       )}
     </section>
+  );
+}
+
+const pickerButton =
+  'text-xs uppercase tracking-[0.14em] text-cocoa underline decoration-gold underline-offset-4 transition-colors hover:text-terracotta disabled:cursor-not-allowed disabled:opacity-40';
+
+function AvatarPicker({ profile, onChange }: {
+  profile: ProfileResponse;
+  onChange: (profile: ProfileResponse) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const displayName = profile.displayName || profile.username;
+  const hasGoogle = profile.googlePictureUrl !== null;
+  const hasUpload = profile.uploadedAvatarUrl !== null;
+
+  async function run(action: () => Promise<ProfileResponse>) {
+    setBusy(true);
+    setError(null);
+    try {
+      onChange(await action());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function onFileSelected(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) run(() => api.uploadAvatar(file));
+  }
+
+  return (
+    <div className="mt-6 flex flex-wrap items-center gap-6 border-b border-cocoa/10 pb-8">
+      <Avatar src={profile.avatarUrl} name={displayName} size={80} ring />
+
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-5">
+          <button type="button" disabled={busy} className={pickerButton}
+            onClick={() => fileInput.current?.click()}>
+            {busy ? 'Working…' : hasUpload ? 'Replace picture' : 'Upload a picture'}
+          </button>
+
+          {/* Only offered when there is something to switch to, so the buttons
+              never lead to a 400 the customer can't act on. */}
+          {hasGoogle && profile.avatarSource !== 'GOOGLE' && (
+            <button type="button" disabled={busy} className={pickerButton}
+              onClick={() => run(() => api.setAvatarSource('GOOGLE'))}>
+              Use my Google picture
+            </button>
+          )}
+          {hasUpload && profile.avatarSource !== 'UPLOAD' && (
+            <button type="button" disabled={busy} className={pickerButton}
+              onClick={() => run(() => api.setAvatarSource('UPLOAD'))}>
+              Use my uploaded picture
+            </button>
+          )}
+          {hasUpload && (
+            <button type="button" disabled={busy}
+              className={`${pickerButton} text-terracotta/80 decoration-terracotta/40`}
+              onClick={() => run(() => api.removeAvatar())}>
+              Remove upload
+            </button>
+          )}
+          {profile.avatarSource !== 'NONE' && (
+            <button type="button" disabled={busy} className={pickerButton}
+              onClick={() => run(() => api.setAvatarSource('NONE'))}>
+              Show initials
+            </button>
+          )}
+        </div>
+
+        <p className="text-xs text-cocoa/50">
+          {profile.avatarSource === 'GOOGLE' && 'Showing your Google picture.'}
+          {profile.avatarSource === 'UPLOAD' && 'Showing the picture you uploaded.'}
+          {profile.avatarSource === 'NONE' && 'Showing your initials.'}
+          {' '}JPEG, PNG or WebP — cropped to a square and resized before upload.
+        </p>
+
+        {error && <p className="text-xs text-terracotta">{error}</p>}
+      </div>
+
+      <input
+        ref={fileInput}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={onFileSelected}
+        className="hidden"
+      />
+    </div>
   );
 }
 

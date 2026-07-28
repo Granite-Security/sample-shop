@@ -31,6 +31,7 @@ import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.core.oidc.StandardClaimNames;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.authorization.client.InMemoryRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
@@ -382,6 +383,18 @@ public class SecurityConfig {
                         .map(GrantedAuthority::getAuthority)
                         .collect(java.util.stream.Collectors.toSet());
                 context.getClaims().claim("roles", roles);
+
+                // Google's `picture`, forwarded rather than stored. We already
+                // request the `profile` scope from Google, so this arrives on
+                // every federated login and was previously discarded. profile
+                // caches it off this claim (docs/users/user-pic.md D1) instead
+                // of authdb growing a column and identity.events growing an
+                // event to keep that column fresh. Absent for form logins,
+                // whose principal is a plain UserDetails — as it should be.
+                if (context.getPrincipal().getPrincipal() instanceof OidcUser oidcUser
+                        && oidcUser.getPicture() != null && !oidcUser.getPicture().isBlank()) {
+                    context.getClaims().claim("picture", oidcUser.getPicture());
+                }
             }
         };
     }
