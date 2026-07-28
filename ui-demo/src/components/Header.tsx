@@ -4,6 +4,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { useShop } from '../store';
 import { AccountIcon, BagIcon, CloseIcon, HeartIcon, MenuIcon, SearchIcon } from './icons';
+import { Avatar } from './Avatar';
 
 const NAV = ['Shop', 'Collections', 'Our Craft', 'Gifts', 'Journal', 'Contact'];
 
@@ -49,6 +50,7 @@ export function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -62,9 +64,18 @@ export function Header() {
   useEffect(() => {
     if (!isAuthenticated) {
       setDisplayName(null);
+      setAvatarUrl(null);
       return;
     }
-    api.getMyProfile().then((p) => setDisplayName(p.displayName)).catch(() => {});
+    api.getMyProfile()
+      .then((p) => {
+        setDisplayName(p.displayName);
+        // Read from the profile, never from the token's `picture` claim: the
+        // claim is always Google's, and it would override a customer who has
+        // chosen their upload (docs/users/user-pic.md D1).
+        setAvatarUrl(p.avatarUrl);
+      })
+      .catch(() => {});
   }, [isAuthenticated]);
 
   const accountLabel = displayName ?? user?.name;
@@ -121,7 +132,7 @@ export function Header() {
                 aria-expanded={accountOpen}
                 onClick={() => setAccountOpen((v) => !v)}
               >
-                <AccountIcon />
+                {avatarUrl ? <Avatar src={avatarUrl} name={accountLabel ?? '?'} size={26} /> : <AccountIcon />}
                 <span className="hidden sm:inline max-w-24 truncate text-xs tracking-[0.14em] uppercase">
                   {accountLabel}
                 </span>

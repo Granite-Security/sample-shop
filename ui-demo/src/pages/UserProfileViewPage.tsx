@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import type { AdminUserProfile } from '../types';
+import { Avatar } from '../components/Avatar';
 
 export function UserProfileViewPage() {
   const { isAdmin, loading: authLoading } = useAuth();
@@ -64,12 +65,21 @@ export function UserProfileViewPage() {
         {loading ? (
           <p className="mt-10 text-sm text-cocoa/50">Loading profile…</p>
         ) : profile && (
-          <dl className="mt-10 max-w-md divide-y divide-cocoa/10 border-y border-cocoa/10">
+          <>
+          <div className="mt-10 flex items-center gap-4">
+            <Avatar src={profile.avatarUrl} name={profile.username} size={64} ring />
+            <span className="font-display text-[22px] text-cocoa">
+              {profile.firstName} {profile.lastName}
+            </span>
+          </div>
+
+          <dl className="mt-8 max-w-md divide-y divide-cocoa/10 border-y border-cocoa/10">
             <ProfileRow label="Username" value={profile.username} />
             <ProfileRow label="Name" value={`${profile.firstName} ${profile.lastName}`} />
             <ProfileRow label="Email" value={profile.email} />
             <ProfileRow label="Member since" value={new Date(profile.createdAt).toLocaleDateString()} />
           </dl>
+          </>
         )}
 
         <div className="mt-10">

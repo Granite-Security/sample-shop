@@ -29,6 +29,23 @@ public class UserProfile {
     @Column("display_name")
     private String displayName;
 
+    // Which of the two possible pictures wins: UPLOAD, GOOGLE or NONE. The
+    // uploaded object survives a switch to GOOGLE so switching back does not
+    // mean uploading again (docs/users/user-pic.md D3).
+    @Column("avatar_source")
+    private String avatarSource = "NONE";
+
+    @Column("avatar_object_key")
+    private String avatarObjectKey;
+
+    @Column("uploaded_avatar_url")
+    private String uploadedAvatarUrl;
+
+    // A cache of Google's `picture` claim, not an identifier: the URL rotates
+    // when the user changes their Google photo and the old one eventually 404s.
+    @Column("google_picture_url")
+    private String googlePictureUrl;
+
     @Column("created_at")
     private Instant createdAt;
 

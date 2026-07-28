@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { useAuth } from '../auth';
 import { api } from '../api';
 import type { AdminUserView } from '../types';
+import Avatar from '../components/Avatar';
 import DeleteUserDialog from './DeleteUserDialog';
 
 const SIGN_IN_LABELS: Record<AdminUserView['signInState'], { label: string; title: string }> = {
@@ -113,6 +114,7 @@ export default function UsersManagement() {
                 opacity: u.enabled ? 1 : 0.7,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <Avatar src={u.avatarUrl} name={u.displayName || u.username} size={32} />
                   <strong>{u.username}</strong>
                   <Badge
                     text={u.enabled ? 'Active' : 'Blocked'}

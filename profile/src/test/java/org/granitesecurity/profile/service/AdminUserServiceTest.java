@@ -2,6 +2,7 @@ package org.granitesecurity.profile.service;
 
 import org.granitesecurity.profile.client.IdentityAdminClient;
 import org.granitesecurity.profile.client.ShopAdminClient;
+import org.granitesecurity.profile.client.StorageClient;
 import org.granitesecurity.profile.domain.AdminAction;
 import org.granitesecurity.profile.domain.UserProfile;
 import org.granitesecurity.profile.dto.AuthUser;
@@ -10,6 +11,7 @@ import org.granitesecurity.profile.dto.PurgeEligibility;
 import org.granitesecurity.profile.dto.PurgeResult;
 import org.granitesecurity.profile.repository.AdminActionRepository;
 import org.granitesecurity.profile.repository.DeliveryAddressRepository;
+import org.granitesecurity.profile.repository.UserFileRepository;
 import org.granitesecurity.profile.repository.UserProfileRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,6 +39,7 @@ class AdminUserServiceTest {
     private ShopAdminClient shopAdminClient;
     private UserProfileRepository userProfileRepository;
     private DeliveryAddressRepository deliveryAddressRepository;
+    private UserFileRepository userFileRepository;
     private AdminActionRepository adminActionRepository;
     private AdminUserService service;
 
@@ -46,18 +49,23 @@ class AdminUserServiceTest {
         shopAdminClient = mock(ShopAdminClient.class);
         userProfileRepository = mock(UserProfileRepository.class);
         deliveryAddressRepository = mock(DeliveryAddressRepository.class);
+        userFileRepository = mock(UserFileRepository.class);
         adminActionRepository = mock(AdminActionRepository.class);
+        StorageClient storageClient = mock(StorageClient.class);
         // Pass-through: transactional boundaries are not what these tests verify.
         TransactionalOperator transactionalOperator = mock(TransactionalOperator.class);
         when(transactionalOperator.transactional(any(Mono.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         service = new AdminUserService(identityAdminClient, shopAdminClient, userProfileRepository,
-                deliveryAddressRepository, adminActionRepository, transactionalOperator);
+                deliveryAddressRepository, userFileRepository, adminActionRepository, storageClient,
+                transactionalOperator);
 
         when(adminActionRepository.save(any(AdminAction.class)))
                 .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
         when(deliveryAddressRepository.findByUsername(anyString())).thenReturn(Flux.empty());
         when(userProfileRepository.findByUsername(anyString())).thenReturn(Mono.empty());
+        when(userFileRepository.findByUsernameOrderByCreatedAtDesc(anyString())).thenReturn(Flux.empty());
+        when(storageClient.delete(anyString())).thenReturn(Mono.empty());
     }
 
     private AuthUser user(String username, boolean enabled, String... roles) {

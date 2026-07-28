@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import type { AdminUserView } from '../types';
+import { Avatar } from '../components/Avatar';
 import { DeleteUserDialog } from './DeleteUserDialog';
 
 const SIGN_IN_LABELS: Record<AdminUserView['signInState'], { label: string; title: string }> = {
@@ -139,6 +140,7 @@ export function UsersManagementPage() {
               return (
                 <li key={u.username} className={`py-6 ${u.enabled ? '' : 'opacity-70'}`}>
                   <div className="flex flex-wrap items-center gap-2">
+                    <Avatar src={u.avatarUrl} name={u.displayName || u.username} size={34} />
                     <span className="font-display text-lg text-cocoa">{u.username}</span>
                     <Badge
                       text={u.enabled ? 'Active' : 'Blocked'}

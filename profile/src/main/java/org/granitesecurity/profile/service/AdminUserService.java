@@ -2,6 +2,7 @@ package org.granitesecurity.profile.service;
 
 import org.granitesecurity.profile.client.IdentityAdminClient;
 import org.granitesecurity.profile.client.ShopAdminClient;
+import org.granitesecurity.profile.client.StorageClient;
 import org.granitesecurity.profile.domain.AdminAction;
 import org.granitesecurity.profile.dto.AdminUserView;
 import org.granitesecurity.profile.dto.AuthUser;
@@ -10,6 +11,7 @@ import org.granitesecurity.profile.dto.PurgeEligibility;
 import org.granitesecurity.profile.domain.UserProfile;
 import org.granitesecurity.profile.repository.AdminActionRepository;
 import org.granitesecurity.profile.repository.DeliveryAddressRepository;
+import org.granitesecurity.profile.repository.UserFileRepository;
 import org.granitesecurity.profile.repository.UserProfileRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,20 +45,26 @@ public class AdminUserService {
     private final ShopAdminClient shopAdminClient;
     private final UserProfileRepository userProfileRepository;
     private final DeliveryAddressRepository deliveryAddressRepository;
+    private final UserFileRepository userFileRepository;
     private final AdminActionRepository adminActionRepository;
+    private final StorageClient storageClient;
     private final TransactionalOperator transactionalOperator;
 
     public AdminUserService(IdentityAdminClient identityAdminClient,
                             ShopAdminClient shopAdminClient,
                             UserProfileRepository userProfileRepository,
                             DeliveryAddressRepository deliveryAddressRepository,
+                            UserFileRepository userFileRepository,
                             AdminActionRepository adminActionRepository,
+                            StorageClient storageClient,
                             TransactionalOperator transactionalOperator) {
         this.identityAdminClient = identityAdminClient;
         this.shopAdminClient = shopAdminClient;
         this.userProfileRepository = userProfileRepository;
         this.deliveryAddressRepository = deliveryAddressRepository;
+        this.userFileRepository = userFileRepository;
         this.adminActionRepository = adminActionRepository;
+        this.storageClient = storageClient;
         this.transactionalOperator = transactionalOperator;
     }
 
@@ -87,6 +95,7 @@ public class AdminUserService {
                 user.signInState(),
                 user.roles(),
                 profile != null,
+                profile != null ? ProfileService.effectiveAvatarUrl(profile) : null,
                 user.blockedAt(),
                 user.blockedBy(),
                 profile != null ? profile.getCreatedAt() : null);
@@ -154,21 +163,60 @@ public class AdminUserService {
     }
 
     /**
-     * Deliberately scoped to the profile row and its delivery addresses, per
-     * §8 Phase 4. Note that {@code user_file} rows — and the objects they point
-     * at in storage — are NOT removed here.
+     * Removes the profile row, its delivery addresses, its uploaded files and the
+     * avatar — and the storage objects the last two point at.
+     *
+     * <p>The file rows were originally left behind (blocking-users-implementation.md
+     * §6 gap 1). Adding an avatar would have made that two orphans of the same shape,
+     * so both are closed here.
+     *
+     * <p>Order matters: the keys are collected first, the rows are deleted in one
+     * local transaction, and only then are the objects deleted. Doing storage first
+     * would risk destroying the files of a user whose deletion then fails; doing it
+     * last means a storage outage leaves orphaned objects instead, which the bucket
+     * quota tolerates and an admin can sweep.
      */
     private Mono<Void> deleteProfileData(String username) {
-        // One local transaction: both writes hit profile's own database, and a
-        // crash between them would leave a half-scrubbed profile. This is the
-        // only place a transaction applies — the wider delete cascade spans
-        // three services' databases over HTTP and is a saga, not a transaction.
-        return deliveryAddressRepository.findByUsername(username)
-                .flatMap(deliveryAddressRepository::delete)
-                .then(userProfileRepository.findByUsername(username)
-                        .flatMap(userProfileRepository::delete))
-                .then()
-                .as(transactionalOperator::transactional);
+        return userFileRepository.findByUsernameOrderByCreatedAtDesc(username)
+                .map(file -> file.getObjectKey())
+                .collectList()
+                .zipWith(userProfileRepository.findByUsername(username)
+                        .map(profile -> java.util.Optional.ofNullable(profile.getAvatarObjectKey()))
+                        .defaultIfEmpty(java.util.Optional.empty()))
+                .flatMap(keys -> {
+                    List<String> objectKeys = new java.util.ArrayList<>(keys.getT1());
+                    keys.getT2().ifPresent(objectKeys::add);
+                    // One local transaction: every write hits profile's own
+                    // database, and a crash midway would leave a half-scrubbed
+                    // profile. This is the only place a transaction applies — the
+                    // wider delete cascade spans three services' databases over
+                    // HTTP and is a saga, not a transaction.
+                    return deliveryAddressRepository.findByUsername(username)
+                            .flatMap(deliveryAddressRepository::delete)
+                            .thenMany(userFileRepository.findByUsernameOrderByCreatedAtDesc(username))
+                            .flatMap(userFileRepository::delete)
+                            .then(userProfileRepository.findByUsername(username)
+                                    .flatMap(userProfileRepository::delete))
+                            .then()
+                            .as(transactionalOperator::transactional)
+                            .then(deleteObjectsQuietly(username, objectKeys));
+                });
+    }
+
+    /**
+     * Best-effort by design: the account is already gone, and a storage failure
+     * must not turn a completed deletion into an error the admin has to retry —
+     * retrying would re-run the whole saga against a user that no longer exists.
+     */
+    private Mono<Void> deleteObjectsQuietly(String username, List<String> keys) {
+        return Flux.fromIterable(keys)
+                .flatMap(key -> storageClient.delete(key)
+                        .onErrorResume(e -> {
+                            log.warn("orphaned storage object {} for deleted user {}: {}",
+                                    key, username, e.getMessage());
+                            return Mono.empty();
+                        }))
+                .then();
     }
 
     // ── Guard rails (§7), enforced server-side ──────────────────────

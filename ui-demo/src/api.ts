@@ -19,7 +19,9 @@ import type {
   AdminUserView,
   AdminUserProfile,
   DeleteUserResult,
+  AvatarSource,
 } from './types';
+import { downscaleToSquare } from './utils/avatar';
 
 // Same-origin calls through the gateway, exactly like ui-shop. Browsing the
 // catalog is public; once logged in (spa-client via the auth-server) the
@@ -121,6 +123,37 @@ export const api = {
 
   updateMyProfile: (body: UpdateProfileRequest) =>
     request<ProfileResponse>('/api/profiles/me', { method: 'PUT', body: JSON.stringify(body) }),
+
+  // Avatar. Deliberately separate from updateMyProfile, which overwrites every
+  // field it is given (docs/users/user-pic.md D4).
+  uploadAvatar: async (file: File): Promise<ProfileResponse> => {
+    const square = await downscaleToSquare(file);
+    const presigned = await api.presignUpload(square.name, square.type, 'avatars');
+    const putResponse = await fetch(presigned.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': square.type },
+      body: square,
+    });
+    if (!putResponse.ok) {
+      throw new Error(`Upload failed: ${putResponse.status} ${putResponse.statusText}`);
+    }
+    return request<ProfileResponse>('/api/profiles/me/avatar', {
+      method: 'PUT',
+      body: JSON.stringify({
+        key: presigned.key,
+        url: presigned.publicUrl,
+        contentType: square.type,
+        sizeBytes: square.size,
+      }),
+    });
+  },
+
+  setAvatarSource: (source: AvatarSource) =>
+    request<ProfileResponse>('/api/profiles/me/avatar/source',
+      { method: 'PUT', body: JSON.stringify({ source }) }),
+
+  removeAvatar: () =>
+    request<ProfileResponse>('/api/profiles/me/avatar', { method: 'DELETE' }),
 
   getAddresses: () => request<AddressResponse[]>('/api/profiles/me/addresses'),
 

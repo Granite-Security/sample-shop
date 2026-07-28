@@ -1,10 +1,12 @@
 import { request } from './client';
 import { storageApi } from './storage';
+import { downscaleToSquare } from '../utils/avatar';
 import type {
   AddressRequest,
   AddressResponse,
   AdminUserProfile,
   AdminUserView,
+  AvatarSource,
   DeleteUserResult,
   DuplicateFileCheckResponse,
   ProfileResponse,
@@ -63,6 +65,37 @@ export const profileApi = {
 
   updateProfile: (body: UpdateProfileRequest) =>
     request<ProfileResponse>('/api/profiles/me', { method: 'PUT', body: JSON.stringify(body) }),
+
+  // Avatar. Deliberately separate from updateProfile, which overwrites every
+  // field it is given (docs/users/user-pic.md D4).
+  uploadAvatar: async (file: File): Promise<ProfileResponse> => {
+    const square = await downscaleToSquare(file);
+    const presigned = await storageApi.presignUpload(square.name, square.type, 'avatars');
+    const putResponse = await fetch(presigned.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': square.type },
+      body: square,
+    });
+    if (!putResponse.ok) {
+      throw new Error(`Upload failed: ${putResponse.status} ${putResponse.statusText}`);
+    }
+    return request<ProfileResponse>('/api/profiles/me/avatar', {
+      method: 'PUT',
+      body: JSON.stringify({
+        key: presigned.key,
+        url: presigned.publicUrl,
+        contentType: square.type,
+        sizeBytes: square.size,
+      }),
+    });
+  },
+
+  setAvatarSource: (source: AvatarSource) =>
+    request<ProfileResponse>('/api/profiles/me/avatar/source',
+      { method: 'PUT', body: JSON.stringify({ source }) }),
+
+  removeAvatar: () =>
+    request<ProfileResponse>('/api/profiles/me/avatar', { method: 'DELETE' }),
 
   getAddresses: () =>
     request<AddressResponse[]>('/api/profiles/me/addresses'),

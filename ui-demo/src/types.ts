@@ -112,6 +112,8 @@ export interface AddressRequest {
   isDefault?: boolean;
 }
 
+export type AvatarSource = 'UPLOAD' | 'GOOGLE' | 'NONE';
+
 export interface ProfileResponse {
   id: number;
   username: string;
@@ -119,6 +121,13 @@ export interface ProfileResponse {
   firstName: string;
   lastName: string;
   displayName: string | null;
+  // The effective picture, already resolved from avatarSource server-side —
+  // render this one. The other two exist so the profile page can offer a
+  // choice without a second round trip (docs/users/user-pic.md §4).
+  avatarUrl: string | null;
+  avatarSource: AvatarSource;
+  uploadedAvatarUrl: string | null;
+  googlePictureUrl: string | null;
 }
 
 export interface UpdateProfileRequest {
@@ -165,6 +174,7 @@ export interface AdminUserView {
   signInState: 'LOCAL' | 'LINKED' | 'GOOGLE';
   roles: string[];
   hasProfile: boolean;
+  avatarUrl: string | null;
   blockedAt: string | null;
   blockedBy: string | null;
   profileCreatedAt: string | null;
@@ -176,6 +186,7 @@ export interface AdminUserProfile {
   email: string;
   firstName: string;
   lastName: string;
+  avatarUrl: string | null;
   createdAt: string;
   updatedAt: string;
 }
