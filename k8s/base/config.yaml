@@ -49,6 +49,9 @@ data:
   PROFILE_PORT: "8064"
   PROFILE_R2DBC_URL: "r2dbc:postgresql://postgres-profile:5432/profiledb"
   PROFILE_JDBC_URL: "jdbc:postgresql://postgres-profile:5432/profiledb"
+  NOTIFICATION_PORT: "8066"
+  NOTIFICATION_R2DBC_URL: "r2dbc:postgresql://postgres-notification:5432/notificationdb"
+  NOTIFICATION_JDBC_URL: "jdbc:postgresql://postgres-notification:5432/notificationdb"
   # Non-secret — the actual key is resend-api-key in granite-secrets.
   RESEND_FROM: "Granite Security <no-reply@notify.granite-security.org>"
 

@@ -15,7 +15,10 @@ resources:
   - shop.yaml
   - payment.yaml
   - profile.yaml
+  - notification.yaml
   - delivery.yaml
+  # Internal tooling — no HTTPRoute in any overlay, port-forward only (see file header)
+  - kafka-ui.yaml
   - garage.yaml
   - garage-webui.yaml
   - storage.yaml

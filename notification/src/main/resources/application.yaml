@@ -1,0 +1,42 @@
+server:
+  port: ${NOTIFICATION_SERVER_PORT:8066}
+
+spring:
+  application:
+    name: notification
+
+  docker:
+    compose:
+      enabled: false
+
+  r2dbc:
+    url: ${NOTIFICATION_R2DBC_URL:r2dbc:postgresql://localhost:5437/notificationdb}
+    username: ${NOTIFICATION_R2DBC_USERNAME:myuser}
+    password: ${NOTIFICATION_R2DBC_PASSWORD:secret}
+    pool:
+      enabled: true
+      validation-query: SELECT 1
+      max-idle-time: 5m
+
+  liquibase:
+    url: ${NOTIFICATION_JDBC_URL:jdbc:postgresql://localhost:5437/notificationdb}
+    user: ${NOTIFICATION_JDBC_USERNAME:myuser}
+    password: ${NOTIFICATION_JDBC_PASSWORD:secret}
+    change-log: classpath:/db/changelog/db.changelog-master.yaml
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        isolation.level: read_committed
+
+# Email sending is disabled while resend.api-key is blank — EmailService logs and
+# skips. Phase 2 moves the real key here from the profile deployment.
+resend:
+  api-key: ${RESEND_API_KEY:}
+  from: ${RESEND_FROM:Granite Security <no-reply@notify.granite-security.org>}
+  base-url: ${RESEND_BASE_URL:https://api.resend.com}
