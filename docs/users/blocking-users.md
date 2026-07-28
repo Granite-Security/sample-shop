@@ -96,6 +96,56 @@ name is still on the profile" is exactly the failure that matters here.
 
 ## 5. Data model
 
+### Existing constraints on `users`
+
+| Constraint | Columns | Notes |
+|---|---|---|
+| `users_pkey` | `id` | primary key |
+| `users_username_key` | `username` | |
+| `users_email_key` | `email` | |
+| `uk_users_provider_id` | `(provider, provider_id)` | **partial** — `WHERE provider_id IS NOT NULL` |
+
+(Plus a redundant non-unique `idx_users_username`, already covered by the unique
+constraint.)
+
+These are what make the anonymisation below work, and one of them works for a
+non-obvious reason:
+
+- `username` unique → keeping the row reserves the name forever (D4).
+- `email` unique → the scrub value must be **unique per user**, hence
+  `deleted-user-{id}@invalid`. A constant placeholder would collide on the second
+  deletion.
+- `(provider, provider_id)` unique but **partial** → setting `provider_id = NULL`
+  removes the row from that index entirely, so the same Google account can link to a
+  fresh user later. Were the index not partial, a second deleted Google user would
+  collide on `(LOCAL, NULL)`.
+
+### Identity states — `provider` alone does not mean "Google"
+
+`FederatedUserProvisioningService` produces **three** states, not two:
+
+| `provider` | `provider_id` | Meaning | Password? |
+|---|---|---|---|
+| `LOCAL` | `NULL` | Registered with the form | yes |
+| `LOCAL` | `<google sub>` | **Linked** — registered locally, later signed in with Google | yes, still works |
+| `GOOGLE` | `<google sub>` | Provisioned by Google sign-in | no (random unguessable value) |
+
+The middle state is deliberate: when a Google sign-in matches an existing user by email,
+provisioning keeps `provider = LOCAL` and only adds the subject, *"so the existing
+password still works; only link the Google subject so both login methods resolve to this
+row."* `iaka` is in exactly this state in production.
+
+Two consequences:
+
+- **The admin list must show three states**, not a `LOCAL`/`GOOGLE` toggle. Keying a
+  "Google" badge off `provider` alone would mislabel linked accounts as password-only;
+  keying it off `provider_id IS NOT NULL` alone would mislabel them as Google-only. Show
+  *Password* / *Password + Google* / *Google*.
+- **The password-change guard is correct as written.** `PasswordChangeService:31` and
+  `PasswordResetService:46` reject only `provider != LOCAL`, so a linked account can
+  still change its password — right, because it genuinely has one. Do not "fix" this to
+  test `provider_id` instead; that would lock linked users out of their own password.
+
 ### auth-server (Liquibase changeset)
 
 ```sql
@@ -132,9 +182,17 @@ user must not resurrect it.
 | `email` | `deleted-user-{id}@invalid` — frees the real address (D5) |
 | `first_name`, `last_name` | `NULL` |
 | `password` | random unguessable value (never a login path again) |
-| `provider_id` | `NULL` — unlinks the Google account so the person can re-register |
+| `provider_id` | `NULL` — unlinks any Google account (see below) |
 | `enabled` | `false` |
 | `deleted_at` | `now()` |
+
+**Deletion must not be reversible by signing in again.** `FederatedUserProvisioningService`
+resolves a returning Google user by `(provider, provider_id)` first, then falls back to
+matching on **email**. Scrubbing the email and nulling `provider_id` makes *both* lookups
+miss, so a returning user gets a fresh account rather than resurrecting the deleted one.
+That property depends on doing both — scrubbing the email alone would leave the
+provider-id path able to revive a deleted account on the next Google sign-in. Cover it
+with a test.
 
 `profile` mirrors this for its own row on `UserDeleted`: `email`, `first_name`,
 `last_name`, `display_name` → `NULL`. Delivery addresses are deleted outright (pure PII,
@@ -182,7 +240,9 @@ Each phase is independently shippable.
    - `DELETE /api/admin/users/{id}` — soft delete + anonymise
 3. `AdminUserService` with the §6.3 guard rails and the `admin_action` writes.
 4. New security filter chain for `/api/admin/**` **with the roles converter** (§6.1).
-5. Tests: guard rails, anonymisation, and a non-admin token getting 403.
+5. Tests: guard rails, anonymisation, a non-admin token getting 403, and — importantly —
+   that a deleted Google user signing in again gets a **new** account rather than
+   resurrecting the old one (§5, both lookup paths must miss).
 
 **Done when:** an admin token can block/unblock/delete via curl; a user token gets 403.
 
@@ -211,7 +271,8 @@ logs "no template, nothing sent" rather than erroring.
 1. `api.admin.listUsers()` etc. against `/auth/api/admin/**` (the gateway already routes
    `/auth/**`).
 2. `UsersManagement.tsx` lists **auth users** (§2.1) with status badges: Active /
-   Blocked / Deleted.
+   Blocked / Deleted, plus a sign-in badge with the three states from §5:
+   *Password* / *Password + Google* / *Google*.
 3. Block / Unblock / Delete buttons. **Delete asks for typed confirmation of the
    username** — it is irreversible in practice, and a misclick in a user list is easy.
 4. Deleted users render greyed with actions disabled; the current user's own row has
@@ -242,6 +303,8 @@ orders. Size it on its own; do not bolt it onto this feature.
 | `UserDeleted` lost to 1h retention → PII survives in profile | Phase 5 reconciliation job |
 | Soft-deleted users clutter the admin list | Filter deleted out by default, behind a "show deleted" toggle |
 | Orders point at an anonymised user | Intended (D1) — history stays intact and attributable to an id, just not to a person |
+| A deleted Google user is resurrected by signing in again | Scrub the email **and** null `provider_id` — provisioning falls back from `(provider, provider_id)` to email, so only doing one leaves a revival path (§5). Tested in Phase 1 |
+| Linked accounts (`LOCAL` + `provider_id`) mislabelled in the UI, or the password guard "fixed" to test `provider_id` | §5 — three states, and the existing guard is correct as written |
 
 **One thing to verify in Phase 1, not assume:** whether Spring Authorization Server
 re-checks `enabled` on the **refresh token** grant. If it does not, a blocked user could
