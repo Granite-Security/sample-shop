@@ -18,12 +18,17 @@ spring:
     gateway:
       httpclient:
         pool:
-          # Backend services (profile/delivery/payment) close idle Netty
-          # connections on their own default timeout; without this the
-          # gateway's pooled client reuses a connection the backend already
-          # closed, surfacing as recvAddress(-104) "Connection reset by peer"
-          # on the next request. Evicting below the backend default keeps the
-          # pool from ever holding a connection past that point.
+          # NOTE: this does not actually prevent recvAddress(-104) "Connection
+          # reset by peer" — confirmed live against the storage route (see
+          # RouterConfig's storage-service route comment). None of the backend
+          # services configure a Netty server-side idle-timeout (grepped the
+          # whole repo — there isn't one anywhere), so there's no known,
+          # measured value to evict below; whatever actually tears down an
+          # idle connection lives beneath the app (kernel/CNI conntrack) and
+          # isn't documented or tunable here. These numbers are a best-effort
+          # guess, not a fix — the real mitigation is the per-route retry
+          # filter on storage-service, since presign/delete traffic is what
+          # actually goes idle long enough to trigger this in practice.
           max-idle-time: 20s
           eviction-interval: 30s
       globalcors:
