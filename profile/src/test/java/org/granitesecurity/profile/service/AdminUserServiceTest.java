@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -46,8 +47,12 @@ class AdminUserServiceTest {
         userProfileRepository = mock(UserProfileRepository.class);
         deliveryAddressRepository = mock(DeliveryAddressRepository.class);
         adminActionRepository = mock(AdminActionRepository.class);
+        // Pass-through: transactional boundaries are not what these tests verify.
+        TransactionalOperator transactionalOperator = mock(TransactionalOperator.class);
+        when(transactionalOperator.transactional(any(Mono.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         service = new AdminUserService(identityAdminClient, shopAdminClient, userProfileRepository,
-                deliveryAddressRepository, adminActionRepository);
+                deliveryAddressRepository, adminActionRepository, transactionalOperator);
 
         when(adminActionRepository.save(any(AdminAction.class)))
                 .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));

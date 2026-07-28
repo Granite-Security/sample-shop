@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -43,17 +44,20 @@ public class AdminUserService {
     private final UserProfileRepository userProfileRepository;
     private final DeliveryAddressRepository deliveryAddressRepository;
     private final AdminActionRepository adminActionRepository;
+    private final TransactionalOperator transactionalOperator;
 
     public AdminUserService(IdentityAdminClient identityAdminClient,
                             ShopAdminClient shopAdminClient,
                             UserProfileRepository userProfileRepository,
                             DeliveryAddressRepository deliveryAddressRepository,
-                            AdminActionRepository adminActionRepository) {
+                            AdminActionRepository adminActionRepository,
+                            TransactionalOperator transactionalOperator) {
         this.identityAdminClient = identityAdminClient;
         this.shopAdminClient = shopAdminClient;
         this.userProfileRepository = userProfileRepository;
         this.deliveryAddressRepository = deliveryAddressRepository;
         this.adminActionRepository = adminActionRepository;
+        this.transactionalOperator = transactionalOperator;
     }
 
     /**
@@ -155,11 +159,16 @@ public class AdminUserService {
      * at in storage — are NOT removed here.
      */
     private Mono<Void> deleteProfileData(String username) {
+        // One local transaction: both writes hit profile's own database, and a
+        // crash between them would leave a half-scrubbed profile. This is the
+        // only place a transaction applies — the wider delete cascade spans
+        // three services' databases over HTTP and is a saga, not a transaction.
         return deliveryAddressRepository.findByUsername(username)
                 .flatMap(deliveryAddressRepository::delete)
                 .then(userProfileRepository.findByUsername(username)
                         .flatMap(userProfileRepository::delete))
-                .then();
+                .then()
+                .as(transactionalOperator::transactional);
     }
 
     // ── Guard rails (§7), enforced server-side ──────────────────────
