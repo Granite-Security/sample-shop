@@ -6,11 +6,15 @@ import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserService;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.oidc.OidcUserInfo;
+import org.springframework.security.oauth2.core.oidc.StandardClaimNames;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -46,6 +50,21 @@ public class GoogleOidcUserService implements OAuth2UserService<OidcUserRequest,
                 .map(authority -> (GrantedAuthority) new SimpleGrantedAuthority(authority.getAuthority()))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        return new DefaultOidcUser(authorities, oidcUser.getIdToken(), oidcUser.getUserInfo());
+        // The `sub` auth-server puts on every JWT it issues is
+        // Authentication.getName(), which for this principal is whatever
+        // nameAttributeKey resolves to. Left at its default that is *Google's*
+        // `sub`, so an opaque number leaked all the way downstream: profile
+        // keyed its rows on it, shop stamped it on orders, storage used it as a
+        // key prefix. Point the name at the username of the row we just
+        // provisioned and a federated login becomes indistinguishable from a
+        // form login below auth-server — which is already true of the roles
+        // claim, and was always meant to be true of the identity too.
+        Map<String, Object> claims = new HashMap<>(oidcUser.getUserInfo() != null
+                ? oidcUser.getUserInfo().getClaims()
+                : oidcUser.getIdToken().getClaims());
+        claims.put(StandardClaimNames.PREFERRED_USERNAME, user.getUsername());
+
+        return new DefaultOidcUser(authorities, oidcUser.getIdToken(), new OidcUserInfo(claims),
+                StandardClaimNames.PREFERRED_USERNAME);
     }
 }
