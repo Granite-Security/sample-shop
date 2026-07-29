@@ -1,10 +1,13 @@
 package org.granitesecurity.authserver.user;
 
+import org.granitesecurity.authserver.client.NotificationEventPublisher;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Locale;
 import java.util.Optional;
@@ -17,10 +20,13 @@ public class FederatedUserProvisioningService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final NotificationEventPublisher notificationEventPublisher;
 
-    public FederatedUserProvisioningService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public FederatedUserProvisioningService(UserRepository userRepository, PasswordEncoder passwordEncoder,
+                                            NotificationEventPublisher notificationEventPublisher) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.notificationEventPublisher = notificationEventPublisher;
     }
 
     @Transactional
@@ -32,6 +38,8 @@ public class FederatedUserProvisioningService {
 
         String normalizedEmail = email.toLowerCase(Locale.ROOT);
 
+        // A returning Google user. No event: they were announced when their
+        // account was first created, and this branch runs on every single login.
         Optional<UserEntity> byProviderId = userRepository.findByProviderAndProviderId(GOOGLE, subject);
         if (byProviderId.isPresent()) {
             UserEntity user = byProviderId.get();
@@ -40,6 +48,10 @@ public class FederatedUserProvisioningService {
             return userRepository.save(user);
         }
 
+        // Linking Google to an account that registered with the form. Also no
+        // event: they already have a profile row and already got their welcome
+        // mail at registration. Nothing has been registered here — a second
+        // login method has been attached to an existing identity.
         Optional<UserEntity> byEmail = userRepository.findByEmailIgnoreCase(normalizedEmail);
         if (byEmail.isPresent()) {
             UserEntity user = byEmail.get();
@@ -62,7 +74,25 @@ public class FederatedUserProvisioningService {
         user.setProvider(GOOGLE);
         user.setProviderId(subject);
         UserRegistrationService.grantDefaultAuthorities(user);
-        return userRepository.save(user);
+        UserEntity saved = userRepository.save(user);
+
+        // A Google sign-in that creates an account IS a registration, and until
+        // now it announced itself to nobody: only the form path published this
+        // event, so profile never learned a federated user's email or name (its
+        // row stayed a username-only stub) and notification never sent them a
+        // welcome mail. Same payload and same afterCommit discipline as
+        // UserRegistrationService — a rolled-back provisioning must not announce
+        // an account that does not exist.
+        String username = saved.getUsername();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                notificationEventPublisher.publishUserRegistered(
+                        username, normalizedEmail, givenName, familyName);
+            }
+        });
+
+        return saved;
     }
 
     private String generateUsername(String email) {
