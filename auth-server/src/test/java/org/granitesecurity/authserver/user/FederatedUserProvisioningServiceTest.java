@@ -1,5 +1,8 @@
 package org.granitesecurity.authserver.user;
 
+import org.granitesecurity.authserver.client.NotificationEventPublisher;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -7,6 +10,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Optional;
 
@@ -25,11 +29,26 @@ class FederatedUserProvisioningServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private NotificationEventPublisher notificationEventPublisher;
+
     private FederatedUserProvisioningService service;
+
+    // provision() now registers an afterCommit synchronization, which throws
+    // without an active one. Same setup as PasswordChangeServiceTest.
+    @BeforeEach
+    void initSynchronization() {
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    @AfterEach
+    void clearSynchronization() {
+        TransactionSynchronizationManager.clearSynchronization();
+    }
 
     @Test
     void rejectsUnverifiedEmail() {
-        service = new FederatedUserProvisioningService(userRepository, passwordEncoder);
+        service = new FederatedUserProvisioningService(userRepository, passwordEncoder, notificationEventPublisher);
 
         assertThatThrownBy(() ->
                 service.provision("google-sub", "jdoe@example.com", false, "John", "Doe"))
@@ -38,7 +57,7 @@ class FederatedUserProvisioningServiceTest {
 
     @Test
     void createsNewUserWhenNoExistingRecordMatches() {
-        service = new FederatedUserProvisioningService(userRepository, passwordEncoder);
+        service = new FederatedUserProvisioningService(userRepository, passwordEncoder, notificationEventPublisher);
         when(userRepository.findByProviderAndProviderId("GOOGLE", "google-sub")).thenReturn(Optional.empty());
         when(userRepository.findByEmailIgnoreCase("jdoe@example.com")).thenReturn(Optional.empty());
         when(userRepository.existsByUsernameIgnoreCase("jdoe")).thenReturn(false);
@@ -60,7 +79,7 @@ class FederatedUserProvisioningServiceTest {
 
     @Test
     void repeatLoginByProviderIdIsIdempotent() {
-        service = new FederatedUserProvisioningService(userRepository, passwordEncoder);
+        service = new FederatedUserProvisioningService(userRepository, passwordEncoder, notificationEventPublisher);
         UserEntity existing = new UserEntity();
         existing.setUsername("jdoe");
         existing.setEmail("jdoe@example.com");
@@ -77,7 +96,7 @@ class FederatedUserProvisioningServiceTest {
 
     @Test
     void linksExistingLocalUserByEmailWithoutChangingProvider() {
-        service = new FederatedUserProvisioningService(userRepository, passwordEncoder);
+        service = new FederatedUserProvisioningService(userRepository, passwordEncoder, notificationEventPublisher);
         UserEntity localUser = new UserEntity();
         localUser.setUsername("jdoe");
         localUser.setEmail("jdoe@example.com");
@@ -96,7 +115,7 @@ class FederatedUserProvisioningServiceTest {
 
     @Test
     void usernameCollisionGetsNumericSuffix() {
-        service = new FederatedUserProvisioningService(userRepository, passwordEncoder);
+        service = new FederatedUserProvisioningService(userRepository, passwordEncoder, notificationEventPublisher);
         when(userRepository.findByProviderAndProviderId("GOOGLE", "google-sub")).thenReturn(Optional.empty());
         when(userRepository.findByEmailIgnoreCase("jdoe@example.com")).thenReturn(Optional.empty());
         when(userRepository.existsByUsernameIgnoreCase("jdoe")).thenReturn(true);

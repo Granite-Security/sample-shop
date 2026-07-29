@@ -172,6 +172,37 @@ the default service, runs inside a transaction:
 5. Return an `OidcUser` whose authorities come from the DB row (plus the
    existing `FactorGrantedAuthority` the current mapper adds), so the `roles`
    claim in the issued JWT is identical in shape to a form login's.
+6. **Publish `UserRegistered` — but only for step 4's "no match" branch.**
+   *(Added later; see below.)*
+
+### Step 6, added later: the federated path announces itself
+
+As originally built, only `UserRegistrationService` published `UserRegistered`.
+The federated path wrote its `users` row and told nobody, so for every
+Google-provisioned account:
+
+- **`profile` never learned their email or name.** Its row is created lazily on
+  first visit to "My Profile" as a username-only stub, and the consumer that
+  fills in the blanks (`UserRegisteredConsumer`) never fired for them. The email
+  was not lost — it lives in `authdb.users.email`, which is why the admin list
+  still shows it correctly (that list is built from auth users, not profiles —
+  `blocking-users.md` D3) — but anything reading `profiledb` saw a blank.
+- **`notification` never sent them a welcome mail**, since it consumes the same
+  event.
+
+`FederatedUserProvisioningService` now publishes it, with the same payload and
+the same `afterCommit` discipline as the form path. Which branch publishes is
+the whole design:
+
+| Branch | Publishes? | Why |
+|---|---|---|
+| found by `(GOOGLE, sub)` | no | a returning user; this runs on **every** login |
+| found by email → link | no | already has a profile and already got a welcome mail at registration; nothing was registered, a second login method was attached |
+| no match → create | **yes** | this, and only this, is a new account |
+
+**This means Google sign-ups now get a welcome email where they previously got
+none.** That is the intended behaviour — it is their account being created — but
+it is a user-visible change, not just plumbing.
 
 Reuse the same authority-granting helper as `UserRegistrationService` so local
 and federated users can never drift apart.
