@@ -1,6 +1,15 @@
 # Granite Security
 
-Microservices demo platform with OAuth2/OIDC authentication, Spring Cloud Gateway, and a reactive e-commerce shop.
+A **roll-your-own commerce stack**: self-hosted, source-available microservices with OAuth2/OIDC baked in end-to-end, 
+an async event-driven order/payment/delivery pipeline, and a fully reactive backend — no per-transaction SaaS fees, no vendor lock-in, you own the data and everything!
+
+## Why this stack
+
+- **Customer management, not just checkout.** A dedicated `profile` service owns each user's profile and delivery addresses, auto-provisioned the moment `auth-server` publishes `UserRegistered` — customer data lives in your own database from signup, not a third-party CRM.
+- **OAuth2/OIDC integrated everywhere, not bolted on.** `auth-server` is a real Spring Authorization Server (OIDC provider) issuing JWTs; every downstream service — shop, payment, delivery, profile — independently validates the token as a resource server, and the gateway relays it via `TokenRelayGatewayFilterFactory`. One login, enforced consistently at every service boundary, with Google federated login supported alongside form login.
+- **Fully asynchronous, event-driven architecture.** Orders, payments, and identity events all flow through Kafka. Shop and payment use the transactional outbox pattern (`OrderPlaced` → `orders.events` → payment/delivery; `PaymentReceived` → `payments.events` → shop) so state transitions are durable and decoupled — no synchronous cross-service calls on the critical path.
+- **Stripe integration that doesn't depend on webhooks.** Production uses Stripe webhooks for payment confirmation and refunds, but every flow also has a synchronous fallback (`POST /api/payments/intent/{orderId}/sync`) that advances payment/refund state directly — useful for local dev, restricted network environments, or anywhere inbound webhooks aren't practical.
+- **Reactive end-to-end.** Every service except `auth-server` runs Spring WebFlux over R2DBC (non-blocking DB access) rather than blocking JDBC — the whole request path, database included, is non-blocking under load.
 
 ## Architecture
 
@@ -68,6 +77,8 @@ Browser (5173) ── Gateway (8080) ──┬── Auth Server (9090) ── P
 - **Java 25** (each service builds with its own Gradle wrapper)
 - **Docker** (for PostgreSQL databases and full-stack compose)
 - **Google OAuth2 credentials** (optional — for Google login)
+- **Stripe API key** (optional - for payments)
+- **RESEND API key** (optional - for sending emails)
 
 ## Quick start — Docker Compose
 

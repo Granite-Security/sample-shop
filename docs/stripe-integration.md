@@ -73,6 +73,6 @@ telling you the outcome regardless of whether the browser is still around.
 The webhook code already exists and works (verified locally via the Stripe
 CLI tunnel) — it just isn't registered against `granite-security.org` in the
 Stripe Dashboard yet. Registering
-`https://granite-security.org/api/payments/webhook` there (note: **not**
-`/api/secured/payment/webhook`, which is an incorrect path that appears in
-`k8s/hetzner/app/secrets-patch.yaml.example`) would close this gap.
+`https://granite-security.org/api/payments/webhook` there would close this gap.
+(The `secrets-patch.yaml.example` files used to document this as
+`/api/secured/payment/webhook`; that was wrong and has been corrected.)
