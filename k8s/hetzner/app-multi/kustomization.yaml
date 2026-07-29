@@ -34,7 +34,7 @@ patches:
 images:
   - name: granite-auth-server
     newName: docker.io/moldovean/granite-auth-server
-    newTag: cb646df49bdffc1593fe28cae8bff149bce0f238
+    newTag: 118abfa2215cfe0ee261722a05ecb3cd46c38dc6
   - name: granite-gateway
     newName: docker.io/moldovean/granite-gateway
     newTag: f62ef28eb945f25c78c29f9a1d4beeaad724ca4c
