@@ -45,7 +45,7 @@ export function CartDrawer() {
               Every piece is made in small batches — explore the collection while today's batch lasts.
             </p>
             <a
-              href="#bestsellers"
+              href="/shop"
               onClick={() => setCartOpen(false)}
               className="mt-2 border border-cocoa px-8 py-3 text-xs uppercase tracking-[0.18em] text-cocoa transition-colors duration-300 hover:bg-cocoa hover:text-ivory"
             >

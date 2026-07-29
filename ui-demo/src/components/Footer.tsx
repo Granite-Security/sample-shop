@@ -1,27 +1,40 @@
+import { Link } from 'react-router';
 import { InstagramIcon } from './icons';
 
-const COLUMNS: Record<string, string[]> = {
-  Shop: ['Dark Chocolate', 'Truffles', 'Gift Boxes', 'Drinking Chocolate'],
-  About: ['Our Story', 'The Atelier', 'Journal', 'Careers'],
-  Sustainability: ['Direct Trade', 'Our Farms', 'Packaging', 'Impact Report'],
-  Support: ['FAQ', 'Shipping', 'Returns', 'Contact'],
+// Only real destinations — every link here goes somewhere that exists.
+const COLUMNS: Record<string, { label: string; to: string }[]> = {
+  Shop: [
+    { label: 'All Chocolate', to: '/shop' },
+    { label: 'Gifts', to: '/gifts' },
+  ],
+  About: [
+    { label: 'Our Story', to: '/our-story' },
+    { label: 'The Atelier', to: '/our-story' },
+  ],
+  Support: [
+    { label: 'Contact', to: '/contact' },
+    { label: 'My Orders', to: '/profile/orders' },
+  ],
 };
 
 export function Footer() {
   return (
     <footer id="footer" className="bg-espresso text-ivory">
       <div className="mx-auto max-w-7xl px-5 py-16 lg:px-8 lg:py-20">
-        <div className="grid gap-10 md:grid-cols-[2fr_repeat(4,1fr)]">
+        <div className="grid gap-10 md:grid-cols-[2fr_repeat(3,1fr)]">
           <div>
             <p className="font-display text-2xl">
               SI <span className="italic text-gold">Chocolate</span>
             </p>
             <p className="mt-4 max-w-xs text-sm text-ivory/55">
-              Small-batch chocolate crafted from ethically sourced cacao — traditional craftsmanship,
-              modern refinement.
+              Small-batch chocolate crafted from ethically sourced cacao — made in Cahul, Moldova.
             </p>
             <div className="mt-6 flex gap-4 text-ivory/60">
-              <a href="#top" aria-label="Instagram" className="transition-colors hover:text-gold">
+              <a
+                href="https://instagram.com"
+                aria-label="Instagram"
+                className="transition-colors hover:text-gold"
+              >
                 <InstagramIcon />
               </a>
             </div>
@@ -32,10 +45,10 @@ export function Footer() {
               <h3 className="text-xs uppercase tracking-[0.25em] text-gold">{heading}</h3>
               <ul className="mt-4 space-y-2.5 text-sm text-ivory/60">
                 {links.map((link) => (
-                  <li key={link}>
-                    <a href="#top" className="transition-colors hover:text-ivory">
-                      {link}
-                    </a>
+                  <li key={link.label}>
+                    <Link to={link.to} className="transition-colors hover:text-ivory">
+                      {link.label}
+                    </Link>
                   </li>
                 ))}
               </ul>
