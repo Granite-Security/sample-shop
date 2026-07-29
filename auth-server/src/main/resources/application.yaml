@@ -6,7 +6,11 @@ server:
 
 logging:
   level:
-    org.springframework.security: trace
+    # TRACE here was ~96% of every log line in the namespace (3.4k lines / 15min,
+    # mostly header-writer chatter) and all of it lands in Loki. Raise it for a
+    # debugging session with LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY=trace —
+    # no rebuild needed — rather than leaving it on by default.
+    org.springframework.security: info
 
 spring:
   application:
