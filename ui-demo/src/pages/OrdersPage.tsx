@@ -54,7 +54,7 @@ export function OrdersPage() {
           <>
             <p className="text-sm text-cocoa/50">No orders yet.</p>
             <Link
-              to="/#bestsellers"
+              to="/shop"
               className="mt-6 inline-block border border-cocoa px-8 py-3 text-xs uppercase tracking-[0.18em] text-cocoa transition-colors duration-300 hover:bg-cocoa hover:text-ivory"
             >
               Browse the Collection

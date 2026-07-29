@@ -54,7 +54,7 @@ export function ProductPage() {
               The product you're looking for isn't in the collection anymore — but the current batch is.
             </p>
             <Link
-              to="/#bestsellers"
+              to="/shop"
               className="mt-4 border border-cocoa px-8 py-3 text-xs uppercase tracking-[0.18em] text-cocoa transition-colors duration-300 hover:bg-cocoa hover:text-ivory"
             >
               Browse the Collection
@@ -80,7 +80,7 @@ export function ProductPage() {
             Home
           </Link>
           <span className="mx-2">/</span>
-          <Link to="/#bestsellers" className="transition-colors hover:text-terracotta">
+          <Link to="/shop" className="transition-colors hover:text-terracotta">
             Shop
           </Link>
           <span className="mx-2">/</span>

@@ -6,38 +6,12 @@ import { useShop } from '../store';
 import { AccountIcon, BagIcon, CloseIcon, HeartIcon, MenuIcon, SearchIcon } from './icons';
 import { Avatar } from './Avatar';
 
-const NAV = ['Shop', 'Collections', 'Our Craft', 'Gifts', 'Journal', 'Contact'];
-
-const anchorFor = (item: string) =>
-  ({
-    Shop: '/#bestsellers',
-    Collections: '/#collections',
-    'Our Craft': '/#craft',
-    Gifts: '/#gifting',
-    Journal: '/#newsletter',
-    Contact: '/#footer',
-  })[item] ?? '/';
-
-function AnnouncementBar() {
-  const items = ['Free shipping over $75', 'Ethically sourced cacao', 'Small-batch handcrafted'];
-  return (
-    <div className="bg-espresso text-ivory/85 text-[11px] tracking-[0.18em] uppercase overflow-hidden">
-      <div className="hidden sm:flex justify-center gap-12 py-2.5">
-        {items.map((text) => (
-          <span key={text}>{text}</span>
-        ))}
-      </div>
-      {/* single rotating message keeps the bar readable on small screens */}
-      <div className="sm:hidden flex whitespace-nowrap py-2.5 animate-marquee w-max">
-        {[...items, ...items].map((text, i) => (
-          <span key={i} className="mx-6">
-            {text}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
+const NAV = [
+  { label: 'Shop', to: '/shop' },
+  { label: 'Our Story', to: '/our-story' },
+  { label: 'Gifts', to: '/gifts' },
+  { label: 'Contact', to: '/contact' },
+];
 
 const linkStyle =
   'relative pb-1 transition-colors duration-300 hover:text-gold after:absolute after:bottom-0 after:left-0 after:h-px after:w-0 after:bg-gold after:transition-all after:duration-500 hover:after:w-full';
@@ -89,7 +63,6 @@ export function Header() {
         solid ? 'bg-espresso/95 backdrop-blur-md shadow-lg shadow-espresso/30' : 'bg-transparent'
       }`}
     >
-      <AnnouncementBar />
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 lg:px-8 text-ivory">
         <button
           className="lg:hidden p-2 -ml-2"
@@ -105,9 +78,9 @@ export function Header() {
 
         <ul className="hidden lg:flex items-center gap-9 text-[13px] tracking-[0.14em] uppercase">
           {NAV.map((item) => (
-            <li key={item}>
-              <Link to={anchorFor(item)} className={linkStyle}>
-                {item}
+            <li key={item.label}>
+              <Link to={item.to} className={linkStyle}>
+                {item.label}
               </Link>
             </li>
           ))}
@@ -209,9 +182,9 @@ export function Header() {
       {menuOpen && (
         <ul className="lg:hidden bg-espresso/95 backdrop-blur-md px-8 pb-8 pt-2 space-y-4 text-ivory text-sm tracking-[0.14em] uppercase">
           {NAV.map((item) => (
-            <li key={item}>
-              <Link to={anchorFor(item)} className="block py-1" onClick={() => setMenuOpen(false)}>
-                {item}
+            <li key={item.label}>
+              <Link to={item.to} className="block py-1" onClick={() => setMenuOpen(false)}>
+                {item.label}
               </Link>
             </li>
           ))}

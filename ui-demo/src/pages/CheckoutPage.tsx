@@ -317,7 +317,7 @@ export function CheckoutPage() {
           <div className="mt-8">
             <p className="text-cocoa/70">Your cart is empty.</p>
             <Link
-              to="/#bestsellers"
+              to="/shop"
               className="mt-6 inline-block border border-cocoa px-8 py-3 text-xs uppercase tracking-[0.18em] text-cocoa transition-colors duration-300 hover:bg-cocoa hover:text-ivory"
             >
               Browse the Collection

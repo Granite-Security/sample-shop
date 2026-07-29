@@ -15,7 +15,6 @@
 
   --animate-pulse-ring: pulse-ring 2.4s var(--ease-luxe) infinite;
   --animate-drift: drift 14s ease-in-out infinite alternate;
-  --animate-marquee: marquee 36s linear infinite;
 
   @keyframes pulse-ring {
     0% {
@@ -34,14 +33,6 @@
     }
     to {
       transform: translate3d(2%, 2%, 0) scale(1.06);
-    }
-  }
-  @keyframes marquee {
-    from {
-      transform: translateX(0);
-    }
-    to {
-      transform: translateX(-50%);
     }
   }
 }

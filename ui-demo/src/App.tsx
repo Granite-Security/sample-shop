@@ -1,4 +1,5 @@
-import { BrowserRouter, Outlet, Route, Routes } from 'react-router';
+import { useEffect } from 'react';
+import { BrowserRouter, Outlet, Route, Routes, useLocation } from 'react-router';
 import { ShopProvider } from './store';
 import { AuthProvider } from './auth';
 import { Callback } from './components/Callback';
@@ -8,6 +9,10 @@ import { CartDrawer } from './components/CartDrawer';
 import RequireAuth from './components/RequireAuth';
 import { AccountLayout } from './components/AccountLayout';
 import { Home } from './pages/Home';
+import { ShopPage } from './pages/ShopPage';
+import { OurStoryPage } from './pages/OurStoryPage';
+import { GiftsPage } from './pages/GiftsPage';
+import { ContactPage } from './pages/ContactPage';
 import { ProductPage } from './pages/ProductPage';
 import { AdminPage } from './pages/AdminPage';
 import { UsersManagementPage } from './pages/UsersManagementPage';
@@ -23,9 +28,19 @@ import { Register } from './pages/Register';
 import { ResetPasswordRequest } from './pages/ResetPasswordRequest';
 import { ResetPasswordConfirm } from './pages/ResetPasswordConfirm';
 
+/** Content is per-page now, so every navigation should start at the top. */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 function Layout() {
   return (
     <>
+      <ScrollToTop />
       <Header />
       <main>
         <Outlet />
@@ -45,6 +60,10 @@ export default function App() {
             <Route path="/callback" element={<Callback />} />
             <Route element={<Layout />}>
               <Route index element={<Home />} />
+              <Route path="shop" element={<ShopPage />} />
+              <Route path="our-story" element={<OurStoryPage />} />
+              <Route path="gifts" element={<GiftsPage />} />
+              <Route path="contact" element={<ContactPage />} />
               <Route path="products/:id" element={<ProductPage />} />
               <Route path="admin" element={<AdminPage />} />
               <Route path="admin/users" element={<UsersManagementPage />} />

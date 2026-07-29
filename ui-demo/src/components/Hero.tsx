@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { formatPrice, useShop } from '../store';
 import { ChocolateArt, variantFor } from './ChocolateArt';
 import { Reveal } from './Reveal';
@@ -66,18 +67,18 @@ export function Hero() {
           </Reveal>
           <Reveal delay={450}>
             <div className="mt-10 flex flex-wrap gap-4">
-              <a
-                href="#bestsellers"
+              <Link
+                to="/shop"
                 className="bg-gold px-9 py-4 text-xs uppercase tracking-[0.2em] text-espresso transition-all duration-500 ease-luxe hover:bg-ivory hover:shadow-xl hover:shadow-gold/20"
               >
                 Shop Collection
-              </a>
-              <a
-                href="#craft"
+              </Link>
+              <Link
+                to="/our-story"
                 className="border border-ivory/40 px-9 py-4 text-xs uppercase tracking-[0.2em] text-ivory transition-all duration-500 ease-luxe hover:border-gold hover:text-gold"
               >
                 Our Story
-              </a>
+              </Link>
             </div>
           </Reveal>
         </div>

@@ -50,6 +50,19 @@ spec:
               value: "storage"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://tempo.infra-global-observability.svc.cluster.local:4318"
+            # Tempo speaks OTLP traces only; the agent's metric exporter 404s
+            # against it every 60s. No metrics backend is wired up yet, so turn
+            # the exporter off rather than spam Loki with failed exports.
+            - name: OTEL_METRICS_EXPORTER
+              value: "none"
+            # Same for logs: stdout -> Alloy -> Loki is the log path, the
+            # agent's OTLP log pipeline has no backend and 404s too.
+            - name: OTEL_LOGS_EXPORTER
+              value: "none"
+            # JSON console logs so the agent's MDC trace_id/span_id land as real
+            # fields, which is what makes Tempo -> Loki correlation work.
+            - name: LOGGING_STRUCTURED_FORMAT_CONSOLE
+              value: "ecs"
             - name: SERVER_PORT
               valueFrom:
                 configMapKeyRef:

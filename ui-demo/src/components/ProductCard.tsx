@@ -16,7 +16,7 @@ const badgeFor = (product: Product): string | null => {
   return null;
 };
 
-function ProductCard({ product, index }: { product: Product; index: number }) {
+export function ProductCard({ product, index = 0 }: { product: Product; index?: number }) {
   const { addToCart, toggleWishlist, wishlist } = useShop();
   const wished = wishlist.has(product.id);
   const badge = badgeFor(product);
@@ -106,42 +106,13 @@ function ProductCard({ product, index }: { product: Product; index: number }) {
   );
 }
 
-export function Bestsellers() {
-  const { products, loading } = useShop();
-  const shown = products.slice(0, 8);
-
+/** Grid skeleton shown while the catalog request is in flight. */
+export function ProductGridSkeleton({ count = 8 }: { count?: number }) {
   return (
-    <section id="bestsellers" className="bg-ivory">
-      <div className="mx-auto max-w-7xl px-5 py-24 lg:px-8 lg:py-32">
-        <Reveal>
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-terracotta">Most Loved</p>
-              <h2 className="mt-4 font-display text-[32px] leading-tight text-cocoa lg:text-[48px]">
-                The Bestsellers
-              </h2>
-            </div>
-            <p className="max-w-sm text-sm text-cocoa/60">
-              Each batch is conched for seventy-two hours and finished by hand. When a batch is gone,
-              it's gone until the next one.
-            </p>
-          </div>
-        </Reveal>
-
-        {loading ? (
-          <div className="mt-14 grid grid-cols-2 gap-x-6 gap-y-12 lg:grid-cols-4" aria-label="Loading products">
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="aspect-square animate-pulse rounded-lg bg-cocoa/10" />
-            ))}
-          </div>
-        ) : (
-          <div className="mt-14 grid grid-cols-2 gap-x-6 gap-y-12 lg:grid-cols-4">
-            {shown.map((product, i) => (
-              <ProductCard key={product.id} product={product} index={i} />
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
+    <div className="grid grid-cols-2 gap-x-6 gap-y-12 lg:grid-cols-4" aria-label="Loading products">
+      {[...Array(count)].map((_, i) => (
+        <div key={i} className="aspect-square animate-pulse rounded-lg bg-cocoa/10" />
+      ))}
+    </div>
   );
 }
