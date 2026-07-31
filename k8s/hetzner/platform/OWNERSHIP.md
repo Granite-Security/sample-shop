@@ -27,9 +27,16 @@ installation that no consuming repository mentions.
 The co-governed platform repository is:
 
 ```
-adiwavegroup/hetzner-platform-infra-devops        (canonical, Argo CD reconciles from here)
+adiwavegroup/hetzner-platform-infra-devops        (canonical deployment authority; the only
+                                                   permitted Argo CD source for shared-platform
+                                                   resources once ownership transfer completes)
 Granite-Security/hetzner-platform-infra-devops    (co-governed copy; follows, does not lead)
 ```
+
+**Argo CD does not yet reconcile Traefik or cert-manager from that repository.** Verified against
+the live cluster: no Argo CD Application targets it at all. After transfer it becomes the sole
+reconciliation source for these components; today it is the *target* owner, not the current one.
+That distinction is the entire point of this file, so it is stated rather than implied.
 
 That repository's `archdesign/infrastructure-ownership.yaml` records, for Traefik:
 
