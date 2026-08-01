@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { loadStripe } from '@stripe/stripe-js';
-import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { formatPrice, useShop } from '../store';
-import type { AddressResponse, DeliveryAddress, OrderResponse } from '../types';
+import type { AddressResponse, DeliveryAddress, OrderResponse, ProviderPayload } from '../types';
 import { ChocolateArt, variantFor } from '../components/ChocolateArt';
+import PaymentWidget from '../components/payment/PaymentWidget';
+import ProviderSelector from '../components/payment/ProviderSelector';
+import { usePaymentProviders } from '../components/payment/usePaymentProviders';
 
 // Flow ported from ui-shop/src/pages/Checkout.tsx:
-// place order → poll for the Stripe client secret → PaymentElement →
-// confirm → sync the intent → poll until the order leaves PENDING.
+// place order → poll for the provider payload → PaymentWidget (switched on the
+// provider's confirmation mode) → confirm → sync the intent → poll until the
+// order leaves PENDING.
 type Step = 'review' | 'placing' | 'waiting_payment' | 'payment' | 'confirming' | 'done' | 'failed';
 
-const stripePromise = loadStripe(window.__ENV__?.STRIPE_PUBLISHABLE_KEY ?? '');
 const POLL_INTERVAL = 1000;
 const POLL_TIMEOUT = 30000;
 const MAX_RETRIES = 25;
@@ -31,53 +32,6 @@ const EMPTY_ADDRESS: DeliveryAddress = {
 const inputStyle =
   'w-full border border-cocoa/20 bg-white/70 px-4 py-3 text-sm text-cocoa placeholder:text-cocoa/40 focus:border-gold focus:outline-none';
 
-function PaymentForm({
-  onPaymentConfirmed,
-  onError,
-}: {
-  onPaymentConfirmed: () => void;
-  onError: (msg: string) => void;
-}) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [confirming, setConfirming] = useState(false);
-  const [ready, setReady] = useState(false);
-
-  const handlePay = async () => {
-    if (!stripe || !elements) return;
-    setConfirming(true);
-    try {
-      const { error } = await stripe.confirmPayment({
-        elements,
-        confirmParams: { return_url: window.location.origin + '/checkout' },
-        redirect: 'if_required',
-      });
-      if (error) {
-        onError(error.message ?? 'Payment failed');
-        setConfirming(false);
-      } else {
-        onPaymentConfirmed();
-      }
-    } catch (e) {
-      onError(e instanceof Error ? e.message : 'Payment failed');
-      setConfirming(false);
-    }
-  };
-
-  return (
-    <div>
-      <PaymentElement onReady={() => setReady(true)} />
-      <button
-        disabled={!stripe || !ready || confirming}
-        onClick={handlePay}
-        className="mt-6 w-full bg-cocoa py-4 text-xs uppercase tracking-[0.2em] text-ivory transition-colors duration-300 hover:bg-espresso disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        {!stripe || !ready ? 'Loading payment form…' : confirming ? 'Processing…' : 'Pay Now'}
-      </button>
-    </div>
-  );
-}
-
 export function CheckoutPage() {
   const { cart, cartTotal, clearCart } = useShop();
   const { isAuthenticated, loading: authLoading, login } = useAuth();
@@ -89,9 +43,17 @@ export function CheckoutPage() {
   const [useSaved, setUseSaved] = useState<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const elementsOptions = useMemo(
-    () => (order?.clientSecret ? { clientSecret: order.clientSecret } : undefined),
-    [order?.clientSecret],
+  const { providers, selected: selectedProvider, setSelected: setSelectedProvider, find } =
+    usePaymentProviders();
+
+  // Which provider actually took the order, once payment has opened one — that is
+  // authoritative over the shopper's selection, which is only a request.
+  const activeProvider = order?.provider ?? selectedProvider;
+  const activeMode = find(activeProvider)?.confirmationMode ?? 'CLIENT_SDK';
+
+  const paymentPayload: ProviderPayload | undefined = useMemo(
+    () => order?.providerPayload ?? undefined,
+    [order],
   );
 
   const stopPolling = useCallback(() => {
@@ -134,9 +96,12 @@ export function CheckoutPage() {
       pollRef.current = setInterval(async () => {
         try {
           const payment = await api.getPaymentIntent(orderId);
-          if (payment.clientSecret) {
+          const payload = payment.providerPayload;
+          if (payload && Object.keys(payload).length > 0) {
             stopPolling();
-            setOrder((prev) => (prev ? { ...prev, clientSecret: payment.clientSecret } : null));
+            setOrder((prev) =>
+              prev ? { ...prev, provider: payment.provider, providerPayload: payload } : null,
+            );
             setStep('payment');
             return;
           }
@@ -200,10 +165,15 @@ export function CheckoutPage() {
           .filter((l) => l.product.id > 0)
           .map((l) => ({ productId: l.product.id, quantity: l.quantity })),
         address,
+        // Null while one provider is enabled; payment fills it in. Once several
+        // are, the selector has already forced a choice.
+        provider: selectedProvider ?? undefined,
       });
       setOrder(result);
       clearCart();
-      if (result.clientSecret) {
+      // shop never fills this in — the SPA fetches it from payment — so this is
+      // effectively always the polling branch. Kept in case that ever changes.
+      if (result.providerPayload) {
         setStep('payment');
       } else {
         setStep('waiting_payment');
@@ -292,7 +262,7 @@ export function CheckoutPage() {
             </p>
             {order && <p className="text-sm text-cocoa/50">Order #{order.id}</p>}
           </div>
-        ) : step === 'payment' && order?.clientSecret ? (
+        ) : step === 'payment' && order && paymentPayload && activeProvider ? (
           <div className="mt-8">
             <p className="mb-6 text-sm text-cocoa/70">
               Order <span className="font-display text-cocoa">#{order.id}</span> ·{' '}
@@ -303,15 +273,19 @@ export function CheckoutPage() {
                 {error}
               </p>
             )}
-            <Elements key={order.id} stripe={stripePromise} options={elementsOptions}>
-              <PaymentForm
-                onPaymentConfirmed={onPaymentConfirmed}
-                onError={(msg) => {
-                  setError(msg);
-                  setStep('payment');
-                }}
-              />
-            </Elements>
+            <PaymentWidget
+              key={order.id}
+              provider={activeProvider}
+              displayName={find(activeProvider)?.displayName}
+              confirmationMode={activeMode}
+              payload={paymentPayload}
+              orderId={order.id}
+              onPaymentConfirmed={onPaymentConfirmed}
+              onError={(msg) => {
+                setError(msg);
+                setStep('payment');
+              }}
+            />
           </div>
         ) : cart.length === 0 ? (
           <div className="mt-8">
@@ -461,6 +435,13 @@ export function CheckoutPage() {
                 </div>
               )}
             </section>
+
+            <ProviderSelector
+              providers={providers}
+              selected={selectedProvider}
+              onSelect={setSelectedProvider}
+              disabled={step === 'placing'}
+            />
 
             {error && (
               <p className="border-l-2 border-terracotta bg-terracotta/10 px-4 py-3 text-sm text-terracotta">

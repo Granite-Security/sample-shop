@@ -65,22 +65,48 @@ export interface OrderResponse {
   username: string;
   status: string;
   total: number;
+  currency: string;
   createdAt: string;
   items: OrderItemResponse[];
-  clientSecret?: string;
+  provider?: string;
+  providerPayload?: ProviderPayload;
   address?: DeliveryAddress;
+}
+
+/**
+ * Whatever the provider needs to complete the payment in the browser. Its shape
+ * depends on the confirmation mode — a client secret for CLIENT_SDK, a redirect
+ * URL for REDIRECT — so never assume a field is present.
+ */
+export interface ProviderPayload {
+  clientSecret?: string;
+  redirectUrl?: string;
+  [key: string]: unknown;
+}
+
+/** How the browser completes a payment. Widgets switch on this, not on provider id. */
+export type ConfirmationMode = 'CLIENT_SDK' | 'REDIRECT';
+
+export interface PaymentProviderInfo {
+  id: string;
+  displayName: string;
+  confirmationMode: ConfirmationMode;
+  webhookEnabled: boolean;
 }
 
 export interface PlaceOrderRequest {
   items: { productId: number; quantity: number }[];
   address: DeliveryAddress;
+  /** Omitted while only one provider is enabled; required once several are. */
+  provider?: string;
 }
 
 export interface CreatePaymentIntentResponse {
   id: string;
   orderId: number;
-  stripePaymentIntentId: string;
-  clientSecret: string;
+  provider: string;
+  providerPaymentId: string;
+  providerPayload?: ProviderPayload | null;
   status: string;
   amount: number;
   currency: string;

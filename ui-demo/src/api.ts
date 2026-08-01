@@ -6,6 +6,7 @@ import type {
   OrderResponse,
   PlaceOrderRequest,
   CreatePaymentIntentResponse,
+  PaymentProviderInfo,
   AddressResponse,
   AddressRequest,
   ProfileResponse,
@@ -112,6 +113,9 @@ export const api = {
     request<PagedResult<OrderResponse>>(`/api/shop/orders?page=${page}&size=${size}`),
 
   getOrder: (id: number) => request<OrderResponse>(`/api/shop/orders/${id}`),
+
+  // Public: the checkout page needs it before the shopper authenticates.
+  listProviders: () => request<PaymentProviderInfo[]>('/api/payments/providers'),
 
   getPaymentIntent: (orderId: number) =>
     request<CreatePaymentIntentResponse>(`/api/payments/intent/${orderId}`),

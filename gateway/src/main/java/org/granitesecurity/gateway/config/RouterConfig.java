@@ -65,20 +65,6 @@ public class RouterConfig {
                         .uri(deliveryServiceUri))
                 .route("storage-service", r -> r
                         .path("/api/storage/**")
-                        // storage gets bursty, gappy traffic (presign-only calls), which
-                        // reliably exposes a stale-pooled-connection race: the gateway's
-                        // shared reactor-netty client hands out a connection to storage
-                        // that something below the app (kernel/CNI conntrack — nothing in
-                        // either service configures a Netty idle-timeout) has already torn
-                        // down, and the first write on it comes back as
-                        // "recvAddress(-104) Connection reset by peer" with a bare 500 —
-                        // confirmed live: storage's own logs show no trace of the request
-                        // ever arriving. Retrying is safe here specifically because every
-                        // verb on this route is idempotent with no side effects (presign
-                        // mutates nothing; deleting an already-deleted object is a no-op) —
-                        // this is NOT safely generalizable to routes with side effects
-                        // (e.g. shop/payment order placement), where a retry after a lost
-                        // response could double up a real mutation.
                         .filters(f -> f.retry(retryConfig -> retryConfig
                                 .setRetries(2)
                                 .setSeries(HttpStatus.Series.SERVER_ERROR)

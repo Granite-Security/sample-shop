@@ -631,8 +631,17 @@ purchasable currency would have been.
    renders nothing below two providers, so today it is invisible and becomes
    visible the moment a second adapter is enabled — no page changes.
 
-   **Aliases stay up.** Dropping them needs `ui-demo` migrated or written off,
-   which by decision happens after `ui-shop` is settled, and which gates step 5.
+   **`ui-demo` migrated 2026-08-02** — same structure, its own Tailwind styling,
+   inline `PaymentForm` lifted into `components/payment/stripe/`. Both frontends
+   now read `providerPayload` and neither imports `@stripe/*` outside that
+   directory.
+
+   **Aliases are still populated, deliberately.** They cannot be dropped in the
+   same deploy that migrates the frontend: browsers hold the old SPA bundle for
+   a while after a release, and an old bundle against an alias-free API is
+   exactly the breakage the aliases exist to prevent. Drop them in a *later*
+   change, once the migrated `ui-demo` is live and cached bundles have turned
+   over. That is what gates step 5.
 5. **Second provider** (future). Adapter + selector entry + config flag.
    Additive by construction if 1–4 are done.
 6. **Docs.** Refresh `docs/stripe-integration.md` line numbers; note it now
