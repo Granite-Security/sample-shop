@@ -37,7 +37,22 @@ stripe:
   secret-key: ${STRIPE_SECRET_KEY:}
   # Default matches the local `stripe listen` forwarding session
   webhook-secret: ${STRIPE_WEBHOOK_SECRET:whsec_321e0f4f965220007dec238f31d6ec4706ebdb81e0062631a2fedde90e1c2d70}
-  currency: ${STRIPE_CURRENCY:usd}
+  currency: ${STRIPE_CURRENCY:chf}
+
+payment:
+  # The one currency the shop prices in. Validated at startup against the closed
+  # set (USD, EUR, RON, CHF) and against every enabled provider's supported set,
+  # so a provider that cannot charge it fails the boot rather than the first order.
+  shop-currency: ${PAYMENT_SHOP_CURRENCY:${STRIPE_CURRENCY:chf}}
+  providers:
+    stripe:
+      enabled: ${PAYMENT_PROVIDER_STRIPE_ENABLED:true}
+      webhook:
+        # No webhook has ever been registered for this deployment — /sync is what
+        # confirms payments. Turn this on only once the endpoint exists in the
+        # Stripe dashboard; until then payment refuses deliveries rather than
+        # verifying them against an unset secret.
+        enabled: ${PAYMENT_PROVIDER_STRIPE_WEBHOOK_ENABLED:false}
 
 app:
   outbox:

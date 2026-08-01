@@ -1,6 +1,7 @@
 # Multi-provider payments — refactor plan
 
-Status: **proposed, not started** · 2026-07-30
+Status: **proposed, not started** · 2026-07-30 · open questions reviewed
+2026-08-01 (§12)
 
 ## 1. Goals and decided constraints
 
@@ -12,9 +13,9 @@ provider at checkout — plus a user balance in CHF that refunds land in.
 |---|---|
 | Provider choice | Per-order, chosen by the shopper. Not a config-time swap. |
 | Webhooks | **Optional per provider.** No webhook has ever been registered for this deployment; `/sync` is and always has been the only thing confirming payments in production. That becomes an explicit switch, not a bug to fix. |
-| Currencies | Closed set: **USD, EUR, MDL, RON, CHF** — all two-decimal. No zero-decimal currencies, no sub-cent amounts. |
-| Pricing | **One active shop currency**, CHF today. No mixed-currency carts, no FX anywhere. |
-| Balance | Plain **CHF balance** per user. Fed by refunds; spendable as an order discount; optionally withdrawn back to the original payment provider. See §9. |
+| Currencies | Closed set: **USD, EUR, RON, CHF** — all two-decimal. No zero-decimal currencies, no sub-cent amounts. **MDL is out of scope** (Stripe does not settle it). |
+| Pricing | **One active shop currency**, CHF — default switched 2026-08-01. No mixed-currency carts, no FX anywhere. Pre-cutover payments remain USD and are refundable only in USD (§8, §9.0). |
+| Balance | Plain **CHF balance** per user. Fed by refunds of real payments only; spendable as an order discount; optionally withdrawn back to the original payment provider for at most what that payment captured. Promotional grants are spend-only. See §9. |
 
 `payment.provider` / `provider_payment_id` already exist on `Payment`
 (`domain/Payment.java:31-34`) but are populated with the literal `"stripe"`
@@ -35,7 +36,7 @@ independently.
 |---|---|
 | `service/PaymentService.java` | Calls `PaymentIntent.create/retrieve`, `com.stripe.model.Refund.create/retrieve` inline in business logic. No interface between it and the SDK. Provider hardcoded to `"stripe"`. |
 | ↳ amounts | `total.multiply(BigDecimal.valueOf(100)).longValue()` in three places. ×100 is correct for our currency set, but `.longValue()` truncates — see §8. |
-| ↳ currency | `@Value("${stripe.currency:usd}")` — the shop currency is Stripe-namespaced, and defaults to `usd` while the intended currency is CHF. |
+| ↳ currency | `@Value("${stripe.currency:chf}")` — the shop currency is still Stripe-namespaced; rename to `payment.shop-currency` in step 1 (§8). |
 | ↳ retry | `retryPaymentIntent` (`:239-282`) builds a fresh PaymentIntent on the existing row — a distinct provider operation. |
 | ↳ idempotency | On `IdempotencyException`, falls back to `PaymentIntent.search("metadata['order_id']...")` (`:467-478`). Pure Stripe; must move inside the adapter. |
 | `handler/WebhookHandler.java` | Verifies `Stripe-Signature`, deserializes Stripe `Event`/`PaymentIntent`. Single route, no notion of which provider. |
@@ -57,10 +58,19 @@ independently.
 | `ui-shop` | `PaymentForm.tsx` (`useStripe`/`<PaymentElement>`/`confirmPayment`), `Checkout.tsx` + `RetryPayment.tsx` (`loadStripe`, `<Elements>`), `types.ts` field names. `RetryPayment.tsx:28` hard-errors when `clientSecret` is absent. |
 | `ui-demo` | **Same coupling, and it is deployed** — `app-chocolate` serves it alone, `app-multi` (current default) alongside `ui-shop`. `types.ts`, `pages/CheckoutPage.tsx`. |
 
-`ui-demo` means the DTO rename in §6 breaks a live frontend. Cheapest fix:
-**keep the old field names as deprecated aliases for one release** (populate
-`clientSecret` *and* `providerPayload`), so the API change stops being
-lockstep with frontend work. Otherwise migrate both, or accept the breakage.
+`ui-demo` means the DTO rename in §6 breaks a live frontend. **Decided:
+deprecated aliases.** The API populates `clientSecret` *and* `providerPayload`
+(and both id fields) for as long as it takes; `ui-shop` migrates first, and
+`ui-demo` is refactored only once we are happy with `ui-shop`. The aliases are
+therefore not "one release" — they stay until `ui-demo` lands, and step 4's
+alias drop is gated on that, not on a date.
+
+Practical consequence: **nothing in steps 3–4 may make an alias impossible to
+populate.** `clientSecret` is only expressible as an alias while every enabled
+provider is `CLIENT_SDK`; a `REDIRECT` provider has no client secret to put
+there. That is fine — it just means a second provider (step 5) is hard-blocked
+on `ui-demo` being migrated or written off, and the alias window closes on its
+own the moment PayPal is real.
 
 ## 3. Target architecture
 
@@ -238,9 +248,11 @@ worse. Same reasoning already applied to `identity.events`/kafka-ui in
   `/api/payments/return/**` and `/api/payments/providers`.
 - `gateway/RouterConfig`: `/api/payments/**` already routes as one block —
   but verify in `GateSec` that `/providers` needs no OAuth2 session.
-- `HealthHandler`: `/actuator/health/stripe` → `/actuator/health/providers`
-  iterating `registry.enabled()` and calling each adapter's `health()`. Check
-  for k8s probes or runbooks referencing the old path first.
+- `HealthHandler`: ~~`/actuator/health/stripe` → `/actuator/health/providers`~~
+  **done in step 1.** Nothing referenced the old path — no k8s probe, no
+  runbook, no frontend — so it was renamed rather than aliased. Reports
+  DEGRADED rather than DOWN when a provider is unreachable, since the service
+  still serves reads and drains its outbox.
 
 ## 7. Frontend
 
@@ -284,31 +296,61 @@ does today. `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` are wired in
 `compose.yaml` and all three Hetzner `secrets-patch.yaml.example` files —
 update the checked-in examples, not just live secrets.
 
-**Money.** ×100 is correct given the currency set, so keep it in one shared
-helper rather than three inline copies. The real fix is that `.longValue()`
-truncates: `BigDecimal("10.999")` silently becomes `1099`. Since sub-cent
-amounts are disallowed, reject rather than round:
+**Money. Done 2026-08-01** — `service/MinorUnits.java`, replacing **four**
+inline copies (the plan said three; `executeRefund:166` was the fourth). It
+rejects sub-cent amounts rather than truncating, uses `longValueExact()` so
+overflow throws, and rejects known zero-decimal currencies outright so adding
+JPY later fails loudly instead of overcharging 100×. Each call site passes the
+currency it is actually charging in — `payment.getCurrency()` on the refund and
+retry paths, the resolved `cur` on create. Covered by `MinorUnitsTest`.
 
-```java
-static long toMinorUnits(BigDecimal amount, String currency) {
-    if (amount.stripTrailingZeros().scale() > 2)
-        throw new IllegalArgumentException("Sub-cent amount not supported: " + amount);
-    return amount.movePointRight(2).longValueExact();   // exact: overflow throws
-}
-```
+Still outstanding: enforce the same scale rule on product prices in `shop` —
+nothing stops a three-decimal price being stored today, it just now fails at
+payment time instead of undercharging. Also: the refund path recomputes from
+`payment.getAmount()` rather than what was captured — once attempts exist,
+refund against the succeeded attempt's amount.
 
-Enforce the same scale rule on product prices in `shop`. Also: the refund path
-recomputes from `payment.getAmount()` rather than what was captured — once
-attempts exist, refund against the succeeded attempt's amount.
-
-**Currency.** One shop currency, validated at startup to be one of the five,
+**Currency.** One shop currency, validated at startup to be one of the four,
 and providers validated at startup to support it — refuse to enable a provider
 that cannot charge it rather than discovering it on the first order. That makes
 `supportedCurrencies()` a startup check, not a runtime filter, and no
-`?currency=` param is needed. **Verify Stripe supports MDL** before treating it
-as a usable shop currency; the others are standard. `shop` still needs a
-currency column on orders so changing the shop currency later doesn't
-reinterpret history — one column, written once.
+`?currency=` param is needed. MDL is out of the set entirely, so nothing needs
+verifying; USD/EUR/RON/CHF are all standard Stripe settlement currencies.
+
+**The CHF switch is a cutover, not a default change.** Done 2026-08-01: the
+default is now `chf` in `application.yaml`, `compose.yaml` and
+`k8s/base/config.yaml` (the Hetzner overlays inherit base and never overrode
+it), with the README and `kind.md` tables updated. Deliberately **lowercase**,
+matching the previous `usd` — the value is passed straight to
+`PaymentIntentCreateParams.setCurrency` (`PaymentService.java:451`), which
+wants a lowercase ISO code.
+
+What this does *not* do: every `payment` row written before the cutover still
+carries `currency = 'USD'` (`001-create-payment-table.sql:8` defaults it), and
+every historical Stripe charge is a USD charge that can only ever be refunded
+in USD. The table holds two currencies from now on. Consequences, all still
+outstanding:
+
+- Stored case is **not** an issue: `doCreatePaymentIntent` persists
+  `cur.toUpperCase()` and `retryPaymentIntent` lowercases only on the way out
+  to Stripe, so the column is uppercase throughout. Nothing to normalise.
+- Refunds are **already currency-safe**: `executeRefund` passes only
+  `paymentIntent` + amount to `RefundCreateParams`, so Stripe refunds in the
+  original charge's currency. There is no path where a CHF config value is
+  applied to a USD charge.
+- Still true: keep `payment.currency` per-row and read it rather than the
+  configured shop currency, since the config is only the currency for *new*
+  payments. As of 2026-08-01 the minor-unit conversion does exactly this.
+- `shop` still has no currency column at all, so orders placed before it lands
+  have no recoverable denomination. That window is now open.
+- This interacts with the balance: see §9.0.
+
+`shop` still needs a currency column on orders so changing the shop currency
+later doesn't reinterpret history — one column, written once. There is
+currently **no currency anywhere in `shop`** (no column, no field, no DTO), so
+this is a new column plus a backfill of `'USD'` for existing orders, not a
+rename. Do it in step 2 alongside the other migrations; doing it after the CHF
+cutover means a window of orders whose currency is unrecoverable from data.
 
 ## 9. User balance (design sketch — not scoped)
 
@@ -318,6 +360,39 @@ provider the original payment used.
 
 Deliberately *not* a separate currency unit: no rate, no FX, no way to buy the
 balance, no top-up orders. Every payment keeps an `order_id`.
+
+**Decided — withdrawal eligibility.** Only lots funded by a real payment are
+withdrawable, and only up to the amount that payment actually captured.
+**Promotional grants are never withdrawable** — they are spend-only. This is
+the rule the lot model in §9.3 has to enforce, and it is what keeps the whole
+feature a delayed refund rather than stored value: no path exists by which
+money leaves the system that did not first enter it from the same user's card.
+
+### 9.0 The USD/CHF boundary
+
+The balance is CHF, but historical payments are USD (§8) — and a withdrawal
+returns money to the *original charge*, which is denominated in that charge's
+currency. Crediting a 20.00 USD refund as 20.00 CHF and then withdrawing
+20.00 CHF back to a USD charge violates "the amount they actually paid" in both
+directions, and no FX is allowed anywhere by §1.
+
+Two options, and this needs a decision before §9.7 step 1:
+
+- **Preferred: lots carry their own currency**, `NOT NULL`, taken from the
+  funding payment. Withdrawal is exact and per-lot by construction. The
+  "balance" shown to the user is then per-currency — in practice one CHF
+  figure plus a shrinking USD tail that drains as it is spent or withdrawn.
+  Spending a USD lot against a CHF order is the one place a rate would be
+  needed, so: **USD lots are withdraw-only, not spendable.** No FX, no
+  reinterpretation, and the tail disappears on its own.
+- Simpler but lossy: refuse to credit refunds of pre-cutover USD payments to
+  the balance at all, and keep refunding those directly to the provider on the
+  old path. Fewer moving parts; leaves two refund flows alive indefinitely.
+
+Either way, do **not** add a `currency` column to `balance_lot` later — a
+single-currency lot table is the one thing in §9 that cannot be migrated
+cleanly once rows exist, because the currency of an existing row is not
+recoverable from the row.
 
 ### 9.1 Refund flow inverts
 
@@ -365,20 +440,42 @@ So the balance is a set of **lots**, each carrying its origin:
 CREATE TABLE balance_lot (
     id UUID PRIMARY KEY,
     username VARCHAR(64) NOT NULL,
+    origin VARCHAR(16) NOT NULL,         -- PAYMENT_REFUND | PROMOTIONAL_GRANT
+    currency VARCHAR(8) NOT NULL,        -- §9.0 — from the funding payment
     source_order_id BIGINT,              -- null for promotional grants
     source_payment_id UUID,              -- which payment/attempt funded it
     provider VARCHAR(32),                -- where a withdrawal would go
     amount NUMERIC(12,2) NOT NULL,       -- original credit
     spent NUMERIC(12,2) NOT NULL DEFAULT 0,
     withdrawn NUMERIC(12,2) NOT NULL DEFAULT 0,
-    withdrawable_until TIMESTAMPTZ,      -- provider refund window
-    created_at TIMESTAMPTZ NOT NULL
+    withdrawable_until TIMESTAMPTZ,      -- provider refund window; null = never
+    created_at TIMESTAMPTZ NOT NULL,
+    -- Decided: promotional grants are spend-only, enforced in the schema.
+    CONSTRAINT grants_not_withdrawable CHECK (
+        origin <> 'PROMOTIONAL_GRANT'
+        OR (withdrawn = 0 AND provider IS NULL AND withdrawable_until IS NULL)
+    ),
+    CONSTRAINT payment_lots_have_origin CHECK (
+        origin <> 'PAYMENT_REFUND'
+        OR (source_payment_id IS NOT NULL AND provider IS NOT NULL)
+    ),
+    CONSTRAINT lot_not_overdrawn CHECK (spent + withdrawn <= amount)
 );
 ```
 
 Available balance is `Σ(amount - spent - withdrawn)`. Spending consumes lots
-FIFO. Withdrawable per lot is `amount - spent - withdrawn`, which gives the
-"can't refund more than was captured" guarantee for free.
+FIFO — **grant lots first**, since they are the ones that can expire worthless
+and the ones the user can never get back as money; spending a withdrawable lot
+before a spend-only one destroys value the user held. Withdrawable per lot is
+`amount - spent - withdrawn` for `PAYMENT_REFUND` lots and **always zero** for
+grants, which gives the "can't refund more than was captured" and "grants are
+not money" guarantees for free.
+
+`origin` as an explicit column rather than inferring "grant" from
+`source_payment_id IS NULL` — the inference is the kind that silently turns a
+data-repair row with a missing id into withdrawable cash. The `CHECK`
+constraints above are the actual enforcement point; do not rely on service
+code alone for a rule about money leaving the system.
 
 The UI the user described falls out of this naturally: **show withdrawal
 per lot, not as one pooled number.** "Order #123 — 20.00 CHF — [Return to
@@ -393,6 +490,13 @@ provider?" question entirely.
   `withdrawable_until`, set from the funding payment's date. Verify the exact
   window per provider before setting it.
 - **Spent credit is not withdrawable.** Enforced by the lot arithmetic.
+- **Promotional grants are not withdrawable at all** (decided). They have no
+  provider and no captured amount to return, so the withdrawal UI must not
+  render a button for them — show them as "store credit", visibly distinct
+  from returnable lots, so the difference is discovered before checkout rather
+  than at the withdrawal screen.
+- **A withdrawal never exceeds what that payment captured**, per lot, in that
+  payment's currency (§9.0) — not the order total, and not the sum of lots.
 - **Withdrawal is async and can fail.** It is a real provider call. Model it
   with a status (`REQUESTED`/`SUCCEEDED`/`FAILED`) and reconcile via the
   existing refund `/sync` path; on failure, return the amount to the lot.
@@ -450,26 +554,93 @@ purchasable currency would have been.
 
 ## 10. Rollout
 
-0. **Drop `clientSecret` from the `PaymentIntentCreated` payload** (§6).
-   Independent, no consumer reads it, removes a credential from a topic.
-1. **Backend seam, no behaviour change.** Port, registry,
-   `StripePaymentProvider`; route service/handler through them. Still one
-   enabled provider. Webhook path → `/webhook/stripe` **plus the `PaymentSec`
-   matcher fix**. Minor-unit helper (§8) — a behaviour *fix*, so verify a real
-   charge amount before and after.
-2. **Data migration** (§5). Decide `payment_attempt` in or out here; if out,
-   retry stays same-provider.
-3. **API + event contract** (§6), with deprecated field aliases so this isn't
-   lockstep with the frontend and `ui-demo` keeps working. `shop`'s
-   `EventConsumer` and `OrderResponse` change here.
-4. **Frontend widget abstraction** (§7), then drop the aliases — which
-   requires `ui-demo` migrated or written off.
+0. ~~**Drop `clientSecret` from the `PaymentIntentCreated` payload** (§6).~~
+   **Done 2026-08-01**, together with the minor-unit helper. `Payment` keeps
+   its `client_secret` column and `GET /api/payments/intent/{orderId}` still
+   serves it — only the Kafka payload lost the field. Verified no consumer read
+   it: `shop`'s `EventConsumer` branches on `paymentId`, `reason` and
+   `stripePaymentIntentId`, never `clientSecret`.
+1. ~~**Backend seam, no behaviour change.**~~ **Done 2026-08-01.** Port +
+   value types + registry in `provider/`, `StripePaymentProvider` in
+   `provider/stripe/`; `PaymentService`, `WebhookHandler` and `HealthHandler`
+   all routed through them, with the adapter resolved from `Payment.provider`
+   rather than config. Webhook path → `/webhook/{provider}` **with the
+   `PaymentSec` matcher widened to `/**`**. `/actuator/health/stripe` →
+   `/actuator/health/providers`. `GET /api/payments/providers` pulled forward
+   from §6 (additive, read-only, and it makes the registry verifiable in the
+   cluster). No DB or event-payload change — those are steps 2 and 3.
+   ~~Minor-unit helper (§8)~~ — landed early in step 0; it is a behaviour
+   *fix*, so a real charge amount still wants verifying in the cluster.
+
+   Two things worth knowing about the seam as built:
+   - **`PaymentProviderException`.** Adapters wrap SDK failures in it so
+     callers can tell "the provider failed" from "our persistence failed".
+     That distinction is load-bearing in `executeRefund`: catching everything
+     would record a refund Stripe actually made as FAILED.
+   - **Webhook-disabled is a 503, not a silent success.** A delivery arriving
+     for a provider whose `webhook.enabled` is false is refused, because the
+     signing secret may be unset and verification would be theatre.
+2. ~~**Data migration** (§5).~~ **Done 2026-08-01**, `payment_attempt`
+   **in** — `005-provider-neutral-schema.sql`, plus `shop`'s
+   `008-add-order-currency.sql` backfilled `'USD'`. Attempts are written by the
+   service, not just modelled: create and retry each open one, and status
+   transitions advance the current attempt. Two decisions made during the work:
+   - **`provider_payload` holds JSON, not a bare secret**, transformed in the
+     same changeset so the column never carries two formats. The DTO still
+     exposes a flat `clientSecret`, extracted on read — renaming that field is
+     step 3, and doing it inside a migration commit would break both frontends.
+   - **Advancing an attempt is best-effort.** It is an audit trail; failing a
+     shopper's `/sync` because a history row would not write is the wrong
+     trade. The unique index on succeeded attempts is the part that must not be
+     papered over, so a violation there is logged loudly.
+2b. **CHF cutover** (§8) — ~~config~~ **done 2026-08-01**, ahead of the rest of
+   this plan. It landed *before* the per-row currency reads, so the follow-ups
+   in §8 (case normalisation, refund reading `payment.currency` instead of
+   config, `shop` order currency) are now debt rather than prerequisites, and
+   the pre-cutover USD rows are already a mixed-currency table.
+3. ~~**API + event contract** (§6)~~ **Done 2026-08-01.** Canonical
+   `provider`/`providerPaymentId`/`providerPayload` fields added, with
+   `stripePaymentIntentId`/`clientSecret`/`stripeRefundId` populated alongside
+   as aliases (`CreatePaymentIntentResponse.of` fills them, and
+   `CreatePaymentIntentResponseTest` pins that they stay in step). Events gained
+   `provider` + `providerPaymentId`/`providerRefundId` *next to* the legacy
+   keys, and `shop`'s `EventConsumer` accepts either. `POST /api/shop/orders`
+   takes an optional `provider`, carried on `OrderPlaced` along with the order's
+   `currency`; unknown-provider and ambiguous-provider are both 400s.
+
+   **`shop`'s `OrderResponse.clientSecret` was never populated server-side** —
+   both call sites passed `null`, and `ui-shop` merges the value in client-side
+   from `GET /api/payments/intent/{orderId}`. §6's "shop
+   `OrderResponse.clientSecret` → provider + providerPayload" was written on the
+   assumption shop filled it. `provider`/`providerPayload` were added anyway, as
+   the null-on-the-wire shape the SPA already mutates locally, so step 4 needs
+   no further shop change. `currency` is populated, being shop's own.
+4. ~~**Frontend widget abstraction** (§7) in `ui-shop`.~~ **Done 2026-08-01.**
+   `components/payment/`: `PaymentWidget` switching on `confirmationMode`,
+   `stripe/StripePaymentWidget` (the `<Elements>` wiring and publishable key) +
+   `stripe/StripePaymentForm` (the old `PaymentForm`, moved),
+   `RedirectPaymentWidget`, `ProviderSelector`, and a `usePaymentProviders`
+   hook. **Every `@stripe/*` import in `ui-shop` now lives under
+   `components/payment/stripe/`** — `Checkout.tsx` and `RetryPayment.tsx` have
+   none. Both tolerate the legacy flat `clientSecret` as well as
+   `providerPayload`, so a row written before migration 005 still pays.
+
+   `RedirectPaymentWidget` is built although nothing renders it yet: it makes
+   the `confirmationMode` switch total rather than a one-case stub the next
+   provider has to reopen, which is the whole claim of §7. `ProviderSelector`
+   renders nothing below two providers, so today it is invisible and becomes
+   visible the moment a second adapter is enabled — no page changes.
+
+   **Aliases stay up.** Dropping them needs `ui-demo` migrated or written off,
+   which by decision happens after `ui-shop` is settled, and which gates step 5.
 5. **Second provider** (future). Adapter + selector entry + config flag.
    Additive by construction if 1–4 are done.
 6. **Docs.** Refresh `docs/stripe-integration.md` line numbers; note it now
    documents the Stripe adapter specifically.
 
-Steps 0–2 are externally invisible and land independently.
+Steps 0–2 are externally invisible and land independently. **2b is the first
+visible change** — prices switch denomination — and is deliberately separated
+so it can be scheduled and announced on its own.
 
 ## 11. Testing
 
@@ -485,20 +656,73 @@ Steps 0–2 are externally invisible and land independently.
   lookups and `enabled()` filtering. A `NoopPaymentProvider` in **test sources
   only** proves N>1 dispatch before a real second adapter exists — no dev-only
   Spring profile, so deployed config matches tested config.
-- The load-bearing check is a **real checkout in the cluster against Stripe
-  test mode**: place, pay, `/sync`, refund, confirm `PAID` → `REIMBURSED` in
-  shop. It is the only thing covering the outbox → Kafka → `shop` consumer
-  path that §6 changes. Run it after steps 1 and 3.
+- The load-bearing check is a **real checkout against Stripe test mode**:
+  place, pay, `/sync`, refund, confirm `PAID` → `REIMBURSED` in shop. It is the
+  only thing covering the outbox → Kafka → `shop` consumer path that §6 changes.
+  **Automated as `scripts/verify-checkout.sh`** and run green (35/35) against
+  the compose stack on 2026-08-01, after steps 0–4. It asserts each step's own
+  claim, not just that checkout works: aliases mirroring canonical fields, the
+  migrated columns, `payment_attempt` written and linked, `clientSecret` absent
+  from the Kafka payload, and the charge actually settling in **chf**.
+
+  Not yet run against the Hetzner cluster: its API server allows 6443 from a
+  single IP that no longer matches, so `kubectl` cannot reach it from here.
+  Nothing in this plan is blocked on that, but nothing has been verified in
+  production either.
+
+  Three bugs surfaced by running it, all pre-existing and none from this
+  refactor — see §12 "Found while verifying".
 - No new Testcontainers requirement.
 
 ## 12. Open questions
 
-- **`payment_attempt` in steps 1–4, or later?** The one sequencing decision.
-- **`ui-demo`: aliases, migrate, or write off?**
-- **Can Stripe charge in MDL?** Factual; blocks MDL as shop currency.
+**Resolved 2026-08-01**
+
+- **`ui-demo`** → deprecated aliases; refactor it after `ui-shop` is settled.
+  Step 4's alias drop is gated on that, and a second provider is gated on the
+  aliases being gone (§2).
+- **MDL** → out of scope. Currency set is USD, EUR, RON, CHF (§1, §8).
+- **Shop currency** → CHF. Note this is a cutover from the USD currently
+  deployed, not a default change (§8).
+- **Promotional grants** → spend-only, never withdrawable, enforced by a
+  `CHECK` constraint. Only real payments are refundable, and only for the
+  amount that payment actually captured (§9, §9.3, §9.4).
+
+**Found while verifying (2026-08-01)** — all pre-existing, all fixed:
+
+- **`shop`'s `GlobalErrorHandler` logged nothing on a 500.** Every unhandled
+  exception returned "An unexpected error occurred" and left no trace at all,
+  which is why the first failure of the verification run was invisible. Now
+  logs at ERROR for 5xx only; 4xx stays quiet, being the API answering.
+- **`compose.yaml` never set `JWT_JWK_SET_URI`** for `shop`, `payment`,
+  `delivery`, `profile` or `greetings` — only for `storage`. They fell back to
+  `localhost:9090`, which inside a container is the service itself, so *every
+  authenticated request failed in compose* with "Could not obtain the keys".
+  k8s always set it (`k8s/base/config.yaml:96`), so only local dev was broken.
+- **The Stripe health check reported the wrong mode.** It inferred `live` from
+  the mere existence of a PaymentIntent, so a test account read `live` as soon
+  as it had one charge — a health endpoint claiming live while taking test
+  money. Now read from the API key prefix, which is what decides it.
+
+**Still open**
+
+- ~~**`payment_attempt` in steps 1–4, or later?**~~ **Resolved: in, landed in
+  step 2** on 2026-08-01. Original reasoning kept below.
+
+  *Recommendation was: in, at step 2.* The decided balance rule — refundable
+  only for what was actually paid — makes "what did this order actually
+  capture, and through which provider" a load-bearing fact rather than an
+  audit nicety, and `balance_lot.source_payment_id`/`provider` want to point at
+  an attempt. Landing it later means a second migration, a second pass over
+  `PaymentService`, and re-pointing wallet rows that already exist. Cost now is
+  one backfilled row per payment. If it goes out, retry stays same-provider and
+  §9 cannot start until it lands.
+- **§9.0: lot currency, or refuse to credit pre-cutover USD refunds?** Blocks
+  §9.7 step 1, because `balance_lot` cannot gain a currency column cleanly
+  after rows exist.
+- **Hold-expiry window** for reserved credit (§9.5), and whether it matches
+  whatever `purgeOrders` already does to stock reservations.
+- **Exact provider refund windows** for `withdrawable_until` — factual, Stripe
+  is ~180 days but verify before hardcoding.
 - **Provider ordering/default** on the selector once a second exists —
   deferred to step 5.
-- **Balance (§9):** hold-expiry window, the exact provider refund windows for
-  `withdrawable_until`, and whether promotional grants (no source payment) are
-  withdrawable at all — they have no provider to go back to, so presumably
-  spend-only.

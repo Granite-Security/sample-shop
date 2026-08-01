@@ -1,28 +1,36 @@
 package org.granitesecurity.payment.handler;
 
-import com.stripe.exception.SignatureVerificationException;
-import com.stripe.model.Event;
-import com.stripe.model.PaymentIntent;
-import com.stripe.net.Webhook;
 import tools.jackson.databind.ObjectMapper;
 import org.granitesecurity.payment.domain.OutboxEvent;
 import org.granitesecurity.payment.domain.Payment;
 import org.granitesecurity.payment.domain.PaymentStatus;
-import org.granitesecurity.payment.domain.StripeEvent;
+import org.granitesecurity.payment.domain.ProviderEvent;
+import org.granitesecurity.payment.provider.PaymentProvider;
+import org.granitesecurity.payment.provider.PaymentProviderRegistry;
+import org.granitesecurity.payment.provider.ProviderWebhookEvent;
+import org.granitesecurity.payment.provider.WebhookVerificationException;
 import org.granitesecurity.payment.repository.OutboxRepository;
 import org.granitesecurity.payment.repository.PaymentRepository;
-import org.granitesecurity.payment.repository.StripeEventRepository;
+import org.granitesecurity.payment.repository.ProviderEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Provider-scoped webhook intake: {@code POST /api/payments/webhook/{provider}}.
+ *
+ * <p>This class knows nothing about any provider's event shape. Verification and
+ * translation happen in the adapter's {@code parseWebhook}; what arrives here is a
+ * {@link ProviderWebhookEvent} with the order id and mapped status already resolved.
+ */
 @Service
 public class WebhookHandler {
 
@@ -30,162 +38,120 @@ public class WebhookHandler {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final PaymentRepository paymentRepository;
-    private final StripeEventRepository stripeEventRepository;
+    private final ProviderEventRepository providerEventRepository;
     private final OutboxRepository outboxRepository;
-
-    @Value("${stripe.webhook-secret}")
-    private String webhookSecret;
+    private final PaymentProviderRegistry providers;
 
     public WebhookHandler(PaymentRepository paymentRepository,
-                          StripeEventRepository stripeEventRepository,
-                          OutboxRepository outboxRepository) {
+                          ProviderEventRepository providerEventRepository,
+                          OutboxRepository outboxRepository,
+                          PaymentProviderRegistry providers) {
         this.paymentRepository = paymentRepository;
-        this.stripeEventRepository = stripeEventRepository;
+        this.providerEventRepository = providerEventRepository;
         this.outboxRepository = outboxRepository;
+        this.providers = providers;
     }
 
     public Mono<ServerResponse> handleWebhook(ServerRequest request) {
-        log.info("Received Stripe webhook request: {}", request);
-        String sigHeader = request.headers().firstHeader("Stripe-Signature");
-        log.info("Received Stripe webhook with signature: {}", sigHeader);
-        if (sigHeader == null || sigHeader.isBlank()) {
-            return ServerResponse.badRequest().bodyValue(Map.of("error", "Missing Stripe-Signature header"));
+        String providerName = request.pathVariable("provider");
+        if (!providers.has(providerName)) {
+            log.warn("Webhook for unknown provider '{}'", providerName);
+            return ServerResponse.notFound().build();
         }
+        PaymentProvider provider = providers.get(providerName);
+
+        // A delivery arriving for a provider whose webhook we never registered is a
+        // misconfiguration worth surfacing loudly rather than silently processing:
+        // the signature secret is likely unset, so verification would be meaningless.
+        if (!provider.webhookEnabled()) {
+            log.error("Webhook received for '{}' but webhooks are disabled for it — refusing", providerName);
+            return ServerResponse.status(503).bodyValue(Map.of(
+                    "error", "Webhooks are not enabled for provider " + providerName));
+        }
+
+        Map<String, String> headers = new HashMap<>();
+        request.headers().asHttpHeaders().forEach((name, values) -> {
+            if (!values.isEmpty()) {
+                headers.put(name, values.getFirst());
+            }
+        });
 
         return request.bodyToMono(String.class)
                 .flatMap(payload -> {
+                    ProviderWebhookEvent event;
                     try {
-                        Event event = Webhook.constructEvent(payload, sigHeader, webhookSecret);
-                        return processEvent(event, payload);
-                    } catch (SignatureVerificationException e) {
-                        log.warn("Webhook signature verification failed: {}", e.getMessage());
-                        return ServerResponse.badRequest().bodyValue(Map.of("error", "Invalid signature"));
+                        event = provider.parseWebhook(payload, headers);
+                    } catch (WebhookVerificationException e) {
+                        log.warn("Webhook signature verification failed for {}: {}", providerName, e.getMessage());
+                        return ServerResponse.badRequest().bodyValue(Map.of("error", e.getMessage()));
                     }
+                    return processEvent(provider, event);
                 });
     }
 
-    private Mono<ServerResponse> processEvent(Event event, String payload) {
-        return stripeEventRepository.findByStripeEventId(event.getId())
+    private Mono<ServerResponse> processEvent(PaymentProvider provider, ProviderWebhookEvent event) {
+        return providerEventRepository.findByProviderAndProviderEventId(provider.name(), event.eventId())
                 .flatMap(existing -> {
-                    log.info("Duplicate webhook event {} ({}) — skipping", event.getId(), event.getType());
+                    log.info("Duplicate webhook event {} ({}) — skipping", event.eventId(), event.eventType());
                     return ServerResponse.ok().bodyValue(Map.of("status", "duplicate"));
                 })
-                .switchIfEmpty(Mono.defer(() -> handleEvent(event, payload)));
+                .switchIfEmpty(Mono.defer(() -> recordAndApply(provider, event)));
     }
 
-    @SuppressWarnings("unchecked")
-    private Mono<ServerResponse> handleEvent(Event event, String payload) {
-        log.info("Recording webhook event {} ({})", event.getId(), event.getType());
-        return recordEvent(event)
-                .flatMap(se -> {
-                    log.info("Recorded event {} as {}", event.getId(), se.getId());
-                    return processPayload(event, payload);
-                })
+    private Mono<ServerResponse> recordAndApply(PaymentProvider provider, ProviderWebhookEvent event) {
+        log.info("Recording webhook event {} ({}) from {}", event.eventId(), event.eventType(), provider.name());
+        return recordEvent(provider, event)
+                .flatMap(se -> apply(event))
                 .onErrorResume(e -> {
-                    log.error("Webhook processing error for event {}: {}", event.getId(), e.getMessage());
-                    return ServerResponse.status(500).bodyValue(Map.of("error", e.getMessage()));
+                    log.error("Webhook processing error for event {}: {}", event.eventId(), e.getMessage());
+                    return ServerResponse.status(500).bodyValue(Map.of("error", String.valueOf(e.getMessage())));
                 });
     }
 
-    private Mono<ServerResponse> processPayload(Event event, String payload) {
-        if (!isStatusChangeEvent(event.getType())) {
-            log.info("Ignoring unhandled event type: {} ({})", event.getType(), event.getId());
+    private Mono<ServerResponse> apply(ProviderWebhookEvent event) {
+        if (event.status() == null) {
+            log.info("Ignoring unhandled event type: {} ({})", event.eventType(), event.eventId());
             return ServerResponse.ok().bodyValue(Map.of("status", "skipped", "reason", "unhandled_event_type"));
         }
-
-        var deserializer = event.getDataObjectDeserializer();
-        var objectOpt = deserializer.getObject();
-
-        if (objectOpt.isPresent() && objectOpt.get() instanceof PaymentIntent intent) {
-            return processPaymentIntent(event, intent);
-        }
-
-        log.warn("SDK deserializer failed for event {} ({}), falling back to manual JSON parsing", event.getId(), event.getType());
-        try {
-            var node = MAPPER.readTree(payload);
-            var dataObj = node.get("data").get("object");
-            String piId = dataObj.get("id").asText();
-            var meta = dataObj.get("metadata");
-            String orderIdStr = meta != null ? meta.get("order_id").asText(null) : null;
-
-            if (orderIdStr == null || orderIdStr.isEmpty()) {
-                log.warn("PaymentIntent {} has no order_id metadata", piId);
-                return ServerResponse.ok().bodyValue(Map.of("status", "skipped", "reason", "no_order_id"));
-            }
-
-            Long orderId = Long.parseLong(orderIdStr);
-            return paymentRepository.findByOrderId(orderId)
-                    .switchIfEmpty(Mono.error(new RuntimeException("Payment not found for order " + orderId)))
-                    .flatMap(payment -> updatePaymentStatus(payment, event.getType())
-                            .switchIfEmpty(Mono.just(payment)))
-                    .flatMap(payment -> publishStatusEvent(payment, event.getType())
-                            .thenReturn(payment)
-                            .defaultIfEmpty(payment))
-                    .flatMap(payment -> ServerResponse.ok().bodyValue(Map.of(
-                            "status", "processed",
-                            "orderId", payment.getOrderId(),
-                            "paymentStatus", payment.getStatus())));
-        } catch (Exception e) {
-            log.error("Manual JSON parsing failed for event {}: {}", event.getId(), e.getMessage());
-            return ServerResponse.ok().bodyValue(Map.of("status", "skipped", "reason", "manual_parsing_failed"));
-        }
-    }
-
-    private Mono<ServerResponse> processPaymentIntent(Event event, PaymentIntent intent) {
-
-        String orderIdStr = intent.getMetadata().get("order_id");
-        if (orderIdStr == null) {
-            log.warn("PaymentIntent {} has no order_id metadata", intent.getId());
+        if (event.orderId() == null) {
             return ServerResponse.ok().bodyValue(Map.of("status", "skipped", "reason", "no_order_id"));
         }
 
-        Long orderId = Long.parseLong(orderIdStr);
-
-        return paymentRepository.findByOrderId(orderId)
-                .switchIfEmpty(Mono.error(new RuntimeException("Payment not found for order " + orderId)))
-                .flatMap(payment -> updatePaymentStatus(payment, event.getType())
-                        .switchIfEmpty(Mono.just(payment)))
-                .flatMap(payment -> publishStatusEvent(payment, event.getType())
-                        .thenReturn(payment)
-                        .defaultIfEmpty(payment))
+        return paymentRepository.findByOrderId(event.orderId())
+                .switchIfEmpty(Mono.error(new RuntimeException("Payment not found for order " + event.orderId())))
+                .flatMap(payment -> updatePaymentStatus(payment, event.status()))
+                .flatMap(payment -> publishStatusEvent(payment, event.status()).thenReturn(payment))
                 .flatMap(payment -> ServerResponse.ok().bodyValue(Map.of(
                         "status", "processed",
                         "orderId", payment.getOrderId(),
                         "paymentStatus", payment.getStatus())));
     }
 
-    private Mono<Payment> updatePaymentStatus(Payment payment, String eventType) {
-        String newStatus = switch (eventType) {
-            case "payment_intent.succeeded" -> PaymentStatus.SUCCEEDED.name();
-            case "payment_intent.payment_failed" -> PaymentStatus.FAILED.name();
-            case "payment_intent.canceled" -> PaymentStatus.CANCELED.name();
-            default -> null;
-        };
-        if (newStatus == null) {
-            log.info("Unhandled event type: {}", eventType);
-            return Mono.empty();
-        }
-        payment.setStatus(newStatus);
+    private Mono<Payment> updatePaymentStatus(Payment payment, PaymentStatus newStatus) {
+        payment.setStatus(newStatus.name());
         payment.setUpdatedAt(Instant.now());
         payment.markNotNew();
         return paymentRepository.save(payment);
     }
 
-    private Mono<Void> publishStatusEvent(Payment payment, String eventType) {
-        String eventName = switch (eventType) {
-            case "payment_intent.succeeded" -> "PaymentSucceeded";
-            case "payment_intent.payment_failed" -> "PaymentFailed";
-            case "payment_intent.canceled" -> "PaymentCanceled";
+    private Mono<Void> publishStatusEvent(Payment payment, PaymentStatus status) {
+        String eventName = switch (status) {
+            case SUCCEEDED -> "PaymentSucceeded";
+            case FAILED -> "PaymentFailed";
+            case CANCELED -> "PaymentCanceled";
             default -> null;
         };
         if (eventName == null) return Mono.empty();
 
         try {
-            String json = MAPPER.writeValueAsString(Map.of(
-                    "orderId", payment.getOrderId(),
-                    "stripePaymentIntentId", payment.getStripePaymentIntentId(),
-                    "status", payment.getStatus()
-            ));
+            Map<String, Object> eventPayload = new LinkedHashMap<>();
+            eventPayload.put("orderId", payment.getOrderId());
+            eventPayload.put("provider", payment.getProvider());
+            eventPayload.put("providerPaymentId", payment.getProviderPaymentId());
+            // Legacy alias, kept alongside for in-flight messages during a rollout.
+            eventPayload.put("stripePaymentIntentId", payment.getProviderPaymentId());
+            eventPayload.put("status", payment.getStatus());
+            String json = MAPPER.writeValueAsString(eventPayload);
             OutboxEvent outbox = new OutboxEvent(
                     "payment",
                     String.valueOf(payment.getOrderId()),
@@ -200,15 +166,9 @@ public class WebhookHandler {
         }
     }
 
-    private static boolean isStatusChangeEvent(String eventType) {
-        return "payment_intent.succeeded".equals(eventType)
-                || "payment_intent.payment_failed".equals(eventType)
-                || "payment_intent.canceled".equals(eventType);
-    }
-
-    private Mono<StripeEvent> recordEvent(Event event) {
-        StripeEvent se = new StripeEvent(event.getId(), event.getType());
-        se.setProcessedAt(Instant.now());
-        return stripeEventRepository.save(se);
+    private Mono<ProviderEvent> recordEvent(PaymentProvider provider, ProviderWebhookEvent event) {
+        ProviderEvent recorded = new ProviderEvent(provider.name(), event.eventId(), event.eventType());
+        recorded.setProcessedAt(Instant.now());
+        return providerEventRepository.save(recorded);
     }
 }

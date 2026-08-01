@@ -107,7 +107,8 @@ a no-op.
 | deliverydb | `delivery` | `order_id` | deleted |
 | deliverydb | `delivery_tracking` | `delivery_id` | deleted (ids resolved first) |
 | profiledb | `user_profile`, `delivery_address` | `username` | deleted |
-| paymentdb | `stripe_event` | — | **left alone** — webhook dedupe log; clearing it would let processed webhooks replay |
+| paymentdb | `provider_event` | — | **left alone** — webhook dedupe log; clearing it would let processed webhooks replay |
+| paymentdb | `payment_attempt` | cascade | no explicit delete — `ON DELETE CASCADE` on `payment_id`, so attempts go with their payment |
 | shopdb/paymentdb/deliverydb | `outbox`, `delivery_event` | — | **left alone** — plumbing, not user data |
 | profiledb | `user_file` | `username` | **not handled** — see §6 |
 
@@ -249,7 +250,7 @@ No single service can see both halves, so the report is a join:
 
 1. **`user_file` is not deleted on hard delete.** A deleted user's uploaded files stay in
    `profiledb.user_file`, and their objects stay in storage, with the owning user gone.
-   The plan's §8 Phase 4 named only the profile row and addresses; unlike `stripe_event`
+   The plan's §8 Phase 4 named only the profile row and addresses; unlike `provider_event`
    there is no reasoning given, so this reads as an oversight. Closing it means also
    calling `StorageClient.delete` per file. **The most worth fixing.**
 2. **`PROCESSING` payments count as deletable.** `PaymentStatus` has six values, not the

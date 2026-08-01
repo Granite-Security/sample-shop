@@ -75,7 +75,7 @@ class OrderServiceTest {
         PlaceOrderRequest request = new PlaceOrderRequest(List.of(
                 new PlaceOrderRequest.LineItem(1L, 2),
                 new PlaceOrderRequest.LineItem(2L, 3)
-        ), ADDRESS);
+        ), ADDRESS, null);
 
         StepVerifier.create(orderService.placeOrder("testuser", request))
                 .assertNext(response -> {
@@ -95,7 +95,7 @@ class OrderServiceTest {
 
     @Test
     void shouldRejectEmptyOrder() {
-        PlaceOrderRequest request = new PlaceOrderRequest(List.of(), ADDRESS);
+        PlaceOrderRequest request = new PlaceOrderRequest(List.of(), ADDRESS, null);
 
         StepVerifier.create(orderService.placeOrder("testuser", request))
                 .expectErrorMatches(e -> e instanceof ShopException
@@ -112,7 +112,7 @@ class OrderServiceTest {
 
         PlaceOrderRequest request = new PlaceOrderRequest(List.of(
                 new PlaceOrderRequest.LineItem(999L, 1)
-        ), ADDRESS);
+        ), ADDRESS, null);
 
         StepVerifier.create(orderService.placeOrder("testuser", request))
                 .expectErrorMatches(e -> e instanceof ShopException
@@ -133,7 +133,7 @@ class OrderServiceTest {
 
         PlaceOrderRequest request = new PlaceOrderRequest(List.of(
                 new PlaceOrderRequest.LineItem(1L, 5)
-        ), ADDRESS);
+        ), ADDRESS, null);
 
         StepVerifier.create(orderService.placeOrder("testuser", request))
                 .expectErrorMatches(e -> e instanceof ShopException

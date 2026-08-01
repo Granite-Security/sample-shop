@@ -31,7 +31,7 @@ stripe.confirmPayment() success (browser side)
   → shop EventConsumer → order status = PAID
 ```
 
-**Problem:** The webhook requires Stripe CLI running locally to forward events from Stripe's servers to `localhost:8080/api/payments/webhook`.
+**Problem:** The webhook requires Stripe CLI running locally to forward events from Stripe's servers to `localhost:8080/api/payments/webhook/stripe`.
 
 ## Plan
 
@@ -50,7 +50,7 @@ Need Stripe CLI to forward webhooks:
 ```bash
 # Install: brew install stripe/stripe-cli/stripe
 stripe login
-stripe listen --forward-to localhost:8080/api/payments/webhook
+stripe listen --forward-to localhost:8080/api/payments/webhook/stripe
 # Set the webhook signing secret in your env:
 export STRIPE_WEBHOOK_SECRET=whsec_...
 ```

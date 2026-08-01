@@ -190,6 +190,12 @@ services:
     ports:
       - "8060:8060"
     environment:
+      # Resource servers verify signatures against auth-server directly: the JWKS
+      # host is internal and domain-agnostic, while the iss claim is not. Without
+      # these the default localhost:9090 resolves to the container itself and every
+      # authenticated request fails with "Could not obtain the keys".
+      - JWT_JWK_SET_URI=http://auth-server:9090/auth/oauth2/jwks
+      - TRUSTED_JWT_ISSUERS=http://gateway:8080/auth
       - SPRING_PROFILES_ACTIVE=docker
       - AUTH_ISSUER_URI=http://gateway:8080/auth
       - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://gateway:8080/auth
@@ -204,6 +210,12 @@ services:
     ports:
       - "8061:8061"
     environment:
+      # Resource servers verify signatures against auth-server directly: the JWKS
+      # host is internal and domain-agnostic, while the iss claim is not. Without
+      # these the default localhost:9090 resolves to the container itself and every
+      # authenticated request fails with "Could not obtain the keys".
+      - JWT_JWK_SET_URI=http://auth-server:9090/auth/oauth2/jwks
+      - TRUSTED_JWT_ISSUERS=http://gateway:8080/auth
       - SPRING_PROFILES_ACTIVE=docker
       - SHOP_R2DBC_URL=r2dbc:postgresql://shop-postgres:5432/shopdb
       - SHOP_R2DBC_USERNAME=myuser
@@ -238,6 +250,12 @@ services:
     ports:
       - "8062:8062"
     environment:
+      # Resource servers verify signatures against auth-server directly: the JWKS
+      # host is internal and domain-agnostic, while the iss claim is not. Without
+      # these the default localhost:9090 resolves to the container itself and every
+      # authenticated request fails with "Could not obtain the keys".
+      - JWT_JWK_SET_URI=http://auth-server:9090/auth/oauth2/jwks
+      - TRUSTED_JWT_ISSUERS=http://gateway:8080/auth
       - SPRING_PROFILES_ACTIVE=docker
       - PAYMENT_SERVER_PORT=8062
       - PAYMENT_R2DBC_URL=r2dbc:postgresql://payment-postgres:5432/paymentdb
@@ -251,7 +269,10 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
-      - STRIPE_CURRENCY=${STRIPE_CURRENCY:-usd}
+      - STRIPE_CURRENCY=${STRIPE_CURRENCY:-chf}
+      # Set to true only with `stripe listen --forward-to .../api/payments/webhook/stripe`
+      # running; otherwise /sync confirms payments and the endpoint answers 503.
+      - PAYMENT_PROVIDER_STRIPE_WEBHOOK_ENABLED=${PAYMENT_PROVIDER_STRIPE_WEBHOOK_ENABLED:-false}
     depends_on:
       gateway:
         condition: service_started
@@ -266,6 +287,12 @@ services:
     ports:
       - "8064:8064"
     environment:
+      # Resource servers verify signatures against auth-server directly: the JWKS
+      # host is internal and domain-agnostic, while the iss claim is not. Without
+      # these the default localhost:9090 resolves to the container itself and every
+      # authenticated request fails with "Could not obtain the keys".
+      - JWT_JWK_SET_URI=http://auth-server:9090/auth/oauth2/jwks
+      - TRUSTED_JWT_ISSUERS=http://gateway:8080/auth
       - SPRING_PROFILES_ACTIVE=docker
       - PROFILE_SERVER_PORT=8064
       - PROFILE_R2DBC_URL=r2dbc:postgresql://profile-postgres:5432/profiledb
@@ -352,6 +379,12 @@ services:
     ports:
       - "8063:8063"
     environment:
+      # Resource servers verify signatures against auth-server directly: the JWKS
+      # host is internal and domain-agnostic, while the iss claim is not. Without
+      # these the default localhost:9090 resolves to the container itself and every
+      # authenticated request fails with "Could not obtain the keys".
+      - JWT_JWK_SET_URI=http://auth-server:9090/auth/oauth2/jwks
+      - TRUSTED_JWT_ISSUERS=http://gateway:8080/auth
       - SPRING_PROFILES_ACTIVE=docker
       - DELIVERY_SERVER_PORT=8063
       - DELIVERY_R2DBC_URL=r2dbc:postgresql://delivery-postgres:5432/deliverydb

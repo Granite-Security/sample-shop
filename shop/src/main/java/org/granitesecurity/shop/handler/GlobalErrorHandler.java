@@ -2,6 +2,8 @@ package org.granitesecurity.shop.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.granitesecurity.shop.service.ShopException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.webflux.error.ErrorWebExceptionHandler;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -18,11 +20,21 @@ import java.net.URI;
 @Order(-2)
 public class GlobalErrorHandler implements ErrorWebExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(GlobalErrorHandler.class);
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
         var result = resolve(ex);
+        // An expected failure (ShopException, ResponseStatusException) is the API
+        // answering, and logging it at ERROR would be noise. Anything falling through
+        // to 500 is a bug we did not anticipate, and until now it left no trace at
+        // all — the client got "An unexpected error occurred" and the log said nothing.
+        if (result.status().is5xxServerError()) {
+            log.error("Unhandled error serving {} {}",
+                    exchange.getRequest().getMethod(), exchange.getRequest().getPath().value(), ex);
+        }
         return writeProblem(exchange, result.status(), result.title(), result.detail());
     }
 

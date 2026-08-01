@@ -33,11 +33,17 @@ public class Payment implements Persistable<UUID> {
     @Column("provider_payment_id")
     private String providerPaymentId;
 
-    @Column("stripe_payment_intent_id")
-    private String stripePaymentIntentId;
+    /**
+     * Whatever the frontend needs to complete this payment, as JSON. A CLIENT_SDK
+     * provider stores a client secret in here; a REDIRECT provider stores a URL.
+     * Nullable, and its shape must not be assumed.
+     */
+    @Column("provider_payload")
+    private String providerPayload;
 
-    @Column("client_secret")
-    private String clientSecret;
+    /** The attempt currently in play. Null only for rows predating payment_attempt. */
+    @Column("current_attempt_id")
+    private UUID currentAttemptId;
 
     private String status;
 

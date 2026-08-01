@@ -1,7 +1,11 @@
 import { request } from './client';
-import type { CreatePaymentIntentResponse } from '../types';
+import type { CreatePaymentIntentResponse, PaymentProviderInfo } from '../types';
 
 export const paymentsApi = {
+  // Public: the checkout page needs it before the shopper authenticates.
+  listProviders: () =>
+    request<PaymentProviderInfo[]>('/api/payments/providers', { skipAuth: true }),
+
   getPaymentIntent: (orderId: number) =>
     request<CreatePaymentIntentResponse>(`/api/payments/intent/${orderId}`, { skipAuth: true }),
 

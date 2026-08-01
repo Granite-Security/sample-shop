@@ -58,7 +58,11 @@ public class PaymentSec {
                         // spirit — different path — but keep it first so the
                         // internal surface is visibly the guarded one.
                         .pathMatchers("/api/payments/internal/**").hasAuthority("SCOPE_internal")
-                        .pathMatchers("/api/payments/webhook").permitAll()
+                        // Must be /** : the route is now /webhook/{provider}, and an
+                        // exact matcher would 401 every delivery before the adapter
+                        // that verifies its signature is ever reached.
+                        .pathMatchers("/api/payments/webhook/**").permitAll()
+                        .pathMatchers("/api/payments/providers").permitAll()
                         .pathMatchers("/api/payments/intent/**").permitAll()
                         .pathMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .anyExchange().authenticated()

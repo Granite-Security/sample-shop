@@ -45,7 +45,7 @@ class UserOrderServiceTest {
     }
 
     private CustomerOrder order(Long id, String status) {
-        CustomerOrder order = new CustomerOrder("alice", status, BigDecimal.TEN,
+        CustomerOrder order = new CustomerOrder("alice", status, BigDecimal.TEN, "CHF",
                 "Alice", "Line 1", "", "Town", "", "1234", "NL");
         order.setId(id);
         return order;

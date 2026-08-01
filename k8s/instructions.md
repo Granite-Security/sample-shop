@@ -145,7 +145,7 @@ kind load docker-image --name granite \
    
 ```bash
 stripe login
-stripe listen --forward-to gateway:8080/api/payments/webhook
+stripe listen --forward-to gateway:8080/api/payments/webhook/stripe
 ```
 
 ---

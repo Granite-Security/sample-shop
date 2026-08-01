@@ -7,16 +7,24 @@ the work.
 
 ## The two mechanisms
 
-### 1. Webhook (`POST /api/payments/webhook`)
+### 1. Webhook (`POST /api/payments/webhook/{provider}` — `/webhook/stripe`)
 
 Stripe calls **your** server when an event happens (`payment_intent.succeeded`,
 `.payment_failed`, `.canceled`). Handled by `WebhookHandler`
 (`payment/src/main/java/org/granitesecurity/payment/handler/WebhookHandler.java`),
-routed at `payment/.../route/PaymentRoute.java:26`. The signature is verified
-with `com.stripe.net.Webhook.constructEvent(...)` using `STRIPE_WEBHOOK_SECRET`.
+routed at `payment/.../route/PaymentRoute.java`. The signature is verified with
+`com.stripe.net.Webhook.constructEvent(...)` using `STRIPE_WEBHOOK_SECRET` —
+though since the multi-provider seam landed, that verification lives in
+`StripePaymentProvider.parseWebhook`, not in the handler.
+
+Two things now gate this route beyond the signature: the path is provider-scoped
+(`/webhook/stripe`), and `payment.providers.stripe.webhook.enabled` must be
+`true`. It defaults to **false**, and while false the endpoint answers 503
+rather than verifying against a secret that may not be set. Registering the
+endpoint in the Stripe Dashboard without flipping that flag will not work.
 
 This direction requires Stripe to know your endpoint exists: someone has to
-register `https://<your-domain>/api/payments/webhook` in the Stripe Dashboard
+register `https://<your-domain>/api/payments/webhook/stripe` in the Stripe Dashboard
 (Developers → Webhooks). Nobody has done that for `granite-security.org` yet.
 
 ### 2. Direct poll/sync (`POST /api/payments/intent/{orderId}/sync`)
@@ -54,7 +62,7 @@ Stripe's side beyond the API keys.
 
 On kind, the *webhook* path (mechanism 1) can't work at all — Stripe's servers
 have no way to reach `localhost`. The Stripe CLI tunnel
-(`stripe listen --forward-to gateway:8080/api/payments/webhook`, documented in
+(`stripe listen --forward-to gateway:8080/api/payments/webhook/stripe`, documented in
 `k8s/instructions.md:147-148`) exists purely to make that webhook path
 reachable for local testing. It has nothing to do with mechanism 2 — the
 `/sync` polling flow works locally with or without the tunnel running, exactly
@@ -73,6 +81,7 @@ telling you the outcome regardless of whether the browser is still around.
 The webhook code already exists and works (verified locally via the Stripe
 CLI tunnel) — it just isn't registered against `granite-security.org` in the
 Stripe Dashboard yet. Registering
-`https://granite-security.org/api/payments/webhook` there would close this gap.
+`https://granite-security.org/api/payments/webhook/stripe` there would close this gap
+(along with setting `payment.providers.stripe.webhook.enabled=true`).
 (The `secrets-patch.yaml.example` files used to document this as
 `/api/secured/payment/webhook`; that was wrong and has been corrected.)

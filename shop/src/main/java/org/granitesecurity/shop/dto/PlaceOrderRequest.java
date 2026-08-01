@@ -6,7 +6,10 @@ import java.util.List;
 @Schema(description = "Request to place a new order")
 public record PlaceOrderRequest(
         @Schema(description = "Items to order") List<LineItem> items,
-        @Schema(description = "Delivery address") DeliveryAddress address
+        @Schema(description = "Delivery address") DeliveryAddress address,
+        @Schema(description = "Payment provider id from GET /api/payments/providers. "
+                + "Optional while only one provider is enabled, in which case it is "
+                + "filled in by payment.", example = "stripe") String provider
 ) {
     @Schema(description = "Product and quantity pair")
     public record LineItem(

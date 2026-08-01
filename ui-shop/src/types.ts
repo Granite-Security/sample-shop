@@ -35,29 +35,61 @@ export interface OrderResponse {
   username: string;
   status: string;
   total: number;
+  currency: string;
   createdAt: string;
   items: OrderItemResponse[];
+  provider?: string;
+  providerPayload?: ProviderPayload;
+  /** @deprecated use providerPayload.clientSecret. Server always sends null. */
   clientSecret?: string;
   address?: DeliveryAddress;
 }
 
 export interface RefundInfo {
-  stripeRefundId: string | null;
+  providerRefundId: string | null;
   amount: number;
   status: string;
   createdAt: string;
+  /** @deprecated use providerRefundId. */
+  stripeRefundId: string | null;
+}
+
+/**
+ * Whatever the provider needs to complete the payment in the browser. Its shape
+ * depends on the provider's confirmation mode — a client secret for CLIENT_SDK, a
+ * redirect URL for REDIRECT — so never assume a field is present.
+ */
+export interface ProviderPayload {
+  clientSecret?: string;
+  redirectUrl?: string;
+  [key: string]: unknown;
+}
+
+/** How the browser completes a payment. Widgets switch on this, not on provider id. */
+export type ConfirmationMode = 'CLIENT_SDK' | 'REDIRECT';
+
+export interface PaymentProviderInfo {
+  id: string;
+  displayName: string;
+  confirmationMode: ConfirmationMode;
+  webhookEnabled: boolean;
 }
 
 export interface CreatePaymentIntentResponse {
   id: string;
   orderId: number;
-  stripePaymentIntentId: string;
-  clientSecret: string;
+  provider: string;
+  providerPaymentId: string;
+  providerPayload?: ProviderPayload | null;
   status: string;
   amount: number;
   currency: string;
   createdAt: string;
   refund?: RefundInfo | null;
+  /** @deprecated use providerPaymentId. */
+  stripePaymentIntentId: string;
+  /** @deprecated use providerPayload.clientSecret. */
+  clientSecret: string;
 }
 
 export interface PagedResult<T> {
@@ -191,6 +223,8 @@ export interface DeliveryAddress {
 export interface PlaceOrderRequest {
   items: { productId: number; quantity: number }[];
   address: DeliveryAddress;
+  /** Omitted while only one provider is enabled; required once several are. */
+  provider?: string;
 }
 
 export interface CartItem {

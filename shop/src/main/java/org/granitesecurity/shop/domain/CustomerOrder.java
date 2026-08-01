@@ -18,6 +18,14 @@ public class CustomerOrder {
     @Column("delivery_status")
     private String deliveryStatus;
     private BigDecimal total;
+    /**
+     * What {@code total} is denominated in, written once at placement.
+     *
+     * <p>Recorded per order so that changing the shop currency later cannot
+     * reinterpret history — an order priced at 50.00 USD must keep reading as USD
+     * after the shop moves to CHF.
+     */
+    private String currency;
     @Column("created_at")
     private Instant createdAt;
     @Column("updated_at")
@@ -36,12 +44,13 @@ public class CustomerOrder {
 
     public CustomerOrder() {}
 
-    public CustomerOrder(String username, String status, BigDecimal total,
+    public CustomerOrder(String username, String status, BigDecimal total, String currency,
                          String recipientName, String addressLine1, String addressLine2,
                          String city, String state, String zipCode, String country) {
         this.username = username;
         this.status = status;
         this.total = total;
+        this.currency = currency;
         this.recipientName = recipientName;
         this.addressLine1 = addressLine1;
         this.addressLine2 = addressLine2;
