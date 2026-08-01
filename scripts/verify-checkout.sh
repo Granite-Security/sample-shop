@@ -19,9 +19,12 @@
 # It writes: one order, one Stripe test charge, one refund. Safe to re-run.
 set -uo pipefail
 
+# Target: local compose by default. Set K8S_NS (and GW/REDIRECT) to run it
+# against a cluster instead — the DB and health probes switch to kubectl exec.
 GW=${GW:-http://localhost:8080}
 AUTH="$GW/auth"
-REDIRECT="http://localhost:5173/callback"
+REDIRECT=${REDIRECT:-http://localhost:5173/callback}
+K8S_NS=${K8S_NS:-}
 CLIENT="spa-client-shop"
 JAR=$(mktemp)
 PASS=0; FAIL=0
@@ -61,7 +64,7 @@ get_token() {
 say "0. Authenticate"
 # Freshly registered accounts rather than the seeded user/admin: this compose
 # volume has been used before and its seeded passwords no longer match the docs.
-VUSER=$(cat /tmp/verify_user.txt); VADMIN=$(cat /tmp/verify_admin.txt)
+VUSER=$(cat "${USER_FILE:-/tmp/verify_user.txt}"); VADMIN=$(cat "${ADMIN_FILE:-/tmp/verify_admin.txt}")
 USER_TOKEN=$(get_token "$VUSER" 'Verify123!')
 [ "${USER_TOKEN:0:2}" = "ey" ] && ok "got user JWT ($VUSER)" || { bad "could not get user JWT: $USER_TOKEN"; exit 1; }
 ADMIN_TOKEN=$(get_token "$VADMIN" 'Verify123!')
@@ -76,7 +79,11 @@ check "confirmation mode"    "$(jq -r '.[0].confirmationMode' <<<"$PROVIDERS")" 
 check "webhook disabled"     "$(jq -r '.[0].webhookEnabled' <<<"$PROVIDERS")" "false"
 
 say "2. GET /actuator/health/providers  (step 1, replaces /health/stripe)"
-HEALTH=$(docker compose exec -T payment sh -c 'wget -qO- http://localhost:8062/actuator/health/providers' 2>/dev/null)
+if [ -n "$K8S_NS" ]; then
+  HEALTH=$(kubectl -n "$K8S_NS" exec deploy/payment -- wget -qO- http://localhost:8062/actuator/health/providers 2>/dev/null)
+else
+  HEALTH=$(docker compose exec -T payment sh -c 'wget -qO- http://localhost:8062/actuator/health/providers' 2>/dev/null)
+fi
 echo "  $HEALTH"
 check "providers health status" "$(jq -r '.status' <<<"$HEALTH")" "UP"
 check "stripe connected"        "$(jq -r '.providers.stripe.stripe' <<<"$HEALTH")" "connected"
@@ -148,7 +155,11 @@ check "refund providerRefundId set"    "$(jq -r 'if .refund.providerRefundId the
 check "refund alias mirrors (step 3)"  "$(jq -r 'if .refund.stripeRefundId == .refund.providerRefundId then "match" else "differ" end' <<<"$PAY2")" "match"
 
 say "9. Database state  (step 2 schema)"
-Q() { docker compose exec -T payment-postgres psql -U myuser -d paymentdb -tAc "$1" 2>/dev/null | tr -d '\r'; }
+if [ -n "$K8S_NS" ]; then
+  Q() { kubectl -n "$K8S_NS" exec "$(kubectl -n "$K8S_NS" get pod -l app=postgres-payment -o jsonpath='{.items[0].metadata.name}')" -- psql -U myuser -d paymentdb -tAc "$1" 2>/dev/null | tr -d '\r'; }
+else
+  Q() { docker compose exec -T payment-postgres psql -U myuser -d paymentdb -tAc "$1" 2>/dev/null | tr -d '\r'; }
+fi
 check "stripe_payment_intent_id dropped" \
       "$(Q "SELECT count(*) FROM information_schema.columns WHERE table_name='payment' AND column_name='stripe_payment_intent_id'")" "0"
 check "provider_payload exists"  "$(Q "SELECT count(*) FROM information_schema.columns WHERE table_name='payment' AND column_name='provider_payload'")" "1"
@@ -159,7 +170,11 @@ echo "  attempt: $(Q "SELECT provider||' '||status||' '||amount||' '||currency F
 check "current_attempt_id linked" "$(Q "SELECT count(*) FROM payment p JOIN payment_attempt a ON a.id=p.current_attempt_id WHERE p.order_id=$ORDER_ID")" "1"
 echo "  provider_payload: $(Q "SELECT left(provider_payload,30) FROM payment WHERE order_id=$ORDER_ID")…"
 
-QS() { docker compose exec -T shop-postgres psql -U myuser -d shopdb -tAc "$1" 2>/dev/null | tr -d '\r'; }
+if [ -n "$K8S_NS" ]; then
+  QS() { kubectl -n "$K8S_NS" exec "$(kubectl -n "$K8S_NS" get pod -l app=postgres-shop -o jsonpath='{.items[0].metadata.name}')" -- psql -U myuser -d shopdb -tAc "$1" 2>/dev/null | tr -d '\r'; }
+else
+  QS() { docker compose exec -T shop-postgres psql -U myuser -d shopdb -tAc "$1" 2>/dev/null | tr -d '\r'; }
+fi
 check "shop order currency column" "$(QS "SELECT currency FROM customer_order WHERE id=$ORDER_ID")" "CHF"
 
 say "10. Kafka payload carries both new and legacy keys (step 3)"
