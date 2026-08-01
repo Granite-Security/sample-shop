@@ -337,7 +337,7 @@ kubectl rollout restart deployment coredns -n kube-system
   one is reachable at a time).
 - Stripe: the publishable key is fine as-is (same Stripe account). If a webhook
   endpoint is registered by URL (`cloudify.md`'s `secrets-patch.yaml.example`
-  comment), add `https://sichocolate.com/api/payments/webhook` as an
+  comment), add `https://sichocolate.com/api/payments/webhook/stripe` as an
   additional endpoint so it keeps firing regardless of which overlay is currently
   live.
 

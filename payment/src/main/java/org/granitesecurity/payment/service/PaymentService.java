@@ -1,12 +1,5 @@
 package org.granitesecurity.payment.service;
 
-import com.stripe.exception.IdempotencyException;
-import com.stripe.exception.StripeException;
-import com.stripe.model.PaymentIntent;
-import com.stripe.net.RequestOptions;
-import com.stripe.param.PaymentIntentCreateParams;
-import com.stripe.param.PaymentIntentSearchParams;
-import com.stripe.param.RefundCreateParams;
 import tools.jackson.databind.ObjectMapper;
 import org.granitesecurity.payment.domain.OutboxEvent;
 import org.granitesecurity.payment.domain.Payment;
@@ -14,6 +7,12 @@ import org.granitesecurity.payment.domain.PaymentStatus;
 import org.granitesecurity.payment.domain.Refund;
 import org.granitesecurity.payment.domain.RefundStatus;
 import org.granitesecurity.payment.dto.CreatePaymentIntentResponse;
+import org.granitesecurity.payment.provider.CreateIntentRequest;
+import org.granitesecurity.payment.provider.Money;
+import org.granitesecurity.payment.provider.PaymentProvider;
+import org.granitesecurity.payment.provider.PaymentProviderException;
+import org.granitesecurity.payment.provider.PaymentProviderRegistry;
+import org.granitesecurity.payment.provider.ProviderIntent;
 import org.granitesecurity.payment.repository.OutboxRepository;
 import org.granitesecurity.payment.repository.PaymentRepository;
 import org.granitesecurity.payment.repository.RefundRepository;
@@ -22,7 +21,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -41,14 +39,39 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final OutboxRepository outboxRepository;
     private final RefundRepository refundRepository;
+    private final PaymentProviderRegistry providers;
 
-    @Value("${stripe.currency:usd}")
+    @Value("${payment.shop-currency:${stripe.currency:chf}}")
     private String currency;
 
-    public PaymentService(PaymentRepository paymentRepository, OutboxRepository outboxRepository, RefundRepository refundRepository) {
+    public PaymentService(PaymentRepository paymentRepository,
+                          OutboxRepository outboxRepository,
+                          RefundRepository refundRepository,
+                          PaymentProviderRegistry providers) {
         this.paymentRepository = paymentRepository;
         this.outboxRepository = outboxRepository;
         this.refundRepository = refundRepository;
+        this.providers = providers;
+    }
+
+    /**
+     * The adapter for an existing payment, resolved from the row rather than from
+     * config: a payment opened against one provider must keep being reconciled and
+     * refunded against that provider even after the configured default changes.
+     *
+     * <p>Rows written before the {@code provider} column was populated fall back to
+     * the single enabled provider, which is correct while Stripe is the only one and
+     * throws loudly once it is not.
+     */
+    private PaymentProvider providerFor(Payment payment) {
+        String name = payment.getProvider();
+        if (name == null || name.isBlank()) {
+            PaymentProvider fallback = providers.defaultProvider();
+            log.warn("Payment {} (order {}) has no provider recorded, assuming {}",
+                    payment.getId(), payment.getOrderId(), fallback.name());
+            return fallback;
+        }
+        return providers.get(name);
     }
 
     public Mono<Void> processOrderPlaced(Long orderId, BigDecimal total, String username) {
@@ -163,22 +186,16 @@ public class PaymentService {
 
     private Mono<Void> executeRefund(Payment payment, Refund refund) {
         Long orderId = payment.getOrderId();
-        long amountCents = MinorUnits.toMinorUnits(payment.getAmount(), payment.getCurrency());
+        PaymentProvider provider = providerFor(payment);
+        Money amount = new Money(payment.getAmount(), payment.getCurrency());
 
-        var params = RefundCreateParams.builder()
-                .setPaymentIntent(payment.getStripePaymentIntentId())
-                .setAmount(amountCents)
-                .build();
-
-        var options = RequestOptions.builder()
-                .setIdempotencyKey("refund-order-" + orderId)
-                .build();
-
-        return Mono.fromCallable(() -> com.stripe.model.Refund.create(params, options))
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(stripeRefund -> {
+        return provider.createRefund(payment.getStripePaymentIntentId(), amount, "refund-order-" + orderId)
+                .flatMap(providerRefund -> {
+                    // Unchanged from before the seam: a refund the provider accepted is
+                    // recorded as SUCCEEDED regardless of the status string it came back
+                    // with; a pending one is reconciled later by /sync.
                     refund.setStatus(RefundStatus.SUCCEEDED.name());
-                    refund.setStripeRefundId(stripeRefund.getId());
+                    refund.setStripeRefundId(providerRefund.providerRefundId());
                     refund.setUpdatedAt(Instant.now());
                     refund.markNotNew();
 
@@ -189,10 +206,13 @@ public class PaymentService {
                     return refundRepository.save(refund)
                             .then(paymentRepository.save(payment))
                             .then(publishPaymentRefundedEvent(refund))
-                            .doOnSuccess(v -> log.info("Refunded order {} via Stripe refund {}", orderId, stripeRefund.getId()));
+                            .doOnSuccess(v -> log.info("Refunded order {} via {} refund {}",
+                                    orderId, provider.name(), providerRefund.providerRefundId()));
                 })
-                .onErrorResume(StripeException.class, e -> {
-                    log.error("Stripe API error refunding order {}: {}", orderId, e.getMessage(), e);
+                // Only provider failures mark the refund FAILED. A persistence error must
+                // propagate, or a refund Stripe actually made would be recorded as failed.
+                .onErrorResume(PaymentProviderException.class, e -> {
+                    log.error("{} API error refunding order {}: {}", provider.name(), orderId, e.getMessage(), e);
                     refund.setStatus(RefundStatus.FAILED.name());
                     refund.setUpdatedAt(Instant.now());
                     refund.markNotNew();
@@ -244,38 +264,30 @@ public class PaymentService {
                         return Mono.error(new RuntimeException("Payment already completed for order " + orderId));
                     }
 
-                    long amountCents = MinorUnits.toMinorUnits(existing.getAmount(), existing.getCurrency());
-                    var params = PaymentIntentCreateParams.builder()
-                            .setAmount(amountCents)
-                            .setCurrency(existing.getCurrency().toLowerCase())
-                            .setAutomaticPaymentMethods(
-                                    PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
-                                            .setEnabled(true)
-                                            .build()
-                            )
-                            .putMetadata("order_id", orderId.toString())
-                            .build();
+                    PaymentProvider provider = providerFor(existing);
+                    // Username is deliberately null here: retry never sent it before the
+                    // seam, and the adapter omits the metadata key when it is null.
+                    var request = CreateIntentRequest.of(
+                            orderId,
+                            new Money(existing.getAmount(), existing.getCurrency()),
+                            null,
+                            "payment-retry-" + orderId + "-" + UUID.randomUUID());
 
-                    var options = RequestOptions.builder()
-                            .setIdempotencyKey("payment-retry-" + orderId + "-" + UUID.randomUUID())
-                            .build();
-
-                    return Mono.fromCallable(() -> PaymentIntent.create(params, options))
-                            .subscribeOn(Schedulers.boundedElastic())
+                    return provider.recreateIntent(request, existing.getStripePaymentIntentId())
                             .flatMap(intent -> {
-                                existing.setStripePaymentIntentId(intent.getId());
-                                existing.setClientSecret(intent.getClientSecret());
+                                existing.setStripePaymentIntentId(intent.providerPaymentId());
+                                existing.setClientSecret(intent.clientSecret());
                                 existing.setStatus(PaymentStatus.CREATED.name());
                                 existing.setUpdatedAt(Instant.now());
                                 existing.markNotNew();
                                 return paymentRepository.save(existing);
                             })
                             .flatMap(saved -> publishIntentCreatedEvent(saved).thenReturn(saved))
-                            .doOnSuccess(saved -> log.info("Retried Stripe PaymentIntent {} for order {}",
-                                    saved.getStripePaymentIntentId(), orderId))
-                            .onErrorResume(StripeException.class, e -> {
-                                log.error("Stripe API error retrying PaymentIntent for order {}: {}",
-                                        orderId, e.getMessage(), e);
+                            .doOnSuccess(saved -> log.info("Retried {} payment {} for order {}",
+                                    provider.name(), saved.getStripePaymentIntentId(), orderId))
+                            .onErrorResume(PaymentProviderException.class, e -> {
+                                log.error("{} API error retrying payment for order {}: {}",
+                                        provider.name(), orderId, e.getMessage(), e);
                                 return Mono.error(e);
                             });
                 });
@@ -285,13 +297,12 @@ public class PaymentService {
         return paymentRepository.findByOrderId(orderId)
                 .switchIfEmpty(Mono.error(new RuntimeException("Payment not found for order " + orderId)))
                 .flatMap(payment -> {
-                    String stripePiId = payment.getStripePaymentIntentId();
-                    if (stripePiId == null) {
-                        return Mono.error(new RuntimeException("No Stripe PaymentIntent for order " + orderId));
+                    String providerPaymentId = payment.getStripePaymentIntentId();
+                    if (providerPaymentId == null) {
+                        return Mono.error(new RuntimeException("No provider payment for order " + orderId));
                     }
-                    return Mono.fromCallable(() -> PaymentIntent.retrieve(stripePiId))
-                            .subscribeOn(Schedulers.boundedElastic())
-                            .flatMap(intent -> updateFromStripeStatus(payment, intent.getStatus()));
+                    return providerFor(payment).retrieveIntent(providerPaymentId)
+                            .flatMap(intent -> applyProviderStatus(payment, intent));
                 })
                 .flatMap(payment -> reconcileRefund(payment).thenReturn(payment))
                 .flatMap(payment -> refundRepository.findByOrderId(orderId)
@@ -315,7 +326,7 @@ public class PaymentService {
                         return Mono.empty();
                     }
                     if (refund.getStripeRefundId() != null && !refund.getStripeRefundId().isBlank()) {
-                        return syncRefundFromStripe(payment, refund);
+                        return syncRefundFromProvider(payment, refund);
                     }
                     // PENDING/FAILED without a Stripe refund id — the create call never completed,
                     // so re-attempt; the fixed idempotency key makes this safe.
@@ -325,11 +336,10 @@ public class PaymentService {
                 });
     }
 
-    private Mono<Void> syncRefundFromStripe(Payment payment, Refund refund) {
-        return Mono.fromCallable(() -> com.stripe.model.Refund.retrieve(refund.getStripeRefundId()))
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(stripeRefund -> {
-                    RefundStatus newStatus = mapStripeRefundStatus(stripeRefund.getStatus());
+    private Mono<Void> syncRefundFromProvider(Payment payment, Refund refund) {
+        return providerFor(payment).retrieveRefund(refund.getStripeRefundId())
+                .flatMap(providerRefund -> {
+                    RefundStatus newStatus = providerRefund.status();
                     if (newStatus == null || newStatus.name().equals(refund.getStatus())) {
                         return Mono.<Void>empty();
                     }
@@ -350,43 +360,30 @@ public class PaymentService {
                             .doOnSuccess(v -> log.info("Refund {} for order {} reconciled to SUCCEEDED via /sync",
                                     refund.getStripeRefundId(), payment.getOrderId()));
                 })
-                .onErrorResume(StripeException.class, e -> {
-                    log.error("Stripe API error retrieving refund {} for order {}: {}",
+                .onErrorResume(PaymentProviderException.class, e -> {
+                    log.error("Provider error retrieving refund {} for order {}: {}",
                             refund.getStripeRefundId(), payment.getOrderId(), e.getMessage(), e);
                     return Mono.empty();
                 });
     }
 
-    private static RefundStatus mapStripeRefundStatus(String stripeStatus) {
-        return switch (stripeStatus) {
-            case "succeeded" -> RefundStatus.SUCCEEDED;
-            case "failed", "canceled" -> RefundStatus.FAILED;
-            case "pending" -> RefundStatus.PENDING;
-            default -> null;
-        };
-    }
-
-    private Mono<Payment> updateFromStripeStatus(Payment payment, String stripeStatus) {
-        String newStatus = mapStripeStatus(stripeStatus);
-        if (newStatus == null || newStatus.equals(payment.getStatus())) {
+    /**
+     * Applies a status the provider reported. A null {@code status} means the provider
+     * is in a state we deliberately do not act on (Stripe's requires_payment_method,
+     * say), so the stored status is left alone — same as before the seam.
+     */
+    private Mono<Payment> applyProviderStatus(Payment payment, ProviderIntent intent) {
+        PaymentStatus mapped = intent.status();
+        if (mapped == null || mapped.name().equals(payment.getStatus())) {
             return Mono.just(payment);
         }
 
-        payment.setStatus(newStatus);
+        payment.setStatus(mapped.name());
         payment.setUpdatedAt(Instant.now());
         payment.markNotNew();
 
         return paymentRepository.save(payment)
-                .flatMap(saved -> publishStatusEvent(saved, newStatus).thenReturn(saved));
-    }
-
-    private static String mapStripeStatus(String stripeStatus) {
-        return switch (stripeStatus) {
-            case "succeeded" -> PaymentStatus.SUCCEEDED.name();
-            case "canceled" -> PaymentStatus.CANCELED.name();
-            case "processing" -> PaymentStatus.PROCESSING.name();
-            default -> null;
-        };
+                .flatMap(saved -> publishStatusEvent(saved, mapped.name()).thenReturn(saved));
     }
 
     private Mono<Void> publishStatusEvent(Payment payment, String newStatus) {
@@ -445,55 +442,46 @@ public class PaymentService {
     }
 
     private Mono<Payment> doCreatePaymentIntent(Long orderId, BigDecimal total, String currencyOverride, String username, String idempotencyPrefix) {
+        return doCreatePaymentIntent(orderId, total, currencyOverride, username, idempotencyPrefix, null);
+    }
+
+    /**
+     * Opens a payment at a provider and records it.
+     *
+     * @param providerName which provider to charge, or null for the only enabled one.
+     *                     While one provider is enabled this is always null in practice;
+     *                     it becomes a shopper choice in step 3 of the refactor plan.
+     */
+    private Mono<Payment> doCreatePaymentIntent(Long orderId, BigDecimal total, String currencyOverride,
+                                                String username, String idempotencyPrefix, String providerName) {
         String cur = currencyOverride != null ? currencyOverride : currency;
-        long amountCents = MinorUnits.toMinorUnits(total, cur);
+        PaymentProvider provider = providerName == null ? providers.defaultProvider() : providers.get(providerName);
 
-        var params = PaymentIntentCreateParams.builder()
-                .setAmount(amountCents)
-                .setCurrency(cur)
-                .setAutomaticPaymentMethods(
-                        PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
-                                .setEnabled(true)
-                                .build()
-                )
-                .putMetadata("order_id", orderId.toString())
-                .putMetadata("username", username != null ? username : "")
-                .build();
+        // Username is passed as "" rather than null when unknown: create always sent the
+        // metadata key before the seam, and the adapter omits it only for null.
+        var request = CreateIntentRequest.of(
+                orderId,
+                new Money(total, cur),
+                username != null ? username : "",
+                idempotencyPrefix + orderId);
 
-        var options = RequestOptions.builder()
-                .setIdempotencyKey(idempotencyPrefix + orderId)
-                .build();
-
-        return Mono.fromCallable(() -> PaymentIntent.create(params, options))
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorResume(IdempotencyException.class, e -> {
-                    log.warn("Idempotency key collision for order {}, searching for existing PaymentIntent", orderId);
-                    return Mono.fromCallable(() -> {
-                        var searchParams = PaymentIntentSearchParams.builder()
-                                .setQuery("metadata['order_id']:'" + orderId + "'")
-                                .setLimit(1L)
-                                .build();
-                        return PaymentIntent.search(searchParams).getData().stream()
-                                .findFirst()
-                                .orElseThrow(() -> e);
-                    }).subscribeOn(Schedulers.boundedElastic());
-                })
+        return provider.createIntent(request)
                 .flatMap(intent -> {
-                    Payment payment = new Payment(orderId, total, cur.toUpperCase(), "stripe");
-                    payment.setStripePaymentIntentId(intent.getId());
-                    payment.setClientSecret(intent.getClientSecret());
+                    Payment payment = new Payment(orderId, total, cur.toUpperCase(), provider.name());
+                    payment.setStripePaymentIntentId(intent.providerPaymentId());
+                    payment.setClientSecret(intent.clientSecret());
                     payment.setStatus(PaymentStatus.CREATED.name());
                     payment.setCreatedAt(Instant.now());
                     payment.setUpdatedAt(Instant.now());
 
                     return paymentRepository.save(payment)
                             .flatMap(saved -> publishIntentCreatedEvent(saved).thenReturn(saved))
-                            .doOnSuccess(saved -> log.info("Created Stripe PaymentIntent {} for order {}",
-                                    saved.getStripePaymentIntentId(), orderId));
+                            .doOnSuccess(saved -> log.info("Created {} payment {} for order {}",
+                                    provider.name(), saved.getStripePaymentIntentId(), orderId));
                 })
-                .onErrorResume(StripeException.class, e -> {
-                    log.error("Stripe API error creating PaymentIntent for order {}: {}",
-                            orderId, e.getMessage(), e);
+                .onErrorResume(PaymentProviderException.class, e -> {
+                    log.error("{} API error creating payment for order {}: {}",
+                            provider.name(), orderId, e.getMessage(), e);
                     return Mono.error(e);
                 });
     }

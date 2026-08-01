@@ -231,7 +231,8 @@ Register / change password / request reset
 | `/api/shop/orders` | JWT required | Shop service (token relayed) |
 | `/api/shop/orders/{id}/refund` | JWT required (admin: any paid order; user: own order, failed delivery only) | Shop service (token relayed) |
 | `/api/payments/intent/**` | Public (clientSecret fetch) | Payment service |
-| `/api/payments/webhook` | Public (Stripe signature) | Payment service |
+| `/api/payments/webhook/{provider}` | Public (provider signature) | Payment service |
+| `/api/payments/providers` | Public | Payment service |
 | `/api/delivery/**` | JWT required | Delivery service (token relayed) |
 | `/api/profiles/**` | JWT required | Profile service (token relayed) |
 | `/v3/api-docs/**`, `/swagger-ui/**` | Public | Shop service |
@@ -248,7 +249,7 @@ export STRIPE_WEBHOOK_SECRET=whsec_... # from Stripe CLI (see below)
 To get `STRIPE_WEBHOOK_SECRET`, run the Stripe CLI in a terminal:
 
 ```bash
-stripe listen --forward-to localhost:8080/api/payments/webhook
+stripe listen --forward-to localhost:8080/api/payments/webhook/stripe
 ```
 
 It prints `Your webhook signing secret is whsec_...` on startup — use that value.

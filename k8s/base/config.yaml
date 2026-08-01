@@ -44,6 +44,11 @@ data:
   PAYMENT_R2DBC_URL: "r2dbc:postgresql://postgres-payment:5432/paymentdb"
   PAYMENT_JDBC_URL: "jdbc:postgresql://postgres-payment:5432/paymentdb"
   STRIPE_CURRENCY: "chf"
+  # No Stripe webhook has ever been registered for this deployment — /sync is what
+  # confirms payments. While this is false, /api/payments/webhook/stripe answers 503
+  # instead of verifying deliveries against a possibly-unset secret. Flip it only
+  # after registering the endpoint in the Stripe Dashboard.
+  PAYMENT_PROVIDER_STRIPE_WEBHOOK_ENABLED: "false"
 
   # ── Profile ──────────────────────────────────────────
   PROFILE_PORT: "8064"

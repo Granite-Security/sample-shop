@@ -302,7 +302,7 @@ Skipping this: form login still works; the "Sign in with Google" button fails.
 2. **Developers → Webhooks → Add endpoint** ([dashboard.stripe.com/webhooks](https://dashboard.stripe.com/webhooks)):
    - Endpoint URL:
      ```
-     https://iaka.com/api/payments/webhook
+     https://iaka.com/api/payments/webhook/stripe
      ```
      (From `PaymentRoute.java:29`. It's `permitAll` in `PaymentSec.java:61` and the gateway passes it through unauthenticated, so Stripe reaches it without a token.)
    - Events to send — these three, and only these; the handler ignores everything else (`WebhookHandler.java:204-206`):

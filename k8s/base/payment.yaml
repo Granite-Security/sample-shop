@@ -110,6 +110,11 @@ spec:
                 configMapKeyRef:
                   name: granite-config
                   key: STRIPE_CURRENCY
+            - name: PAYMENT_PROVIDER_STRIPE_WEBHOOK_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: PAYMENT_PROVIDER_STRIPE_WEBHOOK_ENABLED
 ---
 apiVersion: v1
 kind: Service

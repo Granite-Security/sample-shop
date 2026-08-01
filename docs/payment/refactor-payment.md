@@ -248,9 +248,11 @@ worse. Same reasoning already applied to `identity.events`/kafka-ui in
   `/api/payments/return/**` and `/api/payments/providers`.
 - `gateway/RouterConfig`: `/api/payments/**` already routes as one block —
   but verify in `GateSec` that `/providers` needs no OAuth2 session.
-- `HealthHandler`: `/actuator/health/stripe` → `/actuator/health/providers`
-  iterating `registry.enabled()` and calling each adapter's `health()`. Check
-  for k8s probes or runbooks referencing the old path first.
+- `HealthHandler`: ~~`/actuator/health/stripe` → `/actuator/health/providers`~~
+  **done in step 1.** Nothing referenced the old path — no k8s probe, no
+  runbook, no frontend — so it was renamed rather than aliased. Reports
+  DEGRADED rather than DOWN when a provider is unreachable, since the service
+  still serves reads and drains its outbox.
 
 ## 7. Frontend
 
@@ -558,12 +560,26 @@ purchasable currency would have been.
    serves it — only the Kafka payload lost the field. Verified no consumer read
    it: `shop`'s `EventConsumer` branches on `paymentId`, `reason` and
    `stripePaymentIntentId`, never `clientSecret`.
-1. **Backend seam, no behaviour change.** Port, registry,
-   `StripePaymentProvider`; route service/handler through them. Still one
-   enabled provider. Webhook path → `/webhook/stripe` **plus the `PaymentSec`
-   matcher fix**. ~~Minor-unit helper (§8)~~ — landed early in step 0; it is a
-   behaviour *fix*, so a real charge amount still wants verifying in the
-   cluster before this step builds on it.
+1. ~~**Backend seam, no behaviour change.**~~ **Done 2026-08-01.** Port +
+   value types + registry in `provider/`, `StripePaymentProvider` in
+   `provider/stripe/`; `PaymentService`, `WebhookHandler` and `HealthHandler`
+   all routed through them, with the adapter resolved from `Payment.provider`
+   rather than config. Webhook path → `/webhook/{provider}` **with the
+   `PaymentSec` matcher widened to `/**`**. `/actuator/health/stripe` →
+   `/actuator/health/providers`. `GET /api/payments/providers` pulled forward
+   from §6 (additive, read-only, and it makes the registry verifiable in the
+   cluster). No DB or event-payload change — those are steps 2 and 3.
+   ~~Minor-unit helper (§8)~~ — landed early in step 0; it is a behaviour
+   *fix*, so a real charge amount still wants verifying in the cluster.
+
+   Two things worth knowing about the seam as built:
+   - **`PaymentProviderException`.** Adapters wrap SDK failures in it so
+     callers can tell "the provider failed" from "our persistence failed".
+     That distinction is load-bearing in `executeRefund`: catching everything
+     would record a refund Stripe actually made as FAILED.
+   - **Webhook-disabled is a 503, not a silent success.** A delivery arriving
+     for a provider whose `webhook.enabled` is false is refused, because the
+     signing secret may be unset and verification would be theatre.
 2. **Data migration** (§5). Decide `payment_attempt` in or out here; if out,
    retry stays same-provider. Also the `shop` order-currency column (§8),
    backfilled `'USD'`.

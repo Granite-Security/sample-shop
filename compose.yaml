@@ -252,6 +252,9 @@ services:
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - STRIPE_CURRENCY=${STRIPE_CURRENCY:-chf}
+      # Set to true only with `stripe listen --forward-to .../api/payments/webhook/stripe`
+      # running; otherwise /sync confirms payments and the endpoint answers 503.
+      - PAYMENT_PROVIDER_STRIPE_WEBHOOK_ENABLED=${PAYMENT_PROVIDER_STRIPE_WEBHOOK_ENABLED:-false}
     depends_on:
       gateway:
         condition: service_started

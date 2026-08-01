@@ -1,5 +1,7 @@
 package org.granitesecurity.payment.service;
 
+import org.granitesecurity.payment.provider.PaymentProviderRegistry;
+import org.granitesecurity.payment.provider.stripe.StripePaymentProvider;
 import org.granitesecurity.payment.repository.OutboxRepository;
 import org.granitesecurity.payment.repository.PaymentRepository;
 import org.granitesecurity.payment.repository.RefundRepository;
@@ -34,7 +36,8 @@ class PaymentServicePurgeTest {
     private RefundRepository refundRepository;
 
     private PaymentService service() {
-        return new PaymentService(paymentRepository, outboxRepository, refundRepository);
+        return new PaymentService(paymentRepository, outboxRepository, refundRepository,
+                new PaymentProviderRegistry(java.util.List.of(new StripePaymentProvider()), "USD"));
     }
 
     @Test

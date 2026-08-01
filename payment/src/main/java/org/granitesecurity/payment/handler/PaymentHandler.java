@@ -1,6 +1,7 @@
 package org.granitesecurity.payment.handler;
 
 import org.granitesecurity.payment.dto.CreatePaymentIntentRequest;
+import org.granitesecurity.payment.provider.PaymentProviderRegistry;
 import org.granitesecurity.payment.service.PaymentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,9 +19,27 @@ public class PaymentHandler {
     private static final Logger log = LoggerFactory.getLogger(PaymentHandler.class);
 
     private final PaymentService paymentService;
+    private final PaymentProviderRegistry providers;
 
-    public PaymentHandler(PaymentService paymentService) {
+    public PaymentHandler(PaymentService paymentService, PaymentProviderRegistry providers) {
         this.paymentService = paymentService;
+        this.providers = providers;
+    }
+
+    /**
+     * Public: the checkout page needs this before the shopper is authenticated, and it
+     * leaks nothing — names, labels and how each provider is confirmed. The frontend
+     * renders a selector only when this returns more than one.
+     */
+    public Mono<ServerResponse> listProviders(ServerRequest request) {
+        var body = providers.enabled().stream()
+                .map(p -> Map.of(
+                        "id", p.name(),
+                        "displayName", p.displayName(),
+                        "confirmationMode", p.confirmationMode().name(),
+                        "webhookEnabled", p.webhookEnabled()))
+                .toList();
+        return ServerResponse.ok().bodyValue(body);
     }
 
     public Mono<ServerResponse> createPaymentIntent(ServerRequest request) {

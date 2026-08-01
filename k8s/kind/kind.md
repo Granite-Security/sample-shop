@@ -260,7 +260,7 @@ Every env var below is defined in one of three places:
 | `STRIPE_WEBHOOK_SECRET` | Secret `stripe-webhook-secret` | _(set by you)_ | For Stripe webhooks (`whsec_...`) |
 | `STRIPE_CURRENCY` | ConfigMap | `chf` | |
 
-**Routes:** `/api/payments/webhook` public, `/api/payments/intent/**` public, everything else authenticated.
+**Routes:** `/api/payments/webhook/**` and `/api/payments/providers` public, `/api/payments/intent/**` public, everything else authenticated.
 
 ### 6.6 profile (`profile.yaml`)
 

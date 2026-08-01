@@ -12,6 +12,8 @@ import org.granitesecurity.payment.domain.Payment;
 import org.granitesecurity.payment.domain.PaymentStatus;
 import org.granitesecurity.payment.domain.Refund;
 import org.granitesecurity.payment.domain.RefundStatus;
+import org.granitesecurity.payment.provider.PaymentProviderRegistry;
+import org.granitesecurity.payment.provider.stripe.StripePaymentProvider;
 import org.granitesecurity.payment.repository.OutboxRepository;
 import org.granitesecurity.payment.repository.PaymentRepository;
 import org.granitesecurity.payment.repository.RefundRepository;
@@ -89,7 +91,11 @@ class PaymentServiceRefundTest {
 
     @BeforeEach
     void setUp() {
-        paymentService = new PaymentService(paymentRepository, outboxRepository, refundRepository);
+        // A real StripePaymentProvider over a real registry: the point of these tests is
+        // the service's refund logic, and the SDK is still intercepted below, so stubbing
+        // the port here would only prove the stub works.
+        paymentService = new PaymentService(paymentRepository, outboxRepository, refundRepository,
+                new PaymentProviderRegistry(List.of(new StripePaymentProvider()), "USD"));
         stripeApi = new RecordingResponseGetter();
         ApiResource.setGlobalResponseGetter(stripeApi);
     }
