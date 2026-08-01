@@ -27,8 +27,8 @@ public class Refund implements Persistable<UUID> {
     @Column("payment_id")
     private UUID paymentId;
 
-    @Column("stripe_refund_id")
-    private String stripeRefundId;
+    @Column("provider_refund_id")
+    private String providerRefundId;
 
     private BigDecimal amount;
 

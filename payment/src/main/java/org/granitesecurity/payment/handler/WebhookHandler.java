@@ -4,14 +4,14 @@ import tools.jackson.databind.ObjectMapper;
 import org.granitesecurity.payment.domain.OutboxEvent;
 import org.granitesecurity.payment.domain.Payment;
 import org.granitesecurity.payment.domain.PaymentStatus;
-import org.granitesecurity.payment.domain.StripeEvent;
+import org.granitesecurity.payment.domain.ProviderEvent;
 import org.granitesecurity.payment.provider.PaymentProvider;
 import org.granitesecurity.payment.provider.PaymentProviderRegistry;
 import org.granitesecurity.payment.provider.ProviderWebhookEvent;
 import org.granitesecurity.payment.provider.WebhookVerificationException;
 import org.granitesecurity.payment.repository.OutboxRepository;
 import org.granitesecurity.payment.repository.PaymentRepository;
-import org.granitesecurity.payment.repository.StripeEventRepository;
+import org.granitesecurity.payment.repository.ProviderEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -37,12 +37,12 @@ public class WebhookHandler {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final PaymentRepository paymentRepository;
-    private final StripeEventRepository providerEventRepository;
+    private final ProviderEventRepository providerEventRepository;
     private final OutboxRepository outboxRepository;
     private final PaymentProviderRegistry providers;
 
     public WebhookHandler(PaymentRepository paymentRepository,
-                          StripeEventRepository providerEventRepository,
+                          ProviderEventRepository providerEventRepository,
                           OutboxRepository outboxRepository,
                           PaymentProviderRegistry providers) {
         this.paymentRepository = paymentRepository;
@@ -89,7 +89,7 @@ public class WebhookHandler {
     }
 
     private Mono<ServerResponse> processEvent(PaymentProvider provider, ProviderWebhookEvent event) {
-        return providerEventRepository.findByStripeEventId(event.eventId())
+        return providerEventRepository.findByProviderAndProviderEventId(provider.name(), event.eventId())
                 .flatMap(existing -> {
                     log.info("Duplicate webhook event {} ({}) — skipping", event.eventId(), event.eventType());
                     return ServerResponse.ok().bodyValue(Map.of("status", "duplicate"));
@@ -99,7 +99,7 @@ public class WebhookHandler {
 
     private Mono<ServerResponse> recordAndApply(PaymentProvider provider, ProviderWebhookEvent event) {
         log.info("Recording webhook event {} ({}) from {}", event.eventId(), event.eventType(), provider.name());
-        return recordEvent(event)
+        return recordEvent(provider, event)
                 .flatMap(se -> apply(event))
                 .onErrorResume(e -> {
                     log.error("Webhook processing error for event {}: {}", event.eventId(), e.getMessage());
@@ -145,7 +145,7 @@ public class WebhookHandler {
         try {
             String json = MAPPER.writeValueAsString(Map.of(
                     "orderId", payment.getOrderId(),
-                    "stripePaymentIntentId", payment.getStripePaymentIntentId(),
+                    "stripePaymentIntentId", payment.getProviderPaymentId(),
                     "status", payment.getStatus()
             ));
             OutboxEvent outbox = new OutboxEvent(
@@ -162,9 +162,9 @@ public class WebhookHandler {
         }
     }
 
-    private Mono<StripeEvent> recordEvent(ProviderWebhookEvent event) {
-        StripeEvent se = new StripeEvent(event.eventId(), event.eventType());
-        se.setProcessedAt(Instant.now());
-        return providerEventRepository.save(se);
+    private Mono<ProviderEvent> recordEvent(PaymentProvider provider, ProviderWebhookEvent event) {
+        ProviderEvent recorded = new ProviderEvent(provider.name(), event.eventId(), event.eventType());
+        recorded.setProcessedAt(Instant.now());
+        return providerEventRepository.save(recorded);
     }
 }

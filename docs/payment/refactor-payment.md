@@ -580,9 +580,19 @@ purchasable currency would have been.
    - **Webhook-disabled is a 503, not a silent success.** A delivery arriving
      for a provider whose `webhook.enabled` is false is refused, because the
      signing secret may be unset and verification would be theatre.
-2. **Data migration** (§5). Decide `payment_attempt` in or out here; if out,
-   retry stays same-provider. Also the `shop` order-currency column (§8),
-   backfilled `'USD'`.
+2. ~~**Data migration** (§5).~~ **Done 2026-08-01**, `payment_attempt`
+   **in** — `005-provider-neutral-schema.sql`, plus `shop`'s
+   `008-add-order-currency.sql` backfilled `'USD'`. Attempts are written by the
+   service, not just modelled: create and retry each open one, and status
+   transitions advance the current attempt. Two decisions made during the work:
+   - **`provider_payload` holds JSON, not a bare secret**, transformed in the
+     same changeset so the column never carries two formats. The DTO still
+     exposes a flat `clientSecret`, extracted on read — renaming that field is
+     step 3, and doing it inside a migration commit would break both frontends.
+   - **Advancing an attempt is best-effort.** It is an audit trail; failing a
+     shopper's `/sync` because a history row would not write is the wrong
+     trade. The unique index on succeeded attempts is the part that must not be
+     papered over, so a violation there is logged loudly.
 2b. **CHF cutover** (§8) — ~~config~~ **done 2026-08-01**, ahead of the rest of
    this plan. It landed *before* the per-row currency reads, so the follow-ups
    in §8 (case normalisation, refund reading `payment.currency` instead of
@@ -639,8 +649,10 @@ so it can be scheduled and announced on its own.
 
 **Still open**
 
-- **`payment_attempt` in steps 1–4, or later?** The one sequencing decision
-  left. *Recommendation: in, at step 2.* The decided balance rule — refundable
+- ~~**`payment_attempt` in steps 1–4, or later?**~~ **Resolved: in, landed in
+  step 2** on 2026-08-01. Original reasoning kept below.
+
+  *Recommendation was: in, at step 2.* The decided balance rule — refundable
   only for what was actually paid — makes "what did this order actually
   capture, and through which provider" a load-bearing fact rather than an
   audit nicety, and `balance_lot.source_payment_id`/`provider` want to point at

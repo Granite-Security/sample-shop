@@ -57,6 +57,11 @@ springdoc:
 payment-service:
   uri: ${PAYMENT_SERVICE_URI:http://localhost:8062}
 
+shop:
+  # Denomination for new orders, written onto each order row so changing this later
+  # cannot reinterpret history. Must match payment's shop-currency (STRIPE_CURRENCY).
+  currency: ${SHOP_CURRENCY:CHF}
+
 app:
   outbox:
     poll-interval: 5000

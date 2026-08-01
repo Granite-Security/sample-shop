@@ -18,6 +18,7 @@ import org.granitesecurity.shop.repository.OrderItemRepository;
 import org.granitesecurity.shop.repository.OutboxRepository;
 import org.granitesecurity.shop.repository.ProductRepository;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
@@ -41,6 +42,13 @@ public class OrderService {
     private final OrderItemRepository orderItemRepository;
     private final ProductRepository productRepository;
     private final OutboxRepository outboxRepository;
+
+    /**
+     * The currency new orders are priced in. Must match payment's shop-currency —
+     * shop prices the order, payment charges it, and nothing converts between them.
+     */
+    @Value("${shop.currency:CHF}")
+    private String shopCurrency;
 
     public OrderService(CustomerOrderRepository customerOrderRepository,
                         OrderItemRepository orderItemRepository,
@@ -93,7 +101,7 @@ public class OrderService {
         PlaceOrderRequest.DeliveryAddress addr = request.address();
         String addrLine2 = addr.addressLine2() != null ? addr.addressLine2() : "";
         String state = addr.state() != null ? addr.state() : "";
-        CustomerOrder order = new CustomerOrder(username, OrderStatus.PENDING.name(), total,
+        CustomerOrder order = new CustomerOrder(username, OrderStatus.PENDING.name(), total, shopCurrency,
                 addr.recipientName(), addr.addressLine1(), addrLine2, addr.city(), state, addr.zipCode(), addr.country());
         return Mono.just(new OrderContext(order, items, productMap));
     }

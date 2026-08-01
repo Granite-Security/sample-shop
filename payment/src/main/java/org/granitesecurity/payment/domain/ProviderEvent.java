@@ -12,16 +12,25 @@ import org.springframework.data.relational.core.mapping.Table;
 import java.time.Instant;
 import java.util.UUID;
 
-@Table("stripe_event")
+/**
+ * The webhook dedupe log: one row per event we have already acted on.
+ *
+ * <p>Keyed by {@code (provider, provider_event_id)} rather than the event id alone —
+ * two providers can legitimately issue the same id string, and collapsing them would
+ * let one provider's event silently suppress the other's.
+ */
+@Table("provider_event")
 @Getter
 @Setter
-public class StripeEvent implements Persistable<UUID> {
+public class ProviderEvent implements Persistable<UUID> {
 
     @Id
     private UUID id;
 
-    @Column("stripe_event_id")
-    private String stripeEventId;
+    private String provider;
+
+    @Column("provider_event_id")
+    private String providerEventId;
 
     private String type;
 
@@ -36,11 +45,12 @@ public class StripeEvent implements Persistable<UUID> {
     @Transient
     private boolean isNew = true;
 
-    public StripeEvent() {}
+    public ProviderEvent() {}
 
-    public StripeEvent(String stripeEventId, String type) {
+    public ProviderEvent(String provider, String providerEventId, String type) {
         this.id = UUID.randomUUID();
-        this.stripeEventId = stripeEventId;
+        this.provider = provider;
+        this.providerEventId = providerEventId;
         this.type = type;
         this.createdAt = Instant.now();
     }

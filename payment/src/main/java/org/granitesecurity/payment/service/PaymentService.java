@@ -3,6 +3,7 @@ package org.granitesecurity.payment.service;
 import tools.jackson.databind.ObjectMapper;
 import org.granitesecurity.payment.domain.OutboxEvent;
 import org.granitesecurity.payment.domain.Payment;
+import org.granitesecurity.payment.domain.PaymentAttempt;
 import org.granitesecurity.payment.domain.PaymentStatus;
 import org.granitesecurity.payment.domain.Refund;
 import org.granitesecurity.payment.domain.RefundStatus;
@@ -14,6 +15,7 @@ import org.granitesecurity.payment.provider.PaymentProviderException;
 import org.granitesecurity.payment.provider.PaymentProviderRegistry;
 import org.granitesecurity.payment.provider.ProviderIntent;
 import org.granitesecurity.payment.repository.OutboxRepository;
+import org.granitesecurity.payment.repository.PaymentAttemptRepository;
 import org.granitesecurity.payment.repository.PaymentRepository;
 import org.granitesecurity.payment.repository.RefundRepository;
 import org.slf4j.Logger;
@@ -39,6 +41,7 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final OutboxRepository outboxRepository;
     private final RefundRepository refundRepository;
+    private final PaymentAttemptRepository attemptRepository;
     private final PaymentProviderRegistry providers;
 
     @Value("${payment.shop-currency:${stripe.currency:chf}}")
@@ -47,10 +50,12 @@ public class PaymentService {
     public PaymentService(PaymentRepository paymentRepository,
                           OutboxRepository outboxRepository,
                           RefundRepository refundRepository,
+                          PaymentAttemptRepository attemptRepository,
                           PaymentProviderRegistry providers) {
         this.paymentRepository = paymentRepository;
         this.outboxRepository = outboxRepository;
         this.refundRepository = refundRepository;
+        this.attemptRepository = attemptRepository;
         this.providers = providers;
     }
 
@@ -113,9 +118,12 @@ public class PaymentService {
      * <p>Idempotent by construction: deleting rows that are already gone is a
      * no-op, so an at-least-once redelivery needs no dedupe table.
      *
-     * <p><b>stripe_event is deliberately left alone.</b> It is the webhook
-     * dedupe log — clearing it would let already-processed Stripe webhooks
-     * replay against a payment that no longer exists.
+     * <p><b>provider_event is deliberately left alone.</b> It is the webhook
+     * dedupe log — clearing it would let already-processed webhooks replay
+     * against a payment that no longer exists.
+     *
+     * <p>payment_attempt needs no explicit delete: it is {@code ON DELETE CASCADE}
+     * on payment_id, so the attempts go with the payment they belong to.
      */
     public Mono<Void> purgeOrders(Collection<Long> orderIds) {
         if (orderIds.isEmpty()) {
@@ -140,13 +148,50 @@ public class PaymentService {
         return new CreatePaymentIntentResponse(
                 payment.getId(),
                 payment.getOrderId(),
-                payment.getStripePaymentIntentId(),
-                payment.getClientSecret(),
+                payment.getProviderPaymentId(),
+                clientSecretFrom(payment.getProviderPayload()),
                 payment.getStatus(),
                 payment.getAmount(),
                 payment.getCurrency(),
                 payment.getCreatedAt(),
                 refund);
+    }
+
+    /**
+     * {@code provider_payload} is JSON as of migration 005. The DTO still exposes a bare
+     * {@code clientSecret} — renaming that field is step 3 of the refactor plan, and
+     * doing it here would break both frontends in a migration commit.
+     *
+     * <p>Tolerates a bare string for safety: the migration rewrites existing rows to
+     * JSON, but a row written by an older instance mid-rollout would not be.
+     */
+    static String clientSecretFrom(String providerPayload) {
+        if (providerPayload == null || providerPayload.isBlank()) {
+            return null;
+        }
+        if (!providerPayload.startsWith("{")) {
+            return providerPayload;
+        }
+        try {
+            var node = MAPPER.readTree(providerPayload).get("clientSecret");
+            return node == null || node.isNull() ? null : node.asString();
+        } catch (Exception e) {
+            log.warn("provider_payload is not readable JSON, treating as opaque: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /** Serializes a provider's payload map for storage. Null when there is nothing to keep. */
+    private static String toProviderPayload(ProviderIntent intent) {
+        if (intent.payload() == null || intent.payload().isEmpty()) {
+            return null;
+        }
+        try {
+            return MAPPER.writeValueAsString(intent.payload());
+        } catch (Exception e) {
+            log.error("Failed to serialize provider payload for {}", intent.providerPaymentId(), e);
+            return null;
+        }
     }
 
     public Mono<Void> processRefundRequested(Long orderId) {
@@ -189,13 +234,13 @@ public class PaymentService {
         PaymentProvider provider = providerFor(payment);
         Money amount = new Money(payment.getAmount(), payment.getCurrency());
 
-        return provider.createRefund(payment.getStripePaymentIntentId(), amount, "refund-order-" + orderId)
+        return provider.createRefund(payment.getProviderPaymentId(), amount, "refund-order-" + orderId)
                 .flatMap(providerRefund -> {
                     // Unchanged from before the seam: a refund the provider accepted is
                     // recorded as SUCCEEDED regardless of the status string it came back
                     // with; a pending one is reconciled later by /sync.
                     refund.setStatus(RefundStatus.SUCCEEDED.name());
-                    refund.setStripeRefundId(providerRefund.providerRefundId());
+                    refund.setProviderRefundId(providerRefund.providerRefundId());
                     refund.setUpdatedAt(Instant.now());
                     refund.markNotNew();
 
@@ -225,7 +270,7 @@ public class PaymentService {
             Map<String, Object> eventPayload = new LinkedHashMap<>();
             eventPayload.put("orderId", refund.getOrderId());
             eventPayload.put("status", PaymentStatus.REFUNDED.name());
-            eventPayload.put("stripeRefundId", refund.getStripeRefundId());
+            eventPayload.put("stripeRefundId", refund.getProviderRefundId());
             eventPayload.put("amount", refund.getAmount());
             eventPayload.put("refundedAt", refund.getUpdatedAt() != null ? refund.getUpdatedAt() : Instant.now());
             String json = MAPPER.writeValueAsString(eventPayload);
@@ -273,18 +318,23 @@ public class PaymentService {
                             null,
                             "payment-retry-" + orderId + "-" + UUID.randomUUID());
 
-                    return provider.recreateIntent(request, existing.getStripePaymentIntentId())
-                            .flatMap(intent -> {
-                                existing.setStripePaymentIntentId(intent.providerPaymentId());
-                                existing.setClientSecret(intent.clientSecret());
-                                existing.setStatus(PaymentStatus.CREATED.name());
-                                existing.setUpdatedAt(Instant.now());
-                                existing.markNotNew();
-                                return paymentRepository.save(existing);
-                            })
+                    return provider.recreateIntent(request, existing.getProviderPaymentId())
+                            // A retry is a new attempt, not an edit of the old one: the
+                            // abandoned intent keeps its own row so /sync can still
+                            // reconcile it and so the audit trail survives.
+                            .flatMap(intent -> recordAttempt(existing, provider, intent)
+                                    .flatMap(attempt -> {
+                                        existing.setProviderPaymentId(intent.providerPaymentId());
+                                        existing.setProviderPayload(toProviderPayload(intent));
+                                        existing.setCurrentAttemptId(attempt.getId());
+                                        existing.setStatus(PaymentStatus.CREATED.name());
+                                        existing.setUpdatedAt(Instant.now());
+                                        existing.markNotNew();
+                                        return paymentRepository.save(existing);
+                                    }))
                             .flatMap(saved -> publishIntentCreatedEvent(saved).thenReturn(saved))
                             .doOnSuccess(saved -> log.info("Retried {} payment {} for order {}",
-                                    provider.name(), saved.getStripePaymentIntentId(), orderId))
+                                    provider.name(), saved.getProviderPaymentId(), orderId))
                             .onErrorResume(PaymentProviderException.class, e -> {
                                 log.error("{} API error retrying payment for order {}: {}",
                                         provider.name(), orderId, e.getMessage(), e);
@@ -297,7 +347,7 @@ public class PaymentService {
         return paymentRepository.findByOrderId(orderId)
                 .switchIfEmpty(Mono.error(new RuntimeException("Payment not found for order " + orderId)))
                 .flatMap(payment -> {
-                    String providerPaymentId = payment.getStripePaymentIntentId();
+                    String providerPaymentId = payment.getProviderPaymentId();
                     if (providerPaymentId == null) {
                         return Mono.error(new RuntimeException("No provider payment for order " + orderId));
                     }
@@ -312,7 +362,7 @@ public class PaymentService {
 
     private static CreatePaymentIntentResponse.RefundInfo toRefundInfo(Refund refund) {
         return new CreatePaymentIntentResponse.RefundInfo(
-                refund.getStripeRefundId(),
+                refund.getProviderRefundId(),
                 refund.getAmount(),
                 refund.getStatus(),
                 refund.getCreatedAt());
@@ -325,7 +375,7 @@ public class PaymentService {
                     if (RefundStatus.SUCCEEDED.name().equals(refund.getStatus())) {
                         return Mono.empty();
                     }
-                    if (refund.getStripeRefundId() != null && !refund.getStripeRefundId().isBlank()) {
+                    if (refund.getProviderRefundId() != null && !refund.getProviderRefundId().isBlank()) {
                         return syncRefundFromProvider(payment, refund);
                     }
                     // PENDING/FAILED without a Stripe refund id — the create call never completed,
@@ -337,7 +387,7 @@ public class PaymentService {
     }
 
     private Mono<Void> syncRefundFromProvider(Payment payment, Refund refund) {
-        return providerFor(payment).retrieveRefund(refund.getStripeRefundId())
+        return providerFor(payment).retrieveRefund(refund.getProviderRefundId())
                 .flatMap(providerRefund -> {
                     RefundStatus newStatus = providerRefund.status();
                     if (newStatus == null || newStatus.name().equals(refund.getStatus())) {
@@ -358,11 +408,11 @@ public class PaymentService {
                             .then(paymentRepository.save(payment))
                             .then(publishPaymentRefundedEvent(refund))
                             .doOnSuccess(v -> log.info("Refund {} for order {} reconciled to SUCCEEDED via /sync",
-                                    refund.getStripeRefundId(), payment.getOrderId()));
+                                    refund.getProviderRefundId(), payment.getOrderId()));
                 })
                 .onErrorResume(PaymentProviderException.class, e -> {
                     log.error("Provider error retrieving refund {} for order {}: {}",
-                            refund.getStripeRefundId(), payment.getOrderId(), e.getMessage(), e);
+                            refund.getProviderRefundId(), payment.getOrderId(), e.getMessage(), e);
                     return Mono.empty();
                 });
     }
@@ -383,7 +433,52 @@ public class PaymentService {
         payment.markNotNew();
 
         return paymentRepository.save(payment)
+                .flatMap(saved -> advanceCurrentAttempt(saved, mapped, intent.declineReason()).thenReturn(saved))
                 .flatMap(saved -> publishStatusEvent(saved, mapped.name()).thenReturn(saved));
+    }
+
+    /** Opens a row recording this try at taking the money. */
+    private Mono<PaymentAttempt> recordAttempt(Payment payment, PaymentProvider provider, ProviderIntent intent) {
+        PaymentAttempt attempt = new PaymentAttempt(
+                payment.getId(), payment.getOrderId(), provider.name(),
+                payment.getAmount(), payment.getCurrency());
+        attempt.setProviderPaymentId(intent.providerPaymentId());
+        attempt.setProviderPayload(toProviderPayload(intent));
+        attempt.setDeclineReason(intent.declineReason());
+        return attemptRepository.save(attempt);
+    }
+
+    /**
+     * Moves the attempt in play to match the payment.
+     *
+     * <p>Best-effort by design: the attempt table is an audit trail, and failing a
+     * shopper's {@code /sync} because a history row would not write is the wrong
+     * trade. The unique index on succeeded attempts is the part that must not be
+     * papered over, so a violation there is logged loudly.
+     */
+    private Mono<Void> advanceCurrentAttempt(Payment payment, PaymentStatus status, String declineReason) {
+        if (payment.getCurrentAttemptId() == null) {
+            return Mono.empty();     // predates payment_attempt; nothing to advance
+        }
+        return attemptRepository.findById(payment.getCurrentAttemptId())
+                .flatMap(attempt -> {
+                    if (status.name().equals(attempt.getStatus())) {
+                        return Mono.<PaymentAttempt>empty();
+                    }
+                    attempt.setStatus(status.name());
+                    if (declineReason != null) {
+                        attempt.setDeclineReason(declineReason);
+                    }
+                    attempt.setUpdatedAt(Instant.now());
+                    attempt.markNotNew();
+                    return attemptRepository.save(attempt);
+                })
+                .onErrorResume(e -> {
+                    log.error("Could not advance attempt {} for order {} to {}: {}",
+                            payment.getCurrentAttemptId(), payment.getOrderId(), status, e.getMessage(), e);
+                    return Mono.empty();
+                })
+                .then();
     }
 
     private Mono<Void> publishStatusEvent(Payment payment, String newStatus) {
@@ -398,7 +493,7 @@ public class PaymentService {
         try {
             String json = MAPPER.writeValueAsString(Map.of(
                     "orderId", payment.getOrderId(),
-                    "stripePaymentIntentId", payment.getStripePaymentIntentId(),
+                    "stripePaymentIntentId", payment.getProviderPaymentId(),
                     "status", payment.getStatus()
             ));
             OutboxEvent outbox = new OutboxEvent(
@@ -421,7 +516,7 @@ public class PaymentService {
         // from GET /api/payments/intent/{orderId}. Same reasoning as identity.events.
         Map<String, Object> eventPayload = Map.of(
                 "orderId", saved.getOrderId(),
-                "stripePaymentIntentId", saved.getStripePaymentIntentId(),
+                "stripePaymentIntentId", saved.getProviderPaymentId(),
                 "amount", saved.getAmount(),
                 "currency", saved.getCurrency()
         );
@@ -468,16 +563,24 @@ public class PaymentService {
         return provider.createIntent(request)
                 .flatMap(intent -> {
                     Payment payment = new Payment(orderId, total, cur.toUpperCase(), provider.name());
-                    payment.setStripePaymentIntentId(intent.providerPaymentId());
-                    payment.setClientSecret(intent.clientSecret());
+                    payment.setProviderPaymentId(intent.providerPaymentId());
+                    payment.setProviderPayload(toProviderPayload(intent));
                     payment.setStatus(PaymentStatus.CREATED.name());
                     payment.setCreatedAt(Instant.now());
                     payment.setUpdatedAt(Instant.now());
 
+                    // The payment row must exist before the attempt: payment_attempt
+                    // references it.
                     return paymentRepository.save(payment)
+                            .flatMap(saved -> recordAttempt(saved, provider, intent)
+                                    .flatMap(attempt -> {
+                                        saved.setCurrentAttemptId(attempt.getId());
+                                        saved.markNotNew();
+                                        return paymentRepository.save(saved);
+                                    }))
                             .flatMap(saved -> publishIntentCreatedEvent(saved).thenReturn(saved))
                             .doOnSuccess(saved -> log.info("Created {} payment {} for order {}",
-                                    provider.name(), saved.getStripePaymentIntentId(), orderId));
+                                    provider.name(), saved.getProviderPaymentId(), orderId));
                 })
                 .onErrorResume(PaymentProviderException.class, e -> {
                     log.error("{} API error creating payment for order {}: {}",

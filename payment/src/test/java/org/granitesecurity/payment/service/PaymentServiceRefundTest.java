@@ -15,6 +15,7 @@ import org.granitesecurity.payment.domain.RefundStatus;
 import org.granitesecurity.payment.provider.PaymentProviderRegistry;
 import org.granitesecurity.payment.provider.stripe.StripePaymentProvider;
 import org.granitesecurity.payment.repository.OutboxRepository;
+import org.granitesecurity.payment.repository.PaymentAttemptRepository;
 import org.granitesecurity.payment.repository.PaymentRepository;
 import org.granitesecurity.payment.repository.RefundRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -54,6 +55,8 @@ class PaymentServiceRefundTest {
     private RefundRepository refundRepository;
     @Mock
     private OutboxRepository outboxRepository;
+    @Mock
+    private PaymentAttemptRepository attemptRepository;
 
     private PaymentService paymentService;
     private RecordingResponseGetter stripeApi;
@@ -94,7 +97,7 @@ class PaymentServiceRefundTest {
         // A real StripePaymentProvider over a real registry: the point of these tests is
         // the service's refund logic, and the SDK is still intercepted below, so stubbing
         // the port here would only prove the stub works.
-        paymentService = new PaymentService(paymentRepository, outboxRepository, refundRepository,
+        paymentService = new PaymentService(paymentRepository, outboxRepository, refundRepository, attemptRepository,
                 new PaymentProviderRegistry(List.of(new StripePaymentProvider()), "USD"));
         stripeApi = new RecordingResponseGetter();
         ApiResource.setGlobalResponseGetter(stripeApi);
@@ -108,7 +111,7 @@ class PaymentServiceRefundTest {
     private Payment succeededPayment() {
         Payment payment = new Payment(ORDER_ID, new BigDecimal("10.00"), "USD", "stripe");
         payment.setStatus(PaymentStatus.SUCCEEDED.name());
-        payment.setStripePaymentIntentId("pi_123");
+        payment.setProviderPaymentId("pi_123");
         payment.setCreatedAt(Instant.now());
         payment.setUpdatedAt(Instant.now());
         return payment;
@@ -117,7 +120,7 @@ class PaymentServiceRefundTest {
     private Refund refundWith(RefundStatus status, String stripeRefundId) {
         Refund refund = new Refund(ORDER_ID, null, new BigDecimal("10.00"));
         refund.setStatus(status.name());
-        refund.setStripeRefundId(stripeRefundId);
+        refund.setProviderRefundId(stripeRefundId);
         refund.setCreatedAt(Instant.now());
         refund.setUpdatedAt(Instant.now());
         return refund;
@@ -207,7 +210,7 @@ class PaymentServiceRefundTest {
         verify(refundRepository, times(2)).save(refundCaptor.capture());
         Refund saved = refundCaptor.getValue();
         assertThat(saved.getStatus()).isEqualTo(RefundStatus.SUCCEEDED.name());
-        assertThat(saved.getStripeRefundId()).isEqualTo("re_123");
+        assertThat(saved.getProviderRefundId()).isEqualTo("re_123");
         assertThat(saved.getAmount()).isEqualByComparingTo("10.00");
 
         ArgumentCaptor<Payment> paymentCaptor = ArgumentCaptor.forClass(Payment.class);
@@ -313,7 +316,7 @@ class PaymentServiceRefundTest {
         verify(refundRepository).save(refundCaptor.capture());
         Refund saved = refundCaptor.getValue();
         assertThat(saved.getStatus()).isEqualTo(RefundStatus.SUCCEEDED.name());
-        assertThat(saved.getStripeRefundId()).isEqualTo("re_retry");
+        assertThat(saved.getProviderRefundId()).isEqualTo("re_retry");
 
         ArgumentCaptor<Payment> paymentCaptor = ArgumentCaptor.forClass(Payment.class);
         verify(paymentRepository).save(paymentCaptor.capture());

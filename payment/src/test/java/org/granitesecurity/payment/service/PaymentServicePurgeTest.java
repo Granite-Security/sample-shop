@@ -3,6 +3,7 @@ package org.granitesecurity.payment.service;
 import org.granitesecurity.payment.provider.PaymentProviderRegistry;
 import org.granitesecurity.payment.provider.stripe.StripePaymentProvider;
 import org.granitesecurity.payment.repository.OutboxRepository;
+import org.granitesecurity.payment.repository.PaymentAttemptRepository;
 import org.granitesecurity.payment.repository.PaymentRepository;
 import org.granitesecurity.payment.repository.RefundRepository;
 import org.junit.jupiter.api.Test;
@@ -31,12 +32,14 @@ class PaymentServicePurgeTest {
 
     @Mock
     private OutboxRepository outboxRepository;
+    @Mock
+    private PaymentAttemptRepository attemptRepository;
 
     @Mock
     private RefundRepository refundRepository;
 
     private PaymentService service() {
-        return new PaymentService(paymentRepository, outboxRepository, refundRepository,
+        return new PaymentService(paymentRepository, outboxRepository, refundRepository, attemptRepository,
                 new PaymentProviderRegistry(java.util.List.of(new StripePaymentProvider()), "USD"));
     }
 
@@ -60,7 +63,7 @@ class PaymentServicePurgeTest {
     }
 
     // A purge is a local cleanup, not a domain fact anyone downstream reacts
-    // to — it must not put anything on payment's outbox. (stripe_event, the
+    // to — it must not put anything on payment's outbox. (provider_event, the
     // other table §6 protects, is not reachable from here at all: PaymentService
     // has no StripeEventRepository dependency to delete through.)
     @Test

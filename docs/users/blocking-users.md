@@ -254,7 +254,7 @@ have no username to match on. shop resolves the mapping and publishes
 `OrdersPurged { orderIds }` via its **existing outbox**; payment and delivery consume it
 and delete by `order_id`.
 
-Left alone deliberately: `paymentdb.stripe_event` (webhook dedupe — deleting it would let
+Left alone deliberately: `paymentdb.provider_event` (webhook dedupe — deleting it would let
 processed webhooks replay) and the `outbox` / `delivery_event` tables (plumbing, not user
 data).
 

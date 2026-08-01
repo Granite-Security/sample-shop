@@ -13,39 +13,49 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-@Table("payment")
+/**
+ * One try at taking the money for an order.
+ *
+ * <p>A {@link Payment} holds the order's current state; the attempts hold how it got
+ * there. Without this, retrying overwrites {@code provider_payment_id} in place: no
+ * audit trail, and {@code /sync} can no longer reconcile the abandoned intent.
+ *
+ * <p>It is also what makes "refundable for the amount actually paid" answerable — the
+ * succeeded attempt records what was captured, at which provider. A partial DB unique
+ * index enforces at most one succeeded attempt per order, so a double charge fails
+ * loudly at the database rather than quietly reconciling.
+ */
+@Table("payment_attempt")
 @Getter
 @Setter
-public class Payment implements Persistable<UUID> {
+public class PaymentAttempt implements Persistable<UUID> {
 
     @Id
     private UUID id;
 
+    @Column("payment_id")
+    private UUID paymentId;
+
     @Column("order_id")
     private Long orderId;
-
-    private BigDecimal amount;
-
-    private String currency;
 
     private String provider;
 
     @Column("provider_payment_id")
     private String providerPaymentId;
 
-    /**
-     * Whatever the frontend needs to complete this payment, as JSON. A CLIENT_SDK
-     * provider stores a client secret in here; a REDIRECT provider stores a URL.
-     * Nullable, and its shape must not be assumed.
-     */
     @Column("provider_payload")
     private String providerPayload;
 
-    /** The attempt currently in play. Null only for rows predating payment_attempt. */
-    @Column("current_attempt_id")
-    private UUID currentAttemptId;
+    private BigDecimal amount;
+
+    private String currency;
 
     private String status;
+
+    /** Why the provider declined, when it said. Shown to the shopper, so kept as data. */
+    @Column("decline_reason")
+    private String declineReason;
 
     @Column("created_at")
     private Instant createdAt;
@@ -58,15 +68,18 @@ public class Payment implements Persistable<UUID> {
     @Transient
     private boolean isNew = true;
 
-    public Payment() {}
+    public PaymentAttempt() {}
 
-    public Payment(Long orderId, BigDecimal amount, String currency, String provider) {
+    public PaymentAttempt(UUID paymentId, Long orderId, String provider, BigDecimal amount, String currency) {
         this.id = UUID.randomUUID();
+        this.paymentId = paymentId;
         this.orderId = orderId;
+        this.provider = provider;
         this.amount = amount;
         this.currency = currency;
-        this.provider = provider;
         this.status = PaymentStatus.CREATED.name();
+        this.createdAt = Instant.now();
+        this.updatedAt = Instant.now();
     }
 
     @Override
