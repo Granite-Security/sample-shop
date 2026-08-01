@@ -43,7 +43,7 @@ data:
   PAYMENT_PORT: "8062"
   PAYMENT_R2DBC_URL: "r2dbc:postgresql://postgres-payment:5432/paymentdb"
   PAYMENT_JDBC_URL: "jdbc:postgresql://postgres-payment:5432/paymentdb"
-  STRIPE_CURRENCY: "usd"
+  STRIPE_CURRENCY: "chf"
 
   # ── Profile ──────────────────────────────────────────
   PROFILE_PORT: "8064"

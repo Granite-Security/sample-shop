@@ -258,7 +258,7 @@ Every env var below is defined in one of three places:
 | `KAFKA_BOOTSTRAP_SERVERS` | ConfigMap | `kafka:9092` | |
 | `STRIPE_SECRET_KEY` | Secret `stripe-secret-key` | _(set by you)_ | **Required** (`sk_test_...`) |
 | `STRIPE_WEBHOOK_SECRET` | Secret `stripe-webhook-secret` | _(set by you)_ | For Stripe webhooks (`whsec_...`) |
-| `STRIPE_CURRENCY` | ConfigMap | `usd` | |
+| `STRIPE_CURRENCY` | ConfigMap | `chf` | |
 
 **Routes:** `/api/payments/webhook` public, `/api/payments/intent/**` public, everything else authenticated.
 

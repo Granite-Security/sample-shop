@@ -269,7 +269,7 @@ For local development without webhooks, the frontend calls `POST /api/payments/i
 | `AUTH_ISSUER_URI` | `http://localhost:9090` | greetings, shop |
 | `SHOP_R2DBC_URL` | `r2dbc:postgresql://localhost:5433/shopdb` | shop |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | — | payment |
-| `STRIPE_CURRENCY` | `usd` | payment |
+| `STRIPE_CURRENCY` | `chf` | payment |
 | `DELIVERY_R2DBC_URL` | `r2dbc:postgresql://localhost:5435/deliverydb` | delivery |
 | `PROFILE_R2DBC_URL` | `r2dbc:postgresql://localhost:5436/profiledb` | profile |
 | `NOTIFICATION_R2DBC_URL` | `r2dbc:postgresql://localhost:5437/notificationdb` | notification |

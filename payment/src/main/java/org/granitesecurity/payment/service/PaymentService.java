@@ -163,7 +163,7 @@ public class PaymentService {
 
     private Mono<Void> executeRefund(Payment payment, Refund refund) {
         Long orderId = payment.getOrderId();
-        long amountCents = payment.getAmount().multiply(BigDecimal.valueOf(100)).longValue();
+        long amountCents = MinorUnits.toMinorUnits(payment.getAmount(), payment.getCurrency());
 
         var params = RefundCreateParams.builder()
                 .setPaymentIntent(payment.getStripePaymentIntentId())
@@ -244,7 +244,7 @@ public class PaymentService {
                         return Mono.error(new RuntimeException("Payment already completed for order " + orderId));
                     }
 
-                    long amountCents = existing.getAmount().multiply(BigDecimal.valueOf(100)).longValue();
+                    long amountCents = MinorUnits.toMinorUnits(existing.getAmount(), existing.getCurrency());
                     var params = PaymentIntentCreateParams.builder()
                             .setAmount(amountCents)
                             .setCurrency(existing.getCurrency().toLowerCase())
@@ -419,10 +419,12 @@ public class PaymentService {
     }
 
     private Mono<Void> publishIntentCreatedEvent(Payment saved) {
+        // No clientSecret: it is a payment-confirmation credential and payments.events
+        // is not the place for one. No consumer ever read it — both frontends fetch it
+        // from GET /api/payments/intent/{orderId}. Same reasoning as identity.events.
         Map<String, Object> eventPayload = Map.of(
                 "orderId", saved.getOrderId(),
                 "stripePaymentIntentId", saved.getStripePaymentIntentId(),
-                "clientSecret", saved.getClientSecret(),
                 "amount", saved.getAmount(),
                 "currency", saved.getCurrency()
         );
@@ -443,8 +445,8 @@ public class PaymentService {
     }
 
     private Mono<Payment> doCreatePaymentIntent(Long orderId, BigDecimal total, String currencyOverride, String username, String idempotencyPrefix) {
-        long amountCents = total.multiply(BigDecimal.valueOf(100)).longValue();
         String cur = currencyOverride != null ? currencyOverride : currency;
+        long amountCents = MinorUnits.toMinorUnits(total, cur);
 
         var params = PaymentIntentCreateParams.builder()
                 .setAmount(amountCents)
