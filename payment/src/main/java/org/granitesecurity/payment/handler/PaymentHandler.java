@@ -45,9 +45,16 @@ public class PaymentHandler {
     public Mono<ServerResponse> createPaymentIntent(ServerRequest request) {
         return request.bodyToMono(CreatePaymentIntentRequest.class)
                 .flatMap(req -> paymentService.createPaymentIntent(
-                        req.orderId(), req.total(), req.currency(), req.username()))
+                        req.orderId(), req.total(), req.currency(), req.username(), req.provider()))
                 .flatMap(payment -> ServerResponse.ok().bodyValue(
-                        PaymentService.toResponse(payment, null)));
+                        PaymentService.toResponse(payment, null)))
+                // A provider the shopper named that we do not have, or none named while
+                // several are enabled, is a bad request — not a 500, and not a silent
+                // choice made on their behalf.
+                .onErrorResume(PaymentProviderRegistry.UnknownProviderException.class,
+                        e -> ServerResponse.badRequest().bodyValue(Map.of("error", e.getMessage())))
+                .onErrorResume(PaymentProviderRegistry.AmbiguousProviderException.class,
+                        e -> ServerResponse.badRequest().bodyValue(Map.of("error", e.getMessage())));
     }
 
     public Mono<ServerResponse> getPaymentByOrderId(ServerRequest request) {

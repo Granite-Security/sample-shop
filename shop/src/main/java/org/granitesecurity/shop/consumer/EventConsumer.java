@@ -59,8 +59,13 @@ public class EventConsumer {
             } else if (data.containsKey("reason")) {
                 orderService.updateOrderStatus(orderId, OrderStatus.PAYMENT_FAILED).block();
                 log.info("PaymentFailed (legacy) -> order {} marked PAYMENT_FAILED", orderId);
-            } else if (data.containsKey("stripePaymentIntentId")) {
-                log.info("PaymentIntentCreated for order {} — awaiting completion", orderId);
+            } else if (data.containsKey("providerPaymentId") || data.containsKey("stripePaymentIntentId")) {
+                // Both keys accepted deliberately. payment publishes providerPaymentId
+                // and the legacy stripePaymentIntentId side by side; dropping the legacy
+                // branch would make messages already on the topic fall through to the
+                // "unknown event type" warning during a rollout.
+                log.info("PaymentIntentCreated for order {} ({}) — awaiting completion",
+                        orderId, data.getOrDefault("provider", "unknown provider"));
             } else {
                 log.warn("Unknown payment event type: {}", message);
             }

@@ -132,9 +132,9 @@ class ShopRouteTest extends AbstractTestcontainers {
     void placeOrderShouldSucceedWithUserJwt() {
         when(orderService.placeOrder(anyString(), any(PlaceOrderRequest.class)))
                 .thenReturn(Mono.just(new OrderResponse(
-                        1L, "testuser", "PENDING", BigDecimal.valueOf(20),
+                        1L, "testuser", "PENDING", BigDecimal.valueOf(20), "CHF",
                         Instant.now(), List.of(new OrderItemResponse(1L, 1L, "Widget", 2, BigDecimal.TEN)),
-                        null, null)));
+                        null, null, null, null)));
 
         webTestClient
                 .mutateWith(mockJwt().jwt(jwt -> jwt.subject("testuser")))
@@ -171,7 +171,7 @@ class ShopRouteTest extends AbstractTestcontainers {
     @Test
     void listOrdersShouldSucceedWithUserJwt() {
         var orders = new PagedResult<>(List.of(
-                new OrderResponse(1L, "testuser", "PENDING", BigDecimal.TEN, Instant.now(), List.of(), null, null)
+                new OrderResponse(1L, "testuser", "PENDING", BigDecimal.TEN, "CHF", Instant.now(), List.of(), null, null, null, null)
         ), 1L, 0, 20);
         when(orderService.getOrdersForUser(anyString(), eq(0), eq(20))).thenReturn(Mono.just(orders));
 
@@ -195,7 +195,7 @@ class ShopRouteTest extends AbstractTestcontainers {
     void getOrderByIdShouldReturn200ForOwner() {
         when(orderService.getOrder(eq(1L), anyString(), anyBoolean()))
                 .thenReturn(Mono.just(new OrderResponse(
-                        1L, "owner", "PENDING", BigDecimal.valueOf(25), Instant.now(), List.of(), null, null)));
+                        1L, "owner", "PENDING", BigDecimal.valueOf(25), "CHF", Instant.now(), List.of(), null, null, null, null)));
 
         webTestClient
                 .mutateWith(mockJwt().jwt(jwt -> jwt.subject("owner")))

@@ -52,10 +52,13 @@ class PaymentProviderRegistryTest {
         assertThat(registry(List.of(new StripePaymentProvider()), "CHF").defaultProvider().name())
                 .isEqualTo("stripe");
 
+        // Ambiguity is the caller's problem to fix, not ours to guess at: picking one
+        // silently would decide who receives the shopper's card details.
         var two = registry(List.of(new StripePaymentProvider(), new NoopPaymentProvider()), "CHF");
         assertThatThrownBy(two::defaultProvider)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("2 are enabled");
+                .isInstanceOf(PaymentProviderRegistry.AmbiguousProviderException.class)
+                .hasMessageContaining("2 are enabled")
+                .hasMessageContaining("/api/payments/providers");
     }
 
     @Test

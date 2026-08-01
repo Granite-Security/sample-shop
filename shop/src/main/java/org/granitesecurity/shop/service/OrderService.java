@@ -103,7 +103,7 @@ public class OrderService {
         String state = addr.state() != null ? addr.state() : "";
         CustomerOrder order = new CustomerOrder(username, OrderStatus.PENDING.name(), total, shopCurrency,
                 addr.recipientName(), addr.addressLine1(), addrLine2, addr.city(), state, addr.zipCode(), addr.country());
-        return Mono.just(new OrderContext(order, items, productMap));
+        return Mono.just(new OrderContext(order, items, productMap, request.provider()));
     }
 
     private Mono<OrderResponse> persistOrder(OrderContext ctx) {
@@ -133,22 +133,22 @@ public class OrderService {
 
         return afterSave.flatMap(order -> {
             CustomerOrder co = order;
-            OutboxEvent outbox = createOutboxEvent(co, itemsWithOrderId);
+            OutboxEvent outbox = createOutboxEvent(co, itemsWithOrderId, ctx.provider());
             return outboxRepository.save(outbox)
                     .flatMap(saved -> buildOrderResponse(co, itemsWithOrderId, null));
         });
     }
 
-    private OutboxEvent createOutboxEvent(CustomerOrder order, List<OrderItem> items) {
+    private OutboxEvent createOutboxEvent(CustomerOrder order, List<OrderItem> items, String provider) {
         try {
-            String payload = OBJECT_MAPPER.writeValueAsString(buildPayload(order, items));
+            String payload = OBJECT_MAPPER.writeValueAsString(buildPayload(order, items, provider));
             return new OutboxEvent("order", String.valueOf(order.getId()), "OrderPlaced", payload, "PENDING");
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to serialize outbox payload", e);
         }
     }
 
-    private Map<String, Object> buildPayload(CustomerOrder order, List<OrderItem> items) {
+    private Map<String, Object> buildPayload(CustomerOrder order, List<OrderItem> items, String provider) {
         List<Map<String, Object>> itemList = items.stream().map(item -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("productId", item.getProductId());
@@ -171,6 +171,11 @@ public class OrderService {
         payload.put("username", order.getUsername());
         payload.put("items", itemList);
         payload.put("total", order.getTotal());
+        // Currency travels with the amount: payment must charge what shop priced, not
+        // whatever its own config currently says.
+        payload.put("currency", order.getCurrency());
+        // Null while one provider is enabled — payment falls back to the only one.
+        payload.put("provider", provider);
         payload.put("orderedAt", Instant.now().toString());
         payload.put("address", addressMap);
         return payload;
@@ -320,8 +325,14 @@ public class OrderService {
                 order.getUsername(),
                 order.getStatus(),
                 order.getTotal(),
+                order.getCurrency(),
                 order.getCreatedAt(),
                 items,
+                // provider/providerPayload/clientSecret are payment's to know, not shop's:
+                // the SPA fetches them from GET /api/payments/intent/{orderId} and merges
+                // them into this object client-side. They have always been null on the wire.
+                null,
+                null,
                 clientSecret,
                 new OrderResponse.DeliveryAddress(
                         order.getRecipientName(),
@@ -335,5 +346,12 @@ public class OrderService {
         );
     }
 
-    private record OrderContext(CustomerOrder order, List<OrderItem> items, Map<Long, Product> productMap) {}
+    /**
+     * @param provider the shopper's chosen payment provider, or null while only one is
+     *                 enabled. Carried on the context rather than the order row: it is
+     *                 an instruction to payment, and payment owns which provider a
+     *                 payment ended up on.
+     */
+    private record OrderContext(CustomerOrder order, List<OrderItem> items,
+                                Map<Long, Product> productMap, String provider) {}
 }

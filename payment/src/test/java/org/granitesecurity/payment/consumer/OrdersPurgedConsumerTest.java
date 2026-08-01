@@ -15,6 +15,9 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -71,14 +74,32 @@ class OrdersPurgedConsumerTest {
 
     @Test
     void stillHandlesOrderPlacedNormally() {
-        when(paymentService.processOrderPlaced(any(), any(), any())).thenReturn(Mono.empty());
+        when(paymentService.processOrderPlaced(any(), any(), any(), any(), any())).thenReturn(Mono.empty());
 
         consumer().onOrderPlaced("""
                 {"orderId":42,"username":"alice","total":10.00}
                 """);
 
-        verify(paymentService).processOrderPlaced(any(), any(), any());
+        // Currency and provider are absent from this payload, as they are in every event
+        // shop published before it carried them: both arrive null and fall back.
+        // eq() on BigDecimal would compare scale: the parsed total is 10.0, not 10.00.
+        verify(paymentService).processOrderPlaced(
+                eq(42L), argThat(t -> t.compareTo(new java.math.BigDecimal("10.00")) == 0),
+                eq("alice"), isNull(), isNull());
         verify(paymentService, never()).purgeOrders(anyCollection());
+    }
+
+    @Test
+    void passesCurrencyAndProviderThroughWhenTheEventCarriesThem() {
+        when(paymentService.processOrderPlaced(any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        consumer().onOrderPlaced("""
+                {"orderId":42,"username":"alice","total":10.00,"currency":"CHF","provider":"stripe"}
+                """);
+
+        verify(paymentService).processOrderPlaced(
+                eq(42L), argThat(t -> t.compareTo(new java.math.BigDecimal("10.00")) == 0),
+                eq("alice"), eq("CHF"), eq("stripe"));
     }
 
     @Test

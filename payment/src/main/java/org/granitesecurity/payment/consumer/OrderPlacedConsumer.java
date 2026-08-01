@@ -58,7 +58,12 @@ public class OrderPlacedConsumer {
             }
             BigDecimal total = parseBigDecimal(data.get("total"));
             String username = data.get("username") != null ? data.get("username").toString() : null;
-            paymentService.processOrderPlaced(orderId, total, username).block();
+            // Both optional: events published before shop carried them, and events for a
+            // shopper who expressed no preference, simply omit them. Null currency falls
+            // back to the configured shop currency; null provider to the only enabled one.
+            String currency = data.get("currency") != null ? data.get("currency").toString() : null;
+            String provider = data.get("provider") != null ? data.get("provider").toString() : null;
+            paymentService.processOrderPlaced(orderId, total, username, currency, provider).block();
         } catch (Exception e) {
             log.error("Failed to parse OrderPlaced event: {}", message, e);
         }

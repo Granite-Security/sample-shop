@@ -1,5 +1,6 @@
 package org.granitesecurity.payment.service;
 
+import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import org.granitesecurity.payment.domain.OutboxEvent;
 import org.granitesecurity.payment.domain.Payment;
@@ -79,14 +80,28 @@ public class PaymentService {
         return providers.get(name);
     }
 
-    public Mono<Void> processOrderPlaced(Long orderId, BigDecimal total, String username) {
+    /**
+     * @param currencyOverride the currency shop priced the order in, or null for events
+     *                         published before shop carried one. Honoured rather than
+     *                         re-derived: payment must charge what shop quoted, even if
+     *                         the configured shop currency has since changed.
+     * @param providerName     the shopper's chosen provider, or null for the only
+     *                         enabled one
+     */
+    public Mono<Void> processOrderPlaced(Long orderId, BigDecimal total, String username,
+                                         String currencyOverride, String providerName) {
         return paymentRepository.findByOrderId(orderId)
                 .switchIfEmpty(Mono.defer(() -> {
-                    log.info("Creating PaymentIntent for order {} from OrderPlaced event", orderId);
-                    return doCreatePaymentIntent(orderId, total, currency, username, "payment-order-async-");
+                    log.info("Creating payment for order {} from OrderPlaced event", orderId);
+                    return doCreatePaymentIntent(orderId, total, currencyOverride, username,
+                            "payment-order-async-", providerName);
                 }))
                 .doOnNext(existing -> log.info("Payment already exists for order {}, skipping", orderId))
                 .then();
+    }
+
+    public Mono<Void> processOrderPlaced(Long orderId, BigDecimal total, String username) {
+        return processOrderPlaced(orderId, total, username, null, null);
     }
 
     public Mono<CreatePaymentIntentResponse> getPaymentByOrderId(Long orderId) {
@@ -145,11 +160,12 @@ public class PaymentService {
     }
 
     public static CreatePaymentIntentResponse toResponse(Payment payment, CreatePaymentIntentResponse.RefundInfo refund) {
-        return new CreatePaymentIntentResponse(
+        return CreatePaymentIntentResponse.of(
                 payment.getId(),
                 payment.getOrderId(),
+                payment.getProvider(),
                 payment.getProviderPaymentId(),
-                clientSecretFrom(payment.getProviderPayload()),
+                payloadMap(payment.getProviderPayload()),
                 payment.getStatus(),
                 payment.getAmount(),
                 payment.getCurrency(),
@@ -158,25 +174,24 @@ public class PaymentService {
     }
 
     /**
-     * {@code provider_payload} is JSON as of migration 005. The DTO still exposes a bare
-     * {@code clientSecret} — renaming that field is step 3 of the refactor plan, and
-     * doing it here would break both frontends in a migration commit.
+     * {@code provider_payload} is JSON as of migration 005, and is served as an object
+     * rather than a string so a REDIRECT provider can put a URL in it.
      *
-     * <p>Tolerates a bare string for safety: the migration rewrites existing rows to
-     * JSON, but a row written by an older instance mid-rollout would not be.
+     * <p>Tolerates a bare string: the migration rewrote existing rows to JSON, but a row
+     * written by an older instance mid-rollout would not be. Such a value is by
+     * definition a client secret, since CLIENT_SDK was all that existed then.
      */
-    static String clientSecretFrom(String providerPayload) {
+    static Map<String, Object> payloadMap(String providerPayload) {
         if (providerPayload == null || providerPayload.isBlank()) {
             return null;
         }
         if (!providerPayload.startsWith("{")) {
-            return providerPayload;
+            return Map.of("clientSecret", providerPayload);
         }
         try {
-            var node = MAPPER.readTree(providerPayload).get("clientSecret");
-            return node == null || node.isNull() ? null : node.asString();
+            return MAPPER.readValue(providerPayload, new TypeReference<Map<String, Object>>() {});
         } catch (Exception e) {
-            log.warn("provider_payload is not readable JSON, treating as opaque: {}", e.getMessage());
+            log.warn("provider_payload is not readable JSON, omitting it: {}", e.getMessage());
             return null;
         }
     }
@@ -214,7 +229,7 @@ public class PaymentService {
                                     Refund existing = refundOpt.get();
                                     if (RefundStatus.SUCCEEDED.name().equals(existing.getStatus())) {
                                         log.info("Refund already succeeded for order {}, republishing PaymentRefunded event", orderId);
-                                        return publishPaymentRefundedEvent(existing);
+                                        return publishPaymentRefundedEvent(payment.getProvider(), existing);
                                     }
                                     log.info("Refund for order {} in status {}, retrying Stripe refund", orderId, existing.getStatus());
                                     return executeRefund(payment, existing);
@@ -250,7 +265,7 @@ public class PaymentService {
 
                     return refundRepository.save(refund)
                             .then(paymentRepository.save(payment))
-                            .then(publishPaymentRefundedEvent(refund))
+                            .then(publishPaymentRefundedEvent(payment.getProvider(), refund))
                             .doOnSuccess(v -> log.info("Refunded order {} via {} refund {}",
                                     orderId, provider.name(), providerRefund.providerRefundId()));
                 })
@@ -265,11 +280,19 @@ public class PaymentService {
                 });
     }
 
-    private Mono<Void> publishPaymentRefundedEvent(Refund refund) {
+    /**
+     * @param provider the provider that issued the refund. Published as a new key
+     *                 alongside the legacy {@code stripeRefundId} rather than replacing
+     *                 it, so messages in flight during a rollout still match shop's
+     *                 existing branches.
+     */
+    private Mono<Void> publishPaymentRefundedEvent(String provider, Refund refund) {
         try {
             Map<String, Object> eventPayload = new LinkedHashMap<>();
             eventPayload.put("orderId", refund.getOrderId());
             eventPayload.put("status", PaymentStatus.REFUNDED.name());
+            eventPayload.put("provider", provider);
+            eventPayload.put("providerRefundId", refund.getProviderRefundId());
             eventPayload.put("stripeRefundId", refund.getProviderRefundId());
             eventPayload.put("amount", refund.getAmount());
             eventPayload.put("refundedAt", refund.getUpdatedAt() != null ? refund.getUpdatedAt() : Instant.now());
@@ -288,13 +311,19 @@ public class PaymentService {
         }
     }
 
-    public Mono<Payment> createPaymentIntent(Long orderId, BigDecimal total, String currencyOverride, String username) {
+    public Mono<Payment> createPaymentIntent(Long orderId, BigDecimal total, String currencyOverride,
+                                             String username, String providerName) {
         return paymentRepository.findByOrderId(orderId)
                 .flatMap(existing -> {
                     log.info("Payment already exists for order {}, returning existing", orderId);
                     return Mono.just(existing);
                 })
-                .switchIfEmpty(Mono.defer(() -> doCreatePaymentIntent(orderId, total, currencyOverride, username, "payment-order-")));
+                .switchIfEmpty(Mono.defer(() -> doCreatePaymentIntent(
+                        orderId, total, currencyOverride, username, "payment-order-", providerName)));
+    }
+
+    public Mono<Payment> createPaymentIntent(Long orderId, BigDecimal total, String currencyOverride, String username) {
+        return createPaymentIntent(orderId, total, currencyOverride, username, null);
     }
 
     public Mono<Payment> createPaymentIntent(Long orderId, BigDecimal total, String username) {
@@ -361,7 +390,7 @@ public class PaymentService {
     }
 
     private static CreatePaymentIntentResponse.RefundInfo toRefundInfo(Refund refund) {
-        return new CreatePaymentIntentResponse.RefundInfo(
+        return CreatePaymentIntentResponse.RefundInfo.of(
                 refund.getProviderRefundId(),
                 refund.getAmount(),
                 refund.getStatus(),
@@ -406,7 +435,7 @@ public class PaymentService {
                     payment.markNotNew();
                     return saveRefund
                             .then(paymentRepository.save(payment))
-                            .then(publishPaymentRefundedEvent(refund))
+                            .then(publishPaymentRefundedEvent(payment.getProvider(), refund))
                             .doOnSuccess(v -> log.info("Refund {} for order {} reconciled to SUCCEEDED via /sync",
                                     refund.getProviderRefundId(), payment.getOrderId()));
                 })
@@ -491,11 +520,15 @@ public class PaymentService {
         if (eventName == null) return Mono.empty();
 
         try {
-            String json = MAPPER.writeValueAsString(Map.of(
-                    "orderId", payment.getOrderId(),
-                    "stripePaymentIntentId", payment.getProviderPaymentId(),
-                    "status", payment.getStatus()
-            ));
+            Map<String, Object> eventPayload = new LinkedHashMap<>();
+            eventPayload.put("orderId", payment.getOrderId());
+            eventPayload.put("provider", payment.getProvider());
+            eventPayload.put("providerPaymentId", payment.getProviderPaymentId());
+            // Legacy alias, kept alongside so in-flight messages still match shop's
+            // existing branch during a rollout.
+            eventPayload.put("stripePaymentIntentId", payment.getProviderPaymentId());
+            eventPayload.put("status", payment.getStatus());
+            String json = MAPPER.writeValueAsString(eventPayload);
             OutboxEvent outbox = new OutboxEvent(
                     "payment",
                     String.valueOf(payment.getOrderId()),
@@ -514,12 +547,14 @@ public class PaymentService {
         // No clientSecret: it is a payment-confirmation credential and payments.events
         // is not the place for one. No consumer ever read it — both frontends fetch it
         // from GET /api/payments/intent/{orderId}. Same reasoning as identity.events.
-        Map<String, Object> eventPayload = Map.of(
-                "orderId", saved.getOrderId(),
-                "stripePaymentIntentId", saved.getProviderPaymentId(),
-                "amount", saved.getAmount(),
-                "currency", saved.getCurrency()
-        );
+        Map<String, Object> eventPayload = new LinkedHashMap<>();
+        eventPayload.put("orderId", saved.getOrderId());
+        eventPayload.put("provider", saved.getProvider());
+        eventPayload.put("providerPaymentId", saved.getProviderPaymentId());
+        // Legacy alias — shop detects PaymentIntentCreated by this key's presence.
+        eventPayload.put("stripePaymentIntentId", saved.getProviderPaymentId());
+        eventPayload.put("amount", saved.getAmount());
+        eventPayload.put("currency", saved.getCurrency());
         try {
             String json = MAPPER.writeValueAsString(eventPayload);
             OutboxEvent outboxEvent = new OutboxEvent(

@@ -21,6 +21,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -143,11 +144,14 @@ public class WebhookHandler {
         if (eventName == null) return Mono.empty();
 
         try {
-            String json = MAPPER.writeValueAsString(Map.of(
-                    "orderId", payment.getOrderId(),
-                    "stripePaymentIntentId", payment.getProviderPaymentId(),
-                    "status", payment.getStatus()
-            ));
+            Map<String, Object> eventPayload = new LinkedHashMap<>();
+            eventPayload.put("orderId", payment.getOrderId());
+            eventPayload.put("provider", payment.getProvider());
+            eventPayload.put("providerPaymentId", payment.getProviderPaymentId());
+            // Legacy alias, kept alongside for in-flight messages during a rollout.
+            eventPayload.put("stripePaymentIntentId", payment.getProviderPaymentId());
+            eventPayload.put("status", payment.getStatus());
+            String json = MAPPER.writeValueAsString(eventPayload);
             OutboxEvent outbox = new OutboxEvent(
                     "payment",
                     String.valueOf(payment.getOrderId()),

@@ -598,9 +598,23 @@ purchasable currency would have been.
    in §8 (case normalisation, refund reading `payment.currency` instead of
    config, `shop` order currency) are now debt rather than prerequisites, and
    the pre-cutover USD rows are already a mixed-currency table.
-3. **API + event contract** (§6), with deprecated field aliases so this isn't
-   lockstep with the frontend and `ui-demo` keeps working. `shop`'s
-   `EventConsumer` and `OrderResponse` change here.
+3. ~~**API + event contract** (§6)~~ **Done 2026-08-01.** Canonical
+   `provider`/`providerPaymentId`/`providerPayload` fields added, with
+   `stripePaymentIntentId`/`clientSecret`/`stripeRefundId` populated alongside
+   as aliases (`CreatePaymentIntentResponse.of` fills them, and
+   `CreatePaymentIntentResponseTest` pins that they stay in step). Events gained
+   `provider` + `providerPaymentId`/`providerRefundId` *next to* the legacy
+   keys, and `shop`'s `EventConsumer` accepts either. `POST /api/shop/orders`
+   takes an optional `provider`, carried on `OrderPlaced` along with the order's
+   `currency`; unknown-provider and ambiguous-provider are both 400s.
+
+   **`shop`'s `OrderResponse.clientSecret` was never populated server-side** —
+   both call sites passed `null`, and `ui-shop` merges the value in client-side
+   from `GET /api/payments/intent/{orderId}`. §6's "shop
+   `OrderResponse.clientSecret` → provider + providerPayload" was written on the
+   assumption shop filled it. `provider`/`providerPayload` were added anyway, as
+   the null-on-the-wire shape the SPA already mutates locally, so step 4 needs
+   no further shop change. `currency` is populated, being shop's own.
 4. **Frontend widget abstraction** (§7) in `ui-shop`. Aliases stay up; drop
    them only once `ui-demo` is migrated (or written off) — which by decision
    happens after `ui-shop` is settled, and which gates step 5.

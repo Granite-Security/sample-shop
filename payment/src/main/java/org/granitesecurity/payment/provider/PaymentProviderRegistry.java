@@ -91,8 +91,7 @@ public class PaymentProviderRegistry {
      */
     public PaymentProvider defaultProvider() {
         if (providers.size() != 1) {
-            throw new IllegalStateException(
-                    "No provider specified and " + providers.size() + " are enabled: " + providers.keySet());
+            throw new AmbiguousProviderException(providers.keySet());
         }
         return providers.values().iterator().next();
     }
@@ -104,6 +103,18 @@ public class PaymentProviderRegistry {
     public static class UnknownProviderException extends RuntimeException {
         public UnknownProviderException(String name, Set<String> known) {
             super("Unknown payment provider '" + name + "'; enabled: " + known);
+        }
+    }
+
+    /**
+     * No provider was named and there is no single obvious one. A 400, not a 500: the
+     * caller has to choose, and choosing on the shopper's behalf would silently pick who
+     * gets their card details.
+     */
+    public static class AmbiguousProviderException extends RuntimeException {
+        public AmbiguousProviderException(Set<String> enabled) {
+            super("No payment provider specified and " + enabled.size()
+                    + " are enabled: " + enabled + ". Pick one from GET /api/payments/providers.");
         }
     }
 }
