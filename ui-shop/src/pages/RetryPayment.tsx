@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router';
-import { loadStripe } from '@stripe/stripe-js';
-import { Elements } from '@stripe/react-stripe-js';
 import { api } from '../api';
-import PaymentForm from '../components/PaymentForm';
+import PaymentWidget from '../components/payment/PaymentWidget';
+import { usePaymentProviders } from '../components/payment/usePaymentProviders';
+import type { ProviderPayload } from '../types';
 
 type Step = 'creating' | 'payment' | 'confirming' | 'error';
-
-const stripePromise = loadStripe(window.__ENV__?.STRIPE_PUBLISHABLE_KEY ?? '');
 
 export default function RetryPayment() {
   const { id } = useParams();
   const navigate = useNavigate();
   const orderId = Number(id);
   const [step, setStep] = useState<Step>('creating');
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [provider, setProvider] = useState<string | null>(null);
+  const [payload, setPayload] = useState<ProviderPayload | null>(null);
   const [error, setError] = useState('');
+  const { find } = usePaymentProviders();
 
   useEffect(() => {
     if (!orderId) return;
@@ -25,12 +25,17 @@ export default function RetryPayment() {
     api.payments.retryPaymentIntent(orderId)
       .then(payment => {
         if (cancelled) return;
-        if (!payment.clientSecret) {
-          setError('Payment provider did not return a client secret.');
+        // Tolerate the legacy flat clientSecret: a payment row written before the
+        // provider_payload migration still answers with only that field.
+        const resolved: ProviderPayload = payment.providerPayload
+          ?? (payment.clientSecret ? { clientSecret: payment.clientSecret } : {});
+        if (Object.keys(resolved).length === 0) {
+          setError('The payment provider returned nothing to complete the payment with.');
           setStep('error');
           return;
         }
-        setClientSecret(payment.clientSecret);
+        setProvider(payment.provider);
+        setPayload(resolved);
         setStep('payment');
       })
       .catch(e => {
@@ -89,16 +94,18 @@ export default function RetryPayment() {
         </>
       )}
 
-      {step === 'payment' && clientSecret && (
+      {step === 'payment' && provider && payload && (
         <>
           {error && <p className="error">{error}</p>}
-          <Elements key={clientSecret} stripe={stripePromise} options={{ clientSecret }}>
-            <PaymentForm
-              orderId={orderId}
-              onPaymentConfirmed={handlePaymentConfirmed}
-              onError={handlePaymentError}
-            />
-          </Elements>
+          <PaymentWidget
+            provider={provider}
+            displayName={find(provider)?.displayName}
+            confirmationMode={find(provider)?.confirmationMode ?? 'CLIENT_SDK'}
+            payload={payload}
+            orderId={orderId}
+            onPaymentConfirmed={handlePaymentConfirmed}
+            onError={handlePaymentError}
+          />
         </>
       )}
     </div>

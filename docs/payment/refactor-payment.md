@@ -615,9 +615,24 @@ purchasable currency would have been.
    assumption shop filled it. `provider`/`providerPayload` were added anyway, as
    the null-on-the-wire shape the SPA already mutates locally, so step 4 needs
    no further shop change. `currency` is populated, being shop's own.
-4. **Frontend widget abstraction** (§7) in `ui-shop`. Aliases stay up; drop
-   them only once `ui-demo` is migrated (or written off) — which by decision
-   happens after `ui-shop` is settled, and which gates step 5.
+4. ~~**Frontend widget abstraction** (§7) in `ui-shop`.~~ **Done 2026-08-01.**
+   `components/payment/`: `PaymentWidget` switching on `confirmationMode`,
+   `stripe/StripePaymentWidget` (the `<Elements>` wiring and publishable key) +
+   `stripe/StripePaymentForm` (the old `PaymentForm`, moved),
+   `RedirectPaymentWidget`, `ProviderSelector`, and a `usePaymentProviders`
+   hook. **Every `@stripe/*` import in `ui-shop` now lives under
+   `components/payment/stripe/`** — `Checkout.tsx` and `RetryPayment.tsx` have
+   none. Both tolerate the legacy flat `clientSecret` as well as
+   `providerPayload`, so a row written before migration 005 still pays.
+
+   `RedirectPaymentWidget` is built although nothing renders it yet: it makes
+   the `confirmationMode` switch total rather than a one-case stub the next
+   provider has to reopen, which is the whole claim of §7. `ProviderSelector`
+   renders nothing below two providers, so today it is invisible and becomes
+   visible the moment a second adapter is enabled — no page changes.
+
+   **Aliases stay up.** Dropping them needs `ui-demo` migrated or written off,
+   which by decision happens after `ui-shop` is settled, and which gates step 5.
 5. **Second provider** (future). Adapter + selector entry + config flag.
    Additive by construction if 1–4 are done.
 6. **Docs.** Refresh `docs/stripe-integration.md` line numbers; note it now

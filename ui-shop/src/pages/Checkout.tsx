@@ -1,17 +1,16 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router';
-import { loadStripe } from '@stripe/stripe-js';
-import { Elements } from '@stripe/react-stripe-js';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../auth';
 import { api } from '../api';
-import type { OrderResponse, AddressResponse, DeliveryAddress } from '../types';
+import type { OrderResponse, AddressResponse, DeliveryAddress, ProviderPayload } from '../types';
 import ErrorBoundary from '../components/ErrorBoundary';
-import PaymentForm from '../components/PaymentForm';
+import PaymentWidget from '../components/payment/PaymentWidget';
+import ProviderSelector from '../components/payment/ProviderSelector';
+import { usePaymentProviders } from '../components/payment/usePaymentProviders';
 
 type Step = 'review' | 'placing' | 'waiting_payment' | 'payment' | 'confirming' | 'done' | 'failed' | 'error';
 
-const stripePromise = loadStripe(window.__ENV__?.STRIPE_PUBLISHABLE_KEY ?? '');
 const POLL_INTERVAL = 1000;
 const POLL_TIMEOUT = 30000;
 const MAX_RETRIES = 25;
@@ -31,11 +30,21 @@ function CheckoutInner() {
     recipientName: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '', country: '',
   });
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { providers, selected: selectedProvider, setSelected: setSelectedProvider, find } =
+    usePaymentProviders();
 
-  const elementsOptions = useMemo(
-    () => order?.clientSecret ? { clientSecret: order.clientSecret } : undefined,
-    [order?.clientSecret],
-  );
+  // Which provider actually took the order, once payment has opened one — that is
+  // authoritative over the shopper's selection, which is only a request.
+  const activeProvider = order?.provider ?? selectedProvider;
+  const activeMode = find(activeProvider)?.confirmationMode ?? 'CLIENT_SDK';
+
+  const paymentPayload: ProviderPayload | undefined = useMemo(() => {
+    if (order?.providerPayload) return order.providerPayload;
+    // Legacy flat field, still populated by the API as a deprecated alias.
+    return order?.clientSecret ? { clientSecret: order.clientSecret } : undefined;
+    // Depends on `order` as a whole: the React Compiler infers that from reading two
+    // of its properties, and a narrower list here disables optimisation entirely.
+  }, [order]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -50,9 +59,13 @@ function CheckoutInner() {
     pollRef.current = setInterval(async () => {
       try {
         const payment = await api.payments.getPaymentIntent(orderId);
-        if (payment.clientSecret) {
+        const payload = payment.providerPayload
+          ?? (payment.clientSecret ? { clientSecret: payment.clientSecret } : null);
+        if (payload && Object.keys(payload).length > 0) {
           stopPolling();
-          setOrder(prev => prev ? { ...prev, clientSecret: payment.clientSecret } : null);
+          setOrder(prev => prev
+            ? { ...prev, provider: payment.provider, providerPayload: payload }
+            : null);
           setStep('payment');
           return;
         }
@@ -142,10 +155,15 @@ function CheckoutInner() {
       const result = await api.orders.placeOrder({
         items: items.map(i => ({ productId: i.product.id, quantity: i.quantity })),
         address: selectedAddress,
+        // Null while one provider is enabled; payment fills it in. Once several are,
+        // the selector has already forced a choice.
+        provider: selectedProvider ?? undefined,
       });
       setOrder(result);
       clearCart();
-      if (result.clientSecret) {
+      // shop never fills these in — the SPA fetches them from payment — so this is
+      // effectively always the polling branch. Kept in case that ever changes.
+      if (result.providerPayload || result.clientSecret) {
         setStep('payment');
       } else {
         setStep('waiting_payment');
@@ -327,6 +345,12 @@ function CheckoutInner() {
                 </p>
               )}
               <h2>Total: ${total.toFixed(2)}</h2>
+              <ProviderSelector
+                providers={providers}
+                selected={selectedProvider}
+                onSelect={setSelectedProvider}
+                disabled={step === 'placing'}
+              />
               {error && <p className="error">{error}</p>}
               <button
                 className="btn btn-primary"
@@ -336,23 +360,22 @@ function CheckoutInner() {
                 {step === 'placing' ? 'Placing Order...' : 'Place Order'}
               </button>
             </>
-          ) : step === 'payment' && order?.clientSecret ? (
+          ) : step === 'payment' && order && paymentPayload && activeProvider ? (
             <>
               <p style={{ marginBottom: 16 }}>
                 Order #{order.id} — Total: <strong>${Number(order.total).toFixed(2)}</strong>
               </p>
               {error && <p className="error">{error}</p>}
-              <Elements
+              <PaymentWidget
                 key={order.id}
-                stripe={stripePromise}
-                options={elementsOptions}
-              >
-                <PaymentForm
-                  orderId={order.id}
-                  onPaymentConfirmed={handlePaymentConfirmed}
-                  onError={handlePaymentError}
-                />
-              </Elements>
+                provider={activeProvider}
+                displayName={find(activeProvider)?.displayName}
+                confirmationMode={activeMode}
+                payload={paymentPayload}
+                orderId={order.id}
+                onPaymentConfirmed={handlePaymentConfirmed}
+                onError={handlePaymentError}
+              />
             </>
           ) : step === 'payment' ? (
             <p>Loading payment form…</p>
