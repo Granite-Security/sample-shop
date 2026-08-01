@@ -656,10 +656,22 @@ so it can be scheduled and announced on its own.
   lookups and `enabled()` filtering. A `NoopPaymentProvider` in **test sources
   only** proves N>1 dispatch before a real second adapter exists — no dev-only
   Spring profile, so deployed config matches tested config.
-- The load-bearing check is a **real checkout in the cluster against Stripe
-  test mode**: place, pay, `/sync`, refund, confirm `PAID` → `REIMBURSED` in
-  shop. It is the only thing covering the outbox → Kafka → `shop` consumer
-  path that §6 changes. Run it after steps 1 and 3.
+- The load-bearing check is a **real checkout against Stripe test mode**:
+  place, pay, `/sync`, refund, confirm `PAID` → `REIMBURSED` in shop. It is the
+  only thing covering the outbox → Kafka → `shop` consumer path that §6 changes.
+  **Automated as `scripts/verify-checkout.sh`** and run green (35/35) against
+  the compose stack on 2026-08-01, after steps 0–4. It asserts each step's own
+  claim, not just that checkout works: aliases mirroring canonical fields, the
+  migrated columns, `payment_attempt` written and linked, `clientSecret` absent
+  from the Kafka payload, and the charge actually settling in **chf**.
+
+  Not yet run against the Hetzner cluster: its API server allows 6443 from a
+  single IP that no longer matches, so `kubectl` cannot reach it from here.
+  Nothing in this plan is blocked on that, but nothing has been verified in
+  production either.
+
+  Three bugs surfaced by running it, all pre-existing and none from this
+  refactor — see §12 "Found while verifying".
 - No new Testcontainers requirement.
 
 ## 12. Open questions
@@ -675,6 +687,22 @@ so it can be scheduled and announced on its own.
 - **Promotional grants** → spend-only, never withdrawable, enforced by a
   `CHECK` constraint. Only real payments are refundable, and only for the
   amount that payment actually captured (§9, §9.3, §9.4).
+
+**Found while verifying (2026-08-01)** — all pre-existing, all fixed:
+
+- **`shop`'s `GlobalErrorHandler` logged nothing on a 500.** Every unhandled
+  exception returned "An unexpected error occurred" and left no trace at all,
+  which is why the first failure of the verification run was invisible. Now
+  logs at ERROR for 5xx only; 4xx stays quiet, being the API answering.
+- **`compose.yaml` never set `JWT_JWK_SET_URI`** for `shop`, `payment`,
+  `delivery`, `profile` or `greetings` — only for `storage`. They fell back to
+  `localhost:9090`, which inside a container is the service itself, so *every
+  authenticated request failed in compose* with "Could not obtain the keys".
+  k8s always set it (`k8s/base/config.yaml:96`), so only local dev was broken.
+- **The Stripe health check reported the wrong mode.** It inferred `live` from
+  the mere existence of a PaymentIntent, so a test account read `live` as soon
+  as it had one charge — a health endpoint claiming live while taking test
+  money. Now read from the API key prefix, which is what decides it.
 
 **Still open**
 

@@ -60,6 +60,9 @@ public class StripePaymentProvider implements PaymentProvider {
      */
     private static final Set<String> SUPPORTED_CURRENCIES = Set.of("USD", "EUR", "RON", "CHF");
 
+    @Value("${stripe.secret-key:}")
+    private String secretKey;
+
     @Value("${stripe.webhook-secret:}")
     private String webhookSecret;
 
@@ -101,10 +104,10 @@ public class StripePaymentProvider implements PaymentProvider {
     public Mono<ProviderHealth> health() {
         return Mono.fromCallable(() -> {
                     var params = PaymentIntentListParams.builder().setLimit(1L).build();
-                    var intents = PaymentIntent.list(params);
+                    PaymentIntent.list(params);   // the probe: does the API answer at all
                     return ProviderHealth.up(Map.of(
                             "stripe", "connected",
-                            "mode", intents.getData().isEmpty() ? "test" : "live"));
+                            "mode", mode()));
                 })
                 .subscribeOn(Schedulers.boundedElastic())
                 .onErrorResume(StripeException.class, e -> {
@@ -280,6 +283,19 @@ public class StripePaymentProvider implements PaymentProvider {
             log.warn("PaymentIntent {} has non-numeric order_id metadata: {}", intentId, raw);
             return null;
         }
+    }
+
+    /**
+     * Test or live, read from the API key prefix — the only thing that actually decides
+     * it. The previous implementation inferred "live" from the mere existence of a
+     * PaymentIntent, so a test account reported "live" as soon as it had one charge:
+     * the health endpoint said live while taking test-mode money.
+     */
+    private String mode() {
+        String key = secretKey == null ? "" : secretKey;
+        if (key.startsWith("sk_test_") || key.startsWith("rk_test_")) return "test";
+        if (key.startsWith("sk_live_") || key.startsWith("rk_live_")) return "live";
+        return "unknown";
     }
 
     private PaymentProviderException wrap(String what, StripeException e) {
