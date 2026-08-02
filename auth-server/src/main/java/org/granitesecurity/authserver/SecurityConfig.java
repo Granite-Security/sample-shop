@@ -12,6 +12,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -266,6 +267,12 @@ public class SecurityConfig {
     private AuthenticationSuccessHandler siteRootSuccessHandler() {
         DefaultRedirectStrategy redirectStrategy = new DefaultRedirectStrategy();
         redirectStrategy.setContextRelative(true);
+        // 303, not the default 302. A 302 only *conventionally* turns a POST into a
+        // GET; the spec does not require it, and clients that preserve the method
+        // re-POST to the redirect target. The target here is the SPA served by
+        // nginx, which answers POST with 405 — so a login that succeeded still
+        // ended on an error page. 303 See Other mandates the GET.
+        redirectStrategy.setStatusCode(HttpStatus.SEE_OTHER);
         SavedRequestAwareAuthenticationSuccessHandler handler =
                 new SavedRequestAwareAuthenticationSuccessHandler();
         handler.setRedirectStrategy(redirectStrategy);
