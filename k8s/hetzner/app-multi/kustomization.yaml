@@ -43,10 +43,10 @@ images:
     newTag: latest
   - name: granite-shop
     newName: docker.io/moldovean/granite-shop
-    newTag: 22ade1340e50092bf496733dc1ba7968af4f24be
+    newTag: 25badf5a0313d737086e981e1f667aaebe5bd04d
   - name: granite-payment
     newName: docker.io/moldovean/granite-payment
-    newTag: 22ade1340e50092bf496733dc1ba7968af4f24be
+    newTag: 25badf5a0313d737086e981e1f667aaebe5bd04d
   - name: granite-notification
     newName: docker.io/moldovean/granite-notification
     newTag: e2ec7ca971ac69aee5f029ce928910fabf0a655b
