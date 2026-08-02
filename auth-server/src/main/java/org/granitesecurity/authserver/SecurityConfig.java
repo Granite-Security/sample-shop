@@ -40,6 +40,9 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
+import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
+import org.springframework.security.web.DefaultRedirectStrategy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
@@ -211,7 +214,7 @@ public class SecurityConfig {
                         "/api/password-reset/confirm"))
                 // Form login handles the redirect to the login page from the
                 // authorization server filter chain
-                .formLogin(Customizer.withDefaults())
+                .formLogin((form) -> form.successHandler(siteRootSuccessHandler()))
                 .oauth2Login((oauth2) -> oauth2
                         .redirectionEndpoint((redirection) -> redirection
                                 .baseUri("/login/oauth2/code/*")
@@ -238,6 +241,36 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    /**
+     * Where a successful form login lands.
+     *
+     * <p>Spring's default sends the user to the request they were originally after,
+     * falling back to {@code /} when there isn't one — and that fallback is resolved
+     * against the servlet context path, which here is {@code /auth}. So a login typed
+     * straight into {@code /auth/login} succeeded and then redirected to {@code /auth/},
+     * which this application does not map: 302, then 404, looking for all the world
+     * like the password was rejected.
+     *
+     * <p>{@code SavedRequestAware} keeps the important case intact — arriving via
+     * {@code /oauth2/authorize} still resumes that flow, which is how the SPAs log in.
+     * Only the fallback changes, and {@code contextRelative} makes {@code /} mean the
+     * host root rather than the context root.
+     *
+     * <p>Host-relative on purpose: the same auth-server is reached through
+     * granite-security.org and sichocolate.com, so this returns the shopper to
+     * whichever site they came from with no per-domain configuration, and without
+     * echoing a caller-supplied URL back as a redirect.
+     */
+    private AuthenticationSuccessHandler siteRootSuccessHandler() {
+        DefaultRedirectStrategy redirectStrategy = new DefaultRedirectStrategy();
+        redirectStrategy.setContextRelative(true);
+        SavedRequestAwareAuthenticationSuccessHandler handler =
+                new SavedRequestAwareAuthenticationSuccessHandler();
+        handler.setRedirectStrategy(redirectStrategy);
+        handler.setDefaultTargetUrl("/");
+        return handler;
     }
 
     @Bean
