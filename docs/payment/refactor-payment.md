@@ -729,6 +729,21 @@ so it can be scheduled and announced on its own.
   published `PaymentSucceeded` for an order already reimbursed. Masked until now
   because shop's `REIMBURSED` had no outgoing transitions at all.
 
+**Found while verifying (gateway)** — pre-existing, and the reason every deploy
+briefly 500s:
+
+- **The gateway's connection-pool config was bound to nothing.** Spring Cloud
+  Gateway 4.2 moved these keys under `server.webflux` and 5.x dropped the old
+  `spring.cloud.gateway.*` forms outright — they are absent from the
+  configuration metadata even as deprecated aliases, so a misplaced key fails
+  silently. The pool settings (and `globalcors`) sat under the old prefix. The
+  YAML even carried a comment concluding the settings "did not work"; they were
+  never applied. Consequence: the gateway kept pooled connections to pods that
+  had been replaced, and served 500s on `/api/**` after every rollout until the
+  pool happened to turn over — observed on four consecutive deploys.
+  `GatewayConfigBindingTest` now asserts on the *bound* objects, and fails if
+  the keys are ever misplaced again.
+
 **Still open**
 
 - ~~**`payment_attempt` in steps 1–4, or later?**~~ **Resolved: in, landed in
