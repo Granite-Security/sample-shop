@@ -23,14 +23,6 @@ spec:
           ports:
             - containerPort: 8080
           env:
-            # The gateway's globalcors allow-list. The hetzner overlay sets the real
-            # public domains; without this the gateway falls back to its localhost
-            # default and rejects preflights from the deployed frontends.
-            - name: CORS_ALLOWED_ORIGINS
-              valueFrom:
-                configMapKeyRef:
-                  name: granite-config
-                  key: CORS_ALLOWED_ORIGINS
             - name: OTEL_SERVICE_NAME
               value: "gateway"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT

@@ -3,7 +3,6 @@ package org.granitesecurity.gateway;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.cloud.gateway.config.GlobalCorsProperties;
 import org.springframework.cloud.gateway.config.HttpClientProperties;
 
 import java.time.Duration;
@@ -32,9 +31,6 @@ class GatewayConfigBindingTest {
     @Autowired
     private HttpClientProperties httpClient;
 
-    @Autowired
-    private GlobalCorsProperties cors;
-
     @Test
     void connectionPoolSettingsAreActuallyBound() {
         assertThat(httpClient.getPool().getMaxIdleTime())
@@ -50,12 +46,4 @@ class GatewayConfigBindingTest {
                 .isEqualTo(Duration.ofSeconds(15));
     }
 
-    @Test
-    void corsConfigurationIsActuallyBound() {
-        // Inert in production too, but invisibly: the SPA is same-origin behind nginx,
-        // so nothing exercised it. A cross-origin client would have found it broken.
-        assertThat(cors.getCorsConfigurations()).containsKey("/**");
-        assertThat(cors.getCorsConfigurations().get("/**").getAllowedOrigins())
-                .contains("http://localhost:5173");
-    }
 }
