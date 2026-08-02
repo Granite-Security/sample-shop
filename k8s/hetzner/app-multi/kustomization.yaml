@@ -37,7 +37,7 @@ images:
     newTag: 118abfa2215cfe0ee261722a05ecb3cd46c38dc6
   - name: granite-gateway
     newName: docker.io/moldovean/granite-gateway
-    newTag: abd712584fb3cdd704afae82f0e88a94a200491f
+    newTag: 15b1bd8738b844024a5eac492703dbd8ed988d90
   - name: granite-greetings
     newName: docker.io/moldovean/granite-greetings
     newTag: latest
