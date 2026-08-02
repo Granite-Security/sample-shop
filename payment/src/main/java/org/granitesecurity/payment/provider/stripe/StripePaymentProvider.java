@@ -220,8 +220,29 @@ public class StripePaymentProvider implements PaymentProvider {
                 return ProviderWebhookEvent.refund(event.getId(), event.getType(),
                         actual != null ? actual : refundStatus, refund.getId(), refund.getPaymentIntent());
             }
-            log.warn("Refund event {} ({}) carried no deserializable Refund", event.getId(), event.getType());
-            return ProviderWebhookEvent.refund(event.getId(), event.getType(), null, null, null);
+            // The SDK deserializer returns empty whenever the event was produced by a
+            // different API version than the SDK models — which is the normal case for
+            // refund events here. Falling back to raw JSON is the difference between
+            // noticing a failed refund and never noticing it. Same fallback the
+            // PaymentIntent path already relies on.
+            log.warn("SDK deserializer failed for refund event {} ({}), falling back to manual JSON parsing",
+                    event.getId(), event.getType());
+            try {
+                var dataObj = MAPPER.readTree(payload).get("data").get("object");
+                String refundId = text(dataObj, "id");
+                String rawStatus = text(dataObj, "status");
+                String intentId = text(dataObj, "payment_intent");
+                RefundStatus parsed = mapRefundStatus(rawStatus);
+                if (refundId == null || parsed == null) {
+                    log.warn("Refund event {} has no usable id/status (id={}, status={})",
+                            event.getId(), refundId, rawStatus);
+                    return ProviderWebhookEvent.refund(event.getId(), event.getType(), null, null, null);
+                }
+                return ProviderWebhookEvent.refund(event.getId(), event.getType(), parsed, refundId, intentId);
+            } catch (Exception e) {
+                log.error("Manual JSON parsing failed for refund event {}: {}", event.getId(), e.getMessage());
+                return ProviderWebhookEvent.refund(event.getId(), event.getType(), null, null, null);
+            }
         }
 
         PaymentStatus status = mapEventType(event.getType());
@@ -311,6 +332,12 @@ public class StripePaymentProvider implements PaymentProvider {
         if (key.startsWith("sk_test_") || key.startsWith("rk_test_")) return "test";
         if (key.startsWith("sk_live_") || key.startsWith("rk_live_")) return "live";
         return "unknown";
+    }
+
+    /** Null-safe field read: absent and JSON-null both come back as null. */
+    private static String text(tools.jackson.databind.JsonNode node, String field) {
+        var v = node == null ? null : node.get(field);
+        return v == null || v.isNull() ? null : v.asString();
     }
 
     private PaymentProviderException wrap(String what, StripeException e) {
