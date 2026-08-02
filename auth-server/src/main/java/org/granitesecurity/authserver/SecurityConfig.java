@@ -44,6 +44,14 @@ import org.springframework.security.oauth2.server.authorization.settings.ClientS
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.DefaultRedirectStrategy;
+import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
+import org.springframework.security.web.savedrequest.RequestCache;
+import org.springframework.http.HttpHeaders;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.core.Authentication;
+import java.io.IOException;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
@@ -265,19 +273,33 @@ public class SecurityConfig {
      * echoing a caller-supplied URL back as a redirect.
      */
     private AuthenticationSuccessHandler siteRootSuccessHandler() {
-        DefaultRedirectStrategy redirectStrategy = new DefaultRedirectStrategy();
-        redirectStrategy.setContextRelative(true);
-        // 303, not the default 302. A 302 only *conventionally* turns a POST into a
-        // GET; the spec does not require it, and clients that preserve the method
-        // re-POST to the redirect target. The target here is the SPA served by
-        // nginx, which answers POST with 405 — so a login that succeeded still
-        // ended on an error page. 303 See Other mandates the GET.
-        redirectStrategy.setStatusCode(HttpStatus.SEE_OTHER);
-        SavedRequestAwareAuthenticationSuccessHandler handler =
-                new SavedRequestAwareAuthenticationSuccessHandler();
-        handler.setRedirectStrategy(redirectStrategy);
-        handler.setDefaultTargetUrl("/");
-        return handler;
+        RequestCache requestCache = new HttpSessionRequestCache();
+        return new SavedRequestAwareAuthenticationSuccessHandler() {
+            @Override
+            public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
+                                                Authentication authentication) throws IOException, ServletException {
+                // Came from /oauth2/authorize (both SPAs do): resume it untouched.
+                // This is the path that matters and it must behave exactly as
+                // Spring intends — the saved request is an absolute URL, and
+                // rewriting it is how this handler broke login once already.
+                if (requestCache.getRequest(request, response) != null) {
+                    super.onAuthenticationSuccess(request, response, authentication);
+                    return;
+                }
+                // No saved request — someone opened /auth/login directly. Spring's
+                // fallback is "/" resolved against the context path, i.e. /auth/,
+                // which this application does not map. Send them to the host root
+                // instead, which is the site they came from; host-relative, so it
+                // works for granite-security.org and sichocolate.com alike without
+                // echoing back a caller-supplied URL.
+                //
+                // 303, not 302: 302 only conventionally turns a POST into a GET,
+                // and clients that keep the method re-POST to the SPA, which nginx
+                // answers with 405.
+                response.setStatus(HttpServletResponse.SC_SEE_OTHER);
+                response.setHeader(HttpHeaders.LOCATION, "/");
+            }
+        };
     }
 
     @Bean
