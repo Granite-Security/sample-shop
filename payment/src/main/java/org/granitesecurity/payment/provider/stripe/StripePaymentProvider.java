@@ -207,11 +207,26 @@ public class StripePaymentProvider implements PaymentProvider {
             throw new WebhookVerificationException("Invalid signature", e);
         }
 
+        var objectOpt = event.getDataObjectDeserializer().getObject();
+
+        // Refund events first: they carry a Refund, not a PaymentIntent, and are
+        // keyed by refund id rather than order metadata.
+        RefundStatus refundStatus = mapRefundEventType(event.getType());
+        if (refundStatus != null) {
+            if (objectOpt.isPresent() && objectOpt.get() instanceof com.stripe.model.Refund refund) {
+                // Trust the object's own status over the event name: refund.updated
+                // fires for every change, and only the status says which one.
+                RefundStatus actual = mapRefundStatus(refund.getStatus());
+                return ProviderWebhookEvent.refund(event.getId(), event.getType(),
+                        actual != null ? actual : refundStatus, refund.getId(), refund.getPaymentIntent());
+            }
+            log.warn("Refund event {} ({}) carried no deserializable Refund", event.getId(), event.getType());
+            return ProviderWebhookEvent.refund(event.getId(), event.getType(), null, null, null);
+        }
+
         PaymentStatus status = mapEventType(event.getType());
         String providerPaymentId = null;
         Long orderId = null;
-
-        var objectOpt = event.getDataObjectDeserializer().getObject();
         if (objectOpt.isPresent() && objectOpt.get() instanceof PaymentIntent intent) {
             providerPaymentId = intent.getId();
             orderId = parseOrderId(intent.getMetadata() == null ? null : intent.getMetadata().get("order_id"),
@@ -234,7 +249,7 @@ public class StripePaymentProvider implements PaymentProvider {
             }
         }
 
-        return new ProviderWebhookEvent(event.getId(), event.getType(), orderId, status, providerPaymentId);
+        return ProviderWebhookEvent.payment(event.getId(), event.getType(), orderId, status, providerPaymentId);
     }
 
     private PaymentIntentCreateParams.Builder intentParams(CreateIntentRequest request) {
@@ -334,6 +349,23 @@ public class StripePaymentProvider implements PaymentProvider {
             case "payment_intent.succeeded" -> PaymentStatus.SUCCEEDED;
             case "payment_intent.payment_failed" -> PaymentStatus.FAILED;
             case "payment_intent.canceled" -> PaymentStatus.CANCELED;
+            default -> null;
+        };
+    }
+
+    /**
+     * Refund events. {@code refund.updated} fires on any change, so the caller reads
+     * the object's own status; the mapping here only decides that the event is
+     * refund-shaped at all. {@code charge.refund.updated} is the pre-2024 name and is
+     * still delivered by older API versions.
+     */
+    static RefundStatus mapRefundEventType(String eventType) {
+        if (eventType == null) {
+            return null;
+        }
+        return switch (eventType) {
+            case "refund.created", "refund.updated", "charge.refund.updated" -> RefundStatus.PENDING;
+            case "refund.failed" -> RefundStatus.FAILED;
             default -> null;
         };
     }

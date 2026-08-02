@@ -51,6 +51,16 @@ public class EventConsumer {
                         orderService.updateOrderStatus(orderId, OrderStatus.REIMBURSED).block();
                         log.info("PaymentRefunded -> order {} marked REIMBURSED", orderId);
                     }
+                    // The provider walked a refund back after accepting it, so the money
+                    // never reached the shopper. Return the order to RETURNED — the
+                    // refund was still requested, it just did not complete — from where
+                    // a retry can finish it. Logged at ERROR because someone has an
+                    // order they believe was refunded and was not.
+                    case "REFUND_FAILED" -> {
+                        orderService.updateOrderStatus(orderId, OrderStatus.RETURNED).block();
+                        log.error("PaymentRefundFailed -> order {} returned to RETURNED; the refund did not complete",
+                                orderId);
+                    }
                     default -> log.warn("Unknown payment status: {}", s);
                 }
             } else if (data.containsKey("paymentId")) {

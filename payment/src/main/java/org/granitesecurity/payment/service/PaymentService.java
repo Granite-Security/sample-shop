@@ -311,6 +311,28 @@ public class PaymentService {
         }
     }
 
+    /** Mirrors WebhookHandler's event, so both paths tell shop the same thing. */
+    private Mono<Void> publishRefundFailedEvent(String provider, Refund refund) {
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("orderId", refund.getOrderId());
+            // Deliberately not "FAILED": shop's consumer switches on this value and
+            // already maps FAILED to PAYMENT_FAILED, which would mark the order as
+            // never paid rather than walking the refund back.
+            payload.put("status", "REFUND_FAILED");
+            payload.put("provider", provider);
+            payload.put("providerRefundId", refund.getProviderRefundId());
+            payload.put("amount", refund.getAmount());
+            payload.put("failedAt", Instant.now());
+            OutboxEvent outbox = new OutboxEvent("payment", String.valueOf(refund.getOrderId()),
+                    "PaymentRefundFailed", MAPPER.writeValueAsString(payload), "PENDING");
+            return outboxRepository.save(outbox).then();
+        } catch (Exception e) {
+            log.error("Failed to serialize PaymentRefundFailed event", e);
+            return Mono.error(e);
+        }
+    }
+
     public Mono<Payment> createPaymentIntent(Long orderId, BigDecimal total, String currencyOverride,
                                              String username, String providerName) {
         return paymentRepository.findByOrderId(orderId)
@@ -401,11 +423,15 @@ public class PaymentService {
         Long orderId = payment.getOrderId();
         return refundRepository.findByOrderId(orderId)
                 .flatMap(refund -> {
-                    if (RefundStatus.SUCCEEDED.name().equals(refund.getStatus())) {
-                        return Mono.empty();
-                    }
                     if (refund.getProviderRefundId() != null && !refund.getProviderRefundId().isBlank()) {
+                        // Re-checked even when already SUCCEEDED. executeRefund records
+                        // SUCCEEDED the moment the provider accepts, but a refund can
+                        // still fail afterwards at the bank; skipping the check here is
+                        // what made that failure permanently invisible.
                         return syncRefundFromProvider(payment, refund);
+                    }
+                    if (RefundStatus.SUCCEEDED.name().equals(refund.getStatus())) {
+                        return Mono.empty();   // succeeded with no id to verify against
                     }
                     // PENDING/FAILED without a Stripe refund id — the create call never completed,
                     // so re-attempt; the fixed idempotency key makes this safe.
@@ -427,6 +453,18 @@ public class PaymentService {
                     refund.markNotNew();
 
                     Mono<Void> saveRefund = refundRepository.save(refund).then();
+                    if (newStatus == RefundStatus.FAILED) {
+                        // The provider walked a refund back. Restore the payment: we are
+                        // still holding the money, and shop has the order in REIMBURSED.
+                        log.error("Refund {} for order {} reported FAILED by the provider — unwinding",
+                                refund.getProviderRefundId(), payment.getOrderId());
+                        payment.setStatus(PaymentStatus.SUCCEEDED.name());
+                        payment.setUpdatedAt(Instant.now());
+                        payment.markNotNew();
+                        return saveRefund
+                                .then(paymentRepository.save(payment))
+                                .then(publishRefundFailedEvent(payment.getProvider(), refund));
+                    }
                     if (newStatus != RefundStatus.SUCCEEDED) {
                         return saveRefund;
                     }
@@ -454,6 +492,13 @@ public class PaymentService {
     private Mono<Payment> applyProviderStatus(Payment payment, ProviderIntent intent) {
         PaymentStatus mapped = intent.status();
         if (mapped == null || mapped.name().equals(payment.getStatus())) {
+            return Mono.just(payment);
+        }
+        // A refunded payment's intent still reads "succeeded" at the provider — the
+        // charge did succeed; the money was returned separately. Without this guard,
+        // /sync on a refunded order walks the row back to SUCCEEDED and publishes
+        // PaymentSucceeded, telling shop an order it already reimbursed was just paid.
+        if (PaymentStatus.REFUNDED.name().equals(payment.getStatus()) && mapped == PaymentStatus.SUCCEEDED) {
             return Mono.just(payment);
         }
 

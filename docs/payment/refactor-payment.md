@@ -713,6 +713,22 @@ so it can be scheduled and announced on its own.
   as it had one charge — a health endpoint claiming live while taking test
   money. Now read from the API key prefix, which is what decides it.
 
+**Found while verifying (2026-08-02)** — refund webhooks, both pre-existing:
+
+- **A failed refund was invisible.** `executeRefund` records SUCCEEDED the moment
+  the provider *accepts* a refund, and `reconcileRefund` then skipped anything
+  already SUCCEEDED — so a refund that later failed at the bank was never
+  noticed. The shopper's money stayed with us while the order read REIMBURSED.
+  Now: refund webhook events are handled, `/sync` re-verifies SUCCEEDED refunds,
+  a failure restores the payment to SUCCEEDED and publishes `PaymentRefundFailed`,
+  and shop walks the order back to RETURNED (from where a retry can finish it).
+  `REIMBURSED` stops being absolutely terminal for exactly this reason.
+- **`/sync` on a refunded payment walked it back to SUCCEEDED.** A refunded
+  PaymentIntent still reads `succeeded` at Stripe — the charge did succeed, the
+  money went back separately — so `applyProviderStatus` "corrected" the row and
+  published `PaymentSucceeded` for an order already reimbursed. Masked until now
+  because shop's `REIMBURSED` had no outgoing transitions at all.
+
 **Still open**
 
 - ~~**`payment_attempt` in steps 1–4, or later?**~~ **Resolved: in, landed in

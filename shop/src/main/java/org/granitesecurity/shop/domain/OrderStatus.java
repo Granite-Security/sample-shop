@@ -24,7 +24,13 @@ public enum OrderStatus {
             PAYMENT_FAILED, Set.of(PENDING),
             CANCELLED,      Set.of(),
             RETURNED,       Set.of(REIMBURSED),
-            REIMBURSED,     Set.of()
+            // REIMBURSED is terminal in the happy path, but not absolutely: payment
+            // records a refund as succeeded when the provider accepts it, and the
+            // provider can still fail it afterwards at the bank. PaymentRefundFailed
+            // walks the order back to RETURNED — the refund was still requested, it
+            // just did not complete — from where the existing RETURNED -> REIMBURSED
+            // transition lets a retry finish the job.
+            REIMBURSED,     Set.of(RETURNED)
     );
 
     public boolean canTransitionTo(OrderStatus target) {

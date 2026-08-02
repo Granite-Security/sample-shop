@@ -91,6 +91,6 @@ public class NoopPaymentProvider implements PaymentProvider {
 
     @Override
     public ProviderWebhookEvent parseWebhook(String payload, Map<String, String> headers) {
-        return new ProviderWebhookEvent("evt_noop", "noop.event", null, null, null);
+        return ProviderWebhookEvent.payment("evt_noop", "noop.event", null, null, null);
     }
 }

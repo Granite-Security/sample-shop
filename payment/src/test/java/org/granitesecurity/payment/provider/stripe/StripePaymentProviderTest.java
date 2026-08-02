@@ -55,6 +55,25 @@ class StripePaymentProviderTest {
     }
 
     @Test
+    void refundEventTypesAreRecognisedAsRefundShaped() {
+        // The value only marks the event as refund-shaped; parseWebhook then reads the
+        // Refund object's own status, because refund.updated fires on every change.
+        assertThat(StripePaymentProvider.mapRefundEventType("refund.updated")).isNotNull();
+        assertThat(StripePaymentProvider.mapRefundEventType("refund.created")).isNotNull();
+        assertThat(StripePaymentProvider.mapRefundEventType("charge.refund.updated")).isNotNull();
+        assertThat(StripePaymentProvider.mapRefundEventType("refund.failed")).isEqualTo(RefundStatus.FAILED);
+    }
+
+    @Test
+    void paymentEventsAreNotMistakenForRefundEvents() {
+        assertThat(StripePaymentProvider.mapRefundEventType("payment_intent.succeeded")).isNull();
+        assertThat(StripePaymentProvider.mapRefundEventType("charge.updated")).isNull();
+        assertThat(StripePaymentProvider.mapRefundEventType(null)).isNull();
+        // and the converse: a refund event must not map to a payment transition
+        assertThat(StripePaymentProvider.mapEventType("refund.updated")).isNull();
+    }
+
+    @Test
     void describesItselfForTheProviderSelector() {
         assertThat(provider.name()).isEqualTo("stripe");
         assertThat(provider.confirmationMode()).isEqualTo(ConfirmationMode.CLIENT_SDK);

@@ -13,5 +13,8 @@ public interface RefundRepository extends ReactiveCrudRepository<Refund, UUID> {
 
     Mono<Refund> findByOrderId(Long orderId);
 
+    /** Webhook lookup: refund events identify themselves by the provider's refund id. */
+    Mono<Refund> findByProviderRefundId(String providerRefundId);
+
     Mono<Long> deleteByOrderIdIn(Collection<Long> orderIds);
 }

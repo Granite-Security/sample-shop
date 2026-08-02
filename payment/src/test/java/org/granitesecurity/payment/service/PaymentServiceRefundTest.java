@@ -269,10 +269,14 @@ class PaymentServiceRefundTest {
     }
 
     @Test
-    void sync_succeededRefund_noRefundRetrieveAndNoChanges() {
+    void sync_succeededRefund_isStillVerifiedButWritesNothingWhenUnchanged() {
+        // Deliberately re-checked. executeRefund records SUCCEEDED the moment Stripe
+        // accepts the refund, and Stripe can still fail it later at the bank; the
+        // previous early-return made that failure permanently invisible.
         Payment payment = succeededPayment();
         Refund refund = refundWith(RefundStatus.SUCCEEDED, "re_done");
         stripeApi.paymentIntentResult = succeededIntent();
+        stripeApi.refundResult = stripeRefund("re_done", "succeeded");
 
         when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Mono.just(payment));
         when(refundRepository.findByOrderId(ORDER_ID)).thenReturn(Mono.just(refund));
@@ -282,10 +286,68 @@ class PaymentServiceRefundTest {
                         && RefundStatus.SUCCEEDED.name().equals(dto.refund().status()))
                 .verifyComplete();
 
-        assertThat(stripeApi.requestedTypes).containsExactly(com.stripe.model.PaymentIntent.class);
+        assertThat(stripeApi.requestedTypes)
+                .containsExactly(com.stripe.model.PaymentIntent.class, com.stripe.model.Refund.class);
+        // Still SUCCEEDED, so nothing is written and nothing is published.
         verify(refundRepository, never()).save(any());
         verify(paymentRepository, never()).save(any());
         verifyNoInteractions(outboxRepository);
+    }
+
+    @Test
+    void sync_onARefundedPayment_doesNotWalkItBackToSucceeded() {
+        // A refunded PaymentIntent still reads "succeeded" at Stripe — the charge did
+        // succeed, the money went back separately. Treating that as a transition would
+        // publish PaymentSucceeded for an order shop has already reimbursed.
+        Payment payment = succeededPayment();
+        payment.setStatus(PaymentStatus.REFUNDED.name());
+        Refund refund = refundWith(RefundStatus.SUCCEEDED, "re_ok");
+        stripeApi.paymentIntentResult = succeededIntent();
+        stripeApi.refundResult = stripeRefund("re_ok", "succeeded");
+
+        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Mono.just(payment));
+        when(refundRepository.findByOrderId(ORDER_ID)).thenReturn(Mono.just(refund));
+
+        StepVerifier.create(paymentService.syncPaymentStatus(ORDER_ID)).expectNextCount(1).verifyComplete();
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REFUNDED.name());
+        verify(paymentRepository, never()).save(any());
+        verifyNoInteractions(outboxRepository);
+    }
+
+    @Test
+    void sync_refundThatStripeLaterFailed_unwindsThePaymentAndTellsShop() {
+        // The gap this closes: the shopper's money never came back, but the row said
+        // SUCCEEDED and the order sat in REIMBURSED.
+        Payment payment = succeededPayment();
+        payment.setStatus(PaymentStatus.REFUNDED.name());
+        Refund refund = refundWith(RefundStatus.SUCCEEDED, "re_bad");
+        stripeApi.paymentIntentResult = succeededIntent();
+        stripeApi.refundResult = stripeRefund("re_bad", "failed");
+
+        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Mono.just(payment));
+        when(refundRepository.findByOrderId(ORDER_ID)).thenReturn(Mono.just(refund));
+        when(refundRepository.save(any(Refund.class))).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(paymentRepository.save(any(Payment.class))).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(outboxRepository.save(any(OutboxEvent.class))).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+
+        StepVerifier.create(paymentService.syncPaymentStatus(ORDER_ID)).expectNextCount(1).verifyComplete();
+
+        ArgumentCaptor<Refund> refundCaptor = ArgumentCaptor.forClass(Refund.class);
+        verify(refundRepository).save(refundCaptor.capture());
+        assertThat(refundCaptor.getValue().getStatus()).isEqualTo(RefundStatus.FAILED.name());
+
+        // We are still holding the money, so the payment goes back to SUCCEEDED.
+        ArgumentCaptor<Payment> paymentCaptor = ArgumentCaptor.forClass(Payment.class);
+        verify(paymentRepository).save(paymentCaptor.capture());
+        assertThat(paymentCaptor.getValue().getStatus()).isEqualTo(PaymentStatus.SUCCEEDED.name());
+
+        ArgumentCaptor<OutboxEvent> outboxCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxRepository).save(outboxCaptor.capture());
+        assertThat(outboxCaptor.getValue().getEventType()).isEqualTo("PaymentRefundFailed");
+        // Not "FAILED": shop maps that to PAYMENT_FAILED, which would say the order
+        // was never paid rather than that the refund did not complete.
+        assertThat(outboxCaptor.getValue().getPayload()).contains("REFUND_FAILED").contains("re_bad");
     }
 
     @Test

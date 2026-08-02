@@ -5,12 +5,15 @@ import org.granitesecurity.payment.domain.OutboxEvent;
 import org.granitesecurity.payment.domain.Payment;
 import org.granitesecurity.payment.domain.PaymentStatus;
 import org.granitesecurity.payment.domain.ProviderEvent;
+import org.granitesecurity.payment.domain.Refund;
+import org.granitesecurity.payment.domain.RefundStatus;
 import org.granitesecurity.payment.provider.PaymentProvider;
 import org.granitesecurity.payment.provider.PaymentProviderRegistry;
 import org.granitesecurity.payment.provider.ProviderWebhookEvent;
 import org.granitesecurity.payment.provider.WebhookVerificationException;
 import org.granitesecurity.payment.repository.OutboxRepository;
 import org.granitesecurity.payment.repository.PaymentRepository;
+import org.granitesecurity.payment.repository.RefundRepository;
 import org.granitesecurity.payment.repository.ProviderEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,15 +43,18 @@ public class WebhookHandler {
     private final PaymentRepository paymentRepository;
     private final ProviderEventRepository providerEventRepository;
     private final OutboxRepository outboxRepository;
+    private final RefundRepository refundRepository;
     private final PaymentProviderRegistry providers;
 
     public WebhookHandler(PaymentRepository paymentRepository,
                           ProviderEventRepository providerEventRepository,
                           OutboxRepository outboxRepository,
+                          RefundRepository refundRepository,
                           PaymentProviderRegistry providers) {
         this.paymentRepository = paymentRepository;
         this.providerEventRepository = providerEventRepository;
         this.outboxRepository = outboxRepository;
+        this.refundRepository = refundRepository;
         this.providers = providers;
     }
 
@@ -109,6 +115,9 @@ public class WebhookHandler {
     }
 
     private Mono<ServerResponse> apply(ProviderWebhookEvent event) {
+        if (event.isRefundTransition()) {
+            return applyRefund(event);
+        }
         if (event.status() == null) {
             log.info("Ignoring unhandled event type: {} ({})", event.eventType(), event.eventId());
             return ServerResponse.ok().bodyValue(Map.of("status", "skipped", "reason", "unhandled_event_type"));
@@ -125,6 +134,87 @@ public class WebhookHandler {
                         "status", "processed",
                         "orderId", payment.getOrderId(),
                         "paymentStatus", payment.getStatus())));
+    }
+
+    /**
+     * Applies a refund status the provider reported.
+     *
+     * <p>This is the only signal that arrives after we have stopped looking: a refund
+     * is recorded SUCCEEDED the moment the provider accepts it, and can still fail
+     * afterwards at the bank. Without this, the row would keep claiming SUCCEEDED
+     * while the shopper never got their money.
+     */
+    private Mono<ServerResponse> applyRefund(ProviderWebhookEvent event) {
+        return refundRepository.findByProviderRefundId(event.providerRefundId())
+                .switchIfEmpty(Mono.defer(() -> {
+                    // A refund we never recorded — issued straight from the Stripe
+                    // dashboard, say. Nothing to correct, and inventing a row here
+                    // would fabricate an order we know nothing about.
+                    log.warn("Refund event {} for unknown refund {} — skipping",
+                            event.eventId(), event.providerRefundId());
+                    return Mono.empty();
+                }))
+                .flatMap(refund -> {
+                    RefundStatus incoming = event.refundStatus();
+                    if (incoming.name().equals(refund.getStatus())) {
+                        return Mono.just(refund);
+                    }
+                    refund.setStatus(incoming.name());
+                    refund.setUpdatedAt(Instant.now());
+                    refund.markNotNew();
+                    return refundRepository.save(refund)
+                            .flatMap(saved -> incoming == RefundStatus.FAILED
+                                    ? unwindFailedRefund(saved).thenReturn(saved)
+                                    : Mono.just(saved));
+                })
+                .flatMap(refund -> ServerResponse.ok().bodyValue(Map.of(
+                        "status", "processed",
+                        "refundId", String.valueOf(refund.getProviderRefundId()),
+                        "refundStatus", refund.getStatus())))
+                .switchIfEmpty(ServerResponse.ok().bodyValue(
+                        Map.of("status", "skipped", "reason", "unknown_refund")));
+    }
+
+    /**
+     * The money did not go back. Restore the payment to SUCCEEDED — we are still
+     * holding it — and tell shop, which has the order sitting in REIMBURSED on the
+     * strength of a refund that never completed.
+     */
+    private Mono<Void> unwindFailedRefund(Refund refund) {
+        log.error("Refund {} for order {} FAILED after being recorded as succeeded — unwinding",
+                refund.getProviderRefundId(), refund.getOrderId());
+        return paymentRepository.findByOrderId(refund.getOrderId())
+                .flatMap(payment -> {
+                    payment.setStatus(PaymentStatus.SUCCEEDED.name());
+                    payment.setUpdatedAt(Instant.now());
+                    payment.markNotNew();
+                    return paymentRepository.save(payment);
+                })
+                .then(publishRefundFailedEvent(refund));
+    }
+
+    private Mono<Void> publishRefundFailedEvent(Refund refund) {
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("orderId", refund.getOrderId());
+            // Deliberately not "FAILED": shop's consumer switches on this value and
+            // already maps FAILED to PAYMENT_FAILED, which would mark the order as
+            // never paid rather than walking the refund back.
+            payload.put("status", "REFUND_FAILED");
+            payload.put("providerRefundId", refund.getProviderRefundId());
+            payload.put("amount", refund.getAmount());
+            payload.put("failedAt", Instant.now());
+            OutboxEvent outbox = new OutboxEvent(
+                    "payment",
+                    String.valueOf(refund.getOrderId()),
+                    "PaymentRefundFailed",
+                    MAPPER.writeValueAsString(payload),
+                    "PENDING");
+            return outboxRepository.save(outbox).then();
+        } catch (Exception e) {
+            log.error("Failed to serialize PaymentRefundFailed event", e);
+            return Mono.error(e);
+        }
     }
 
     private Mono<Payment> updatePaymentStatus(Payment payment, PaymentStatus newStatus) {
