@@ -1,7 +1,7 @@
 # User-to-user messaging (inbox)
 
-Status: **Phase 1 implemented** — backend and UI shipped in the `messaging` branch.
-Phases 2–3 not started.
+Status: **Phase 1 shipped** (#77), plus Reply and the unread bell from Phase 2 (#78, #79).
+Conversation grouping, pagination and all of Phase 3 not started.
 
 Goal: any signed-in user can send a message to another user by username or email, and read
 what they were sent from an inbox. `manager` sends to `net.vrabie`; `net.vrabie` sees it
@@ -300,8 +300,13 @@ acceptable if registration is ever opened.
 compose form with recipient search, and a detail view. Ship it here — this alone is the
 feature as asked.
 
-**Phase 2 — usability.** Unread badge in `Header.tsx`, polled. Conversation grouping by
-participant pair. Reply, prefilling recipient and `Re:` subject. Pagination in the list.
+**Phase 2 — usability.** *Reply and the unread badge are shipped; grouping and pagination are
+not.* Reply prefills the recipient and an `Re:` subject. The badge is a bell in `Header.tsx`
+fed by `MessagesContext`, which polls `unread-count` every 30s — only while signed in, and
+only while the tab is visible, refreshing immediately on `visibilitychange`. Opening a message
+decrements it locally rather than waiting out the interval, which is the difference between
+the bell feeling live and feeling broken. Still to do: conversation grouping by participant
+pair, and pagination in the list.
 
 **Phase 3 — abuse and hygiene.** Rate limiting (§7.3), user-to-user blocking (§6), inclusion
 in the user-deletion purge sweep alongside addresses and files.

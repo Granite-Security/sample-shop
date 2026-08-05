@@ -77,12 +77,26 @@ h3 { font-size: 1.1rem; }
   color: #fff;
   font-size: 0.7rem;
   border-radius: 999px;
-  width: 18px;
+  /* min-width rather than a fixed width: this badge is shared with the message
+     bell, where "9+" is two characters and would spill out of an 18px circle. */
+  min-width: 18px;
   height: 18px;
+  padding: 0 4px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
+/* The bell is an icon, not a word, so it needs its own hit area rather than
+   inheriting the text link's. */
+.bell-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  font-size: 1.1rem;
+  line-height: 1;
+  text-decoration: none;
+}
+.bell-link:hover { text-decoration: none; }
 .user-info { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--text-secondary); }
 
 /* Home */
@@ -283,6 +297,14 @@ textarea.compose-field { resize: vertical; min-height: 6rem; }
    any page rendered. Stack it and turn the nav into scrollable pills. */
 @media (max-width: 640px) {
   .page { padding: 1rem; }
+
+  /* The header was a single non-wrapping row, so on a phone a signed-in admin
+     pushed Cart, the bell and the avatar clean off the right edge. Nav drops to
+     its own line and the username hides — the avatar already identifies you. */
+  .header { flex-wrap: wrap; gap: 0.75rem; padding: 0.75rem 1rem; }
+  .header .nav { order: 3; flex: 0 0 100%; gap: 0.75rem; overflow-x: auto; }
+  .header-actions { gap: 1rem; }
+  .user-name { display: none; }
   .account-page { flex-direction: column; gap: 1rem; }
   .account-nav { width: 100%; }
   .account-nav h3 { display: none; }

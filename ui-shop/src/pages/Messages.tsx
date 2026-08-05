@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import Avatar from '../components/Avatar';
+import { useMessages } from '../contexts/MessagesContext';
 import { ApiError } from '../api/client';
 import type { MessageResponse, RecipientResponse } from '../types';
 
@@ -23,6 +24,7 @@ export default function Messages() {
   const [selected, setSelected] = useState<MessageResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const { refresh: refreshUnread, markOneRead } = useMessages();
 
   const load = (which: Box) => {
     setLoading(true);
@@ -42,6 +44,9 @@ export default function Messages() {
     setDraft(null);
     if (!message.read && !message.outgoing) {
       setMessages(current => current.map(m => (m.id === message.id ? { ...m, read: true } : m)));
+      // The GET above already marked it read server-side; tell the header now
+      // rather than leaving the bell wrong until the next poll.
+      markOneRead();
     }
   };
 
@@ -49,6 +54,9 @@ export default function Messages() {
     await api.messages.remove(id);
     setSelected(current => (current?.id === id ? null : current));
     load(box);
+    // Deleting an unread message removes it from the unread set too, and only
+    // the server knows how many that leaves.
+    refreshUnread();
   };
 
   /**
