@@ -1,8 +1,33 @@
 # Adding PayPal as a second payment provider
 
-Status: **steps 1–7 implemented** · 2026-08-04 · sandbox app registered, adapter
-written, not yet run end to end with a real shopper. Steps 8–9 (webhook
-registration, dropping the deprecated aliases) remain.
+Status: **deployed to granite-security.org, disabled** · 2026-08-05 · adapter
+live in the cluster behind `PAYMENT_PROVIDER_PAYPAL_ENABLED=false`. No shopper
+has paid with it yet. Steps 8–9 (webhook registration, dropping the deprecated
+aliases) remain.
+
+## Deploy state (2026-08-05)
+
+Shipped dark in `fa28e271`, gitops bump `79a18e1`, ArgoCD synced.
+`payment`/`ui-shop`/`ui-demo` all rolled to `fa28e271f8c9…`, all 1/1, no pods
+down, `shop` untouched.
+
+Verified in-cluster and through the public domain:
+
+| Check | Result |
+|---|---|
+| Startup registry line | `Payment providers enabled: [stripe] (shop currency CHF)` — PayPal code present, not registered |
+| `GET /api/payments/providers` | `[{"id":"stripe",…}]` only — selector stays hidden, checkout unchanged |
+| `GET /api/payments/return/paypal?orderId=999999` | **303 → `https://granite-security.org/orders/999999`** — new route live, permit-all works, and a nonexistent order degrades to a redirect rather than an error |
+
+`granite-secrets` gained `paypal-client-id` / `paypal-client-secret` (80 bytes
+each) and an empty `paypal-webhook-id`, patched by hand — ArgoCD does not manage
+it. **The live secret had none of these before the rollout**, which is why the
+three `secretKeyRef`s are `optional: true`: without that, this deploy would have
+put payment into `CreateContainerConfigError` and taken Stripe down with it.
+
+**To flip on:** set `PAYMENT_PROVIDER_PAYPAL_ENABLED: "true"` in
+`k8s/base/config.yaml`, push, then `kubectl -n granite rollout restart deploy/payment`
+(a ConfigMap change alone does not restart the pod).
 
 ## Verified against the live sandbox (2026-08-04)
 
