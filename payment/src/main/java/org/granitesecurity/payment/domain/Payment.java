@@ -53,12 +53,33 @@ public class Payment implements Persistable<UUID> {
     @Column("updated_at")
     private Instant updatedAt;
 
+    /** ORDER or TOPUP. A top-up funds a balance and has no order (finance.md §6.1). */
+    private String purpose = PURPOSE_ORDER;
+
+    /** Who is topping up. Null for order payments — the order already knows. */
+    private String username;
+
     @Getter(AccessLevel.NONE)
     @Setter(AccessLevel.NONE)
     @Transient
     private boolean isNew = true;
 
+    public static final String PURPOSE_ORDER = "ORDER";
+    public static final String PURPOSE_TOPUP = "TOPUP";
+
     public Payment() {}
+
+    /** A payment that funds {@code username}'s balance rather than an order. */
+    public static Payment topup(String username, BigDecimal amount, String currency, String provider) {
+        Payment payment = new Payment(null, amount, currency, provider);
+        payment.setPurpose(PURPOSE_TOPUP);
+        payment.setUsername(username);
+        return payment;
+    }
+
+    public boolean isTopup() {
+        return PURPOSE_TOPUP.equals(purpose);
+    }
 
     public Payment(Long orderId, BigDecimal amount, String currency, String provider) {
         this.id = UUID.randomUUID();

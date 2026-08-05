@@ -11,6 +11,11 @@ package org.granitesecurity.payment.provider;
  *                       How an adapter recovers from a key collision is its own business.
  * @param returnUrl      where a REDIRECT provider sends the shopper on success; null for CLIENT_SDK
  * @param cancelUrl      where a REDIRECT provider sends the shopper on abandonment; null for CLIENT_SDK
+ * @param reference      a stable, unique handle for this payment, carried in provider
+ *                       metadata. For an order it is the order id; for a top-up, which has
+ *                       no order, it is the payment id. Adapters must key their metadata and
+ *                       any recovery search on this rather than on {@link #orderId()} — a
+ *                       search for {@code order_id:'null'} would match every other top-up.
  */
 public record CreateIntentRequest(
         Long orderId,
@@ -18,9 +23,18 @@ public record CreateIntentRequest(
         String username,
         String idempotencyKey,
         String returnUrl,
-        String cancelUrl) {
+        String cancelUrl,
+        String reference) {
+
+    public CreateIntentRequest {
+        // Keeps every existing caller's behaviour identical: an order payment's
+        // reference has always effectively been its order id.
+        if (reference == null) {
+            reference = String.valueOf(orderId);
+        }
+    }
 
     public static CreateIntentRequest of(Long orderId, Money amount, String username, String idempotencyKey) {
-        return new CreateIntentRequest(orderId, amount, username, idempotencyKey, null, null);
+        return new CreateIntentRequest(orderId, amount, username, idempotencyKey, null, null, null);
     }
 }

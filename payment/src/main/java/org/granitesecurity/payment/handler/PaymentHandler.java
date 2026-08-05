@@ -61,6 +61,27 @@ public class PaymentHandler {
      */
     public Mono<ServerResponse> handleReturn(ServerRequest request) {
         String provider = request.pathVariable("provider");
+
+        // A top-up has no order, so it comes back keyed on the payment itself
+        // (docs/finance/finance.md §6.1).
+        var topupId = request.queryParam("paymentId");
+        if (topupId.isPresent()) {
+            java.util.UUID paymentId;
+            try {
+                paymentId = java.util.UUID.fromString(topupId.get());
+            } catch (IllegalArgumentException e) {
+                log.warn("Return from '{}' with an unusable paymentId", provider);
+                return redirectTo(paymentService.balancePageUrl());
+            }
+            return paymentService.finalizeRedirectTopup(provider, paymentId)
+                    .then(redirectTo(paymentService.balancePageUrl()))
+                    .onErrorResume(e -> {
+                        log.error("Return from '{}' for top-up {} failed: {}",
+                                provider, paymentId, e.getMessage(), e);
+                        return redirectTo(paymentService.balancePageUrl());
+                    });
+        }
+
         Long orderId;
         try {
             orderId = Long.parseLong(request.queryParam("orderId").orElseThrow());
@@ -80,6 +101,42 @@ public class PaymentHandler {
     private Mono<ServerResponse> redirectTo(String url) {
         return ServerResponse.status(303).location(java.net.URI.create(url)).build();
     }
+
+    /** Opens a top-up. The owner is the JWT subject, never a body field. */
+    public Mono<ServerResponse> createTopupIntent(ServerRequest request) {
+        return request.principal()
+                .cast(org.springframework.security.core.Authentication.class)
+                .map(auth -> ((org.springframework.security.oauth2.jwt.Jwt) auth.getCredentials()).getSubject())
+                .flatMap(username -> request.bodyToMono(TopupRequest.class)
+                        .switchIfEmpty(Mono.error(new IllegalArgumentException("An amount is required")))
+                        .flatMap(body -> paymentService.createTopupIntent(
+                                username, body.amount(), body.currency(), body.provider())))
+                .flatMap(payment -> ServerResponse.status(201).bodyValue(
+                        PaymentService.toResponse(payment, null)))
+                .onErrorResume(PaymentProviderRegistry.UnknownProviderException.class,
+                        e -> ServerResponse.badRequest().bodyValue(Map.of("error", e.getMessage())))
+                .onErrorResume(IllegalArgumentException.class,
+                        e -> ServerResponse.badRequest().bodyValue(Map.of("error", e.getMessage())));
+    }
+
+    /**
+     * Confirms a top-up. Unlike an order, this is the <b>only</b> reliable path: the
+     * provider webhooks resolve payments through an order id, and a top-up has none.
+     */
+    public Mono<ServerResponse> syncTopup(ServerRequest request) {
+        java.util.UUID paymentId;
+        try {
+            paymentId = java.util.UUID.fromString(request.pathVariable("paymentId"));
+        } catch (IllegalArgumentException e) {
+            return ServerResponse.badRequest().bodyValue(Map.of("error", "Not a payment id"));
+        }
+        return paymentService.syncTopup(paymentId)
+                .flatMap(payment -> ServerResponse.ok().bodyValue(
+                        PaymentService.toResponse(payment, null)));
+    }
+
+    /** What the frontend needs to complete a top-up (client secret or redirect URL). */
+    public record TopupRequest(java.math.BigDecimal amount, String currency, String provider) {}
 
     public Mono<ServerResponse> createPaymentIntent(ServerRequest request) {
         return request.bodyToMono(CreatePaymentIntentRequest.class)
