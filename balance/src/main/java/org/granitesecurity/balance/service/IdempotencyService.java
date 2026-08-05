@@ -1,6 +1,6 @@
 package org.granitesecurity.balance.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.granitesecurity.balance.domain.Idempotency;
 import org.granitesecurity.balance.repository.IdempotencyRepository;
 import org.slf4j.Logger;
@@ -26,6 +26,7 @@ public class IdempotencyService {
     private static final Logger log = LoggerFactory.getLogger(IdempotencyService.class);
 
     private final IdempotencyRepository idempotencyRepository;
+    /** Jackson 3 (tools.jackson) — the one Spring Boot 4 auto-configures. */
     private final ObjectMapper objectMapper;
 
     public IdempotencyService(IdempotencyRepository idempotencyRepository, ObjectMapper objectMapper) {
