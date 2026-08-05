@@ -4,8 +4,9 @@ Status: **Steps 0–4 built.** Steps 0–2 are deployed (ledger, house accounts,
 reconcile, Swagger). Steps 3–4 — transfer and paying an order with balance — are built but
 not yet deployed. Step 5 (top-up) not started.
 
-`payment.providers.balance.enabled` is **false** by default: turning it on makes the shop
-multi-provider, which turns `POST /api/shop/orders` into *requiring* an explicit provider.
+`PAYMENT_PROVIDER_BALANCE_ENABLED` is **on** in `k8s/base/config.yaml`, so balance appears at
+checkout beside Stripe and PayPal. The application default stays `false`, so a `payment` run
+without a balance service alongside it does not advertise a provider it cannot reach.
 
 Users hold a CHF balance: top it up with any payment provider, spend it on shop orders, send
 some to another user, and admins can gift it.

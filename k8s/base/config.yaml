@@ -79,9 +79,11 @@ data:
   NOTIFICATION_JDBC_URL: "jdbc:postgresql://postgres-notification:5432/notificationdb"
   BALANCE_PORT: "8067"
   MICROSERVICES_BALANCE_URI: "http://balance:8067"
-  # Enabling this makes the shop multi-provider, which turns POST /api/shop/orders
-  # into *requiring* an explicit provider. Flip it deliberately.
-  PAYMENT_PROVIDER_BALANCE_ENABLED: "false"
+  # On: balance is offered at checkout beside Stripe and PayPal. The shop was
+  # already multi-provider (PayPal is on), so this adds a third option rather
+  # than changing whether an explicit provider is required.
+  # payment must be restarted for a change here to take effect.
+  PAYMENT_PROVIDER_BALANCE_ENABLED: "true"
   BALANCE_R2DBC_URL: "r2dbc:postgresql://postgres-balance:5432/balancedb"
   BALANCE_JDBC_URL: "jdbc:postgresql://postgres-balance:5432/balancedb"
   # Non-secret — the actual key is resend-api-key in granite-secrets.
