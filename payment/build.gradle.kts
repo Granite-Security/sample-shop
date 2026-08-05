@@ -23,6 +23,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-r2dbc")
     implementation("org.springframework.boot:spring-boot-starter-liquibase")
     implementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
+    // Client credentials, so BalanceProvider can reach balance's SCOPE_internal API.
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
     implementation("org.springframework.kafka:spring-kafka")
     implementation("org.springframework:spring-jdbc")
 

@@ -48,6 +48,11 @@ public class ProfileRoute {
                 .GET("/api/profiles/me/messages/{id}", messageHandler::get)
                 .POST("/api/profiles/me/messages/{id}/read", messageHandler::markRead)
                 .DELETE("/api/profiles/me/messages/{id}", messageHandler::delete)
+                // Service-to-service lookup: balance calls this to check a transfer
+                // recipient exists before moving money to them. Registered before
+                // the {username} internal route below so "users" is never read as
+                // a username.
+                .GET("/api/profiles/internal/users/{username}", profileHandler::getByUsername)
                 .GET("/api/profiles/internal/{username}/addresses/{id}", addressHandler::getAddressById)
                 // User administration — before the {username} routes below, since
                 // "admin" would otherwise be read as a username.

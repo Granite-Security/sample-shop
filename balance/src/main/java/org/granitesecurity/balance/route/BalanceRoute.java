@@ -9,8 +9,11 @@ import org.granitesecurity.balance.dto.BalanceResponse;
 import org.granitesecurity.balance.dto.GiftRequest;
 import org.granitesecurity.balance.dto.ReconcileReport;
 import org.granitesecurity.balance.dto.TransactionResponse;
+import org.granitesecurity.balance.dto.TransferRequest;
+import org.granitesecurity.balance.dto.TransferResponse;
 import org.granitesecurity.balance.handler.AdminBalanceHandler;
 import org.granitesecurity.balance.handler.BalanceHandler;
+import org.granitesecurity.balance.handler.InternalIntentHandler;
 import org.springdoc.core.annotations.RouterOperation;
 import org.springdoc.core.annotations.RouterOperations;
 import org.springframework.context.annotation.Bean;
@@ -65,6 +68,30 @@ public class BalanceRoute {
                                     content = @Content(array = @io.swagger.v3.oas.annotations.media.ArraySchema(
                                             schema = @Schema(implementation = TransactionResponse.class)))))),
             @RouterOperation(
+                    path = "/api/balance/me/transfers",
+                    method = RequestMethod.POST,
+                    beanClass = BalanceHandler.class,
+                    beanMethod = "transfer",
+                    operation = @Operation(
+                            operationId = "transfer",
+                            summary = "Send money to another user",
+                            description = "Sender is the JWT subject. The recipient is validated "
+                                    + "against profile before anything moves. 402 means the credit "
+                                    + "policy declined it. `idempotencyKey` is optional: supply one "
+                                    + "and a retry replays the original result instead of sending twice.",
+                            security = @SecurityRequirement(name = "bearer-jwt"),
+                            requestBody = @RequestBody(required = true, content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                    schema = @Schema(implementation = TransferRequest.class))),
+                            responses = {
+                                    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                                            responseCode = "201",
+                                            content = @Content(schema = @Schema(implementation = TransferResponse.class))),
+                                    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                                            responseCode = "402", description = "Declined: insufficient balance"),
+                                    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                                            responseCode = "404", description = "No such recipient")})),
+            @RouterOperation(
                     path = "/api/balance/admin/gifts",
                     method = RequestMethod.POST,
                     beanClass = AdminBalanceHandler.class,
@@ -97,15 +124,24 @@ public class BalanceRoute {
                                     content = @Content(schema = @Schema(implementation = ReconcileReport.class)))))
     })
     public RouterFunction<ServerResponse> balanceRoutes(BalanceHandler balanceHandler,
-                                                        AdminBalanceHandler adminHandler) {
+                                                        AdminBalanceHandler adminHandler,
+                                                        InternalIntentHandler intentHandler) {
         return RouterFunctions.route()
                 .GET("/api/balance/me", balanceHandler::getMyBalance)
                 .GET("/api/balance/me/transactions", balanceHandler::getMyTransactions)
+                .POST("/api/balance/me/transfers", balanceHandler::transfer)
                 // Admin routes are gated in BalanceSec by path prefix, so they must
                 // stay under /admin/ — a gift endpoint anywhere else would be
                 // authenticated but not role-checked.
                 .POST("/api/balance/admin/gifts", adminHandler::gift)
                 .GET("/api/balance/admin/reconcile", adminHandler::reconcile)
+                // Service-to-service, SCOPE_internal. Undocumented in Swagger on
+                // purpose: nothing a human should be driving by hand, and the
+                // operations are reachable only with an internal token anyway.
+                .POST("/api/balance/internal/intents", intentHandler::create)
+                .GET("/api/balance/internal/intents/{id}", intentHandler::get)
+                .POST("/api/balance/internal/intents/{id}/capture", intentHandler::capture)
+                .POST("/api/balance/internal/intents/{id}/refund", intentHandler::refund)
                 .build();
     }
 }

@@ -1,8 +1,11 @@
 # `balance` — the platform's central bank
 
-Status: **Steps 0–2 built, not yet deployed.** Schema, ledger, house accounts, `GET /me`,
-`GET /me/transactions`, `POST /admin/gifts` and `GET /admin/reconcile` are implemented, with
-the gateway route and k8s manifests. Steps 3–5 (transfer, redemption, top-up) not started.
+Status: **Steps 0–4 built.** Steps 0–2 are deployed (ledger, house accounts, gifting,
+reconcile, Swagger). Steps 3–4 — transfer and paying an order with balance — are built but
+not yet deployed. Step 5 (top-up) not started.
+
+`payment.providers.balance.enabled` is **false** by default: turning it on makes the shop
+multi-provider, which turns `POST /api/shop/orders` into *requiring* an explicit provider.
 
 Users hold a CHF balance: top it up with any payment provider, spend it on shop orders, send
 some to another user, and admins can gift it.
