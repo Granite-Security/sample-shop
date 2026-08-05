@@ -29,7 +29,7 @@ jobs:
           echo "Changed files:"
           echo "$CHANGED"
 
-          jvm_services=(auth-server gateway greetings payment profile notification shop delivery storage demo-kot)
+          jvm_services=(auth-server gateway greetings payment profile notification shop delivery storage balance demo-kot)
           ui_services=(ui-demo ui-shop)
 
           jvm_arr=()

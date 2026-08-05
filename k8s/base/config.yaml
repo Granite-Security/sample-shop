@@ -77,6 +77,9 @@ data:
   NOTIFICATION_PORT: "8066"
   NOTIFICATION_R2DBC_URL: "r2dbc:postgresql://postgres-notification:5432/notificationdb"
   NOTIFICATION_JDBC_URL: "jdbc:postgresql://postgres-notification:5432/notificationdb"
+  BALANCE_PORT: "8067"
+  BALANCE_R2DBC_URL: "r2dbc:postgresql://postgres-balance:5432/balancedb"
+  BALANCE_JDBC_URL: "jdbc:postgresql://postgres-balance:5432/balancedb"
   # Non-secret — the actual key is resend-api-key in granite-secrets.
   RESEND_FROM: "Granite Security <no-reply@notify.granite-security.org>"
   FRONTEND_ORIGIN: "https://granite-security.org"

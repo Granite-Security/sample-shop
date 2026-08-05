@@ -1,0 +1,61 @@
+server:
+  port: ${BALANCE_SERVER_PORT:8067}
+
+spring:
+  application:
+    name: balance
+
+  docker:
+    compose:
+      enabled: false
+
+  r2dbc:
+    url: ${BALANCE_R2DBC_URL:r2dbc:postgresql://localhost:5438/balancedb}
+    username: ${BALANCE_R2DBC_USERNAME:myuser}
+    password: ${BALANCE_R2DBC_PASSWORD:secret}
+    pool:
+      enabled: true
+      validation-query: SELECT 1
+      max-idle-time: 5m
+
+  # Liquibase is JDBC-only; the application itself never uses this connection.
+  liquibase:
+    url: ${BALANCE_JDBC_URL:jdbc:postgresql://localhost:5438/balancedb}
+    user: ${BALANCE_JDBC_USERNAME:myuser}
+    password: ${BALANCE_JDBC_PASSWORD:secret}
+    change-log: classpath:/db/changelog/db.changelog-master.yaml
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: earliest
+      # A top-up event is money: committing only after the credit is written is
+      # what makes a crash mid-processing replay rather than silently drop it.
+      enable-auto-commit: false
+      properties:
+        isolation.level: read_committed
+
+  security:
+    oauth2:
+      client:
+        registration:
+          # Used to call profile when validating a transfer recipient.
+          profile-client:
+            client-id: ${INTERNAL_CLIENT_ID:internal-service}
+            client-secret: ${INTERNAL_CLIENT_SECRET:internal-secret}
+            authorization-grant-type: client_credentials
+            scope: internal
+            provider: auth-server
+        provider:
+          auth-server:
+            token-uri: ${AUTH_SERVER_TOKEN_URI:http://localhost:9090/auth/oauth2/token}
+
+jwt:
+  jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:9090/auth/oauth2/jwks}
+  trusted-issuers: ${TRUSTED_JWT_ISSUERS:http://localhost:8080/auth}
+
+microservices:
+  profile:
+    uri: ${MICROSERVICES_PROFILE_URI:http://localhost:8064}

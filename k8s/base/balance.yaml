@@ -1,0 +1,112 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: balance
+  labels:
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: balance
+  template:
+    metadata:
+      labels:
+        app: balance
+        tier: backend
+    spec:
+      # Block startup until the OIDC discovery doc is served through the gateway
+      # (i.e. auth-server is up). Prevents CrashLoopBackOff on eager JWKS fetch,
+      # same as profile/payment.
+      initContainers:
+        - name: wait-for-issuer
+          image: curlimages/curl:latest
+          command:
+            - sh
+            - -c
+            - >
+              until curl -sf http://gateway:8080/auth/.well-known/openid-configuration;
+              do echo "waiting for auth issuer..."; sleep 3; done
+      containers:
+        - name: balance
+          image: granite-balance:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8067
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "balance"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://tempo.infra-global-observability.svc.cluster.local:4318"
+            # Tempo speaks OTLP traces only; the agent's metric exporter 404s
+            # against it every 60s. No metrics backend is wired up yet.
+            - name: OTEL_METRICS_EXPORTER
+              value: "none"
+            - name: OTEL_LOGS_EXPORTER
+              value: "none"
+            # JSON console logs so MDC trace_id/span_id land as real fields.
+            - name: LOGGING_STRUCTURED_FORMAT_CONSOLE
+              value: "ecs"
+            - name: BALANCE_SERVER_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: BALANCE_PORT
+            - name: BALANCE_R2DBC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: BALANCE_R2DBC_URL
+            - name: BALANCE_JDBC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: BALANCE_JDBC_URL
+            - name: BALANCE_R2DBC_USERNAME
+              value: myuser
+            - name: BALANCE_R2DBC_PASSWORD
+              value: secret
+            - name: BALANCE_JDBC_USERNAME
+              value: myuser
+            - name: BALANCE_JDBC_PASSWORD
+              value: secret
+            - name: TRUSTED_JWT_ISSUERS
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: TRUSTED_JWT_ISSUERS
+            - name: JWT_JWK_SET_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: JWT_JWK_SET_URI
+            - name: AUTH_SERVER_TOKEN_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: AUTH_SERVER_TOKEN_URI
+            - name: MICROSERVICES_PROFILE_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: MICROSERVICES_PROFILE_URI
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            # Literal and secret-less, exactly as profile does it: the shared
+            # internal-service credentials live in application.yaml defaults.
+            - name: INTERNAL_CLIENT_ID
+              value: "internal-service"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: balance
+spec:
+  ports:
+    - port: 8067
+  selector:
+    app: balance

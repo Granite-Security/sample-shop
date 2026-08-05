@@ -333,3 +333,58 @@ spec:
     - port: 5432
   selector:
     app: postgres-notification
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-balance-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-balance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-balance
+  template:
+    metadata:
+      labels:
+        app: postgres-balance
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          env:
+            - name: POSTGRES_DB
+              value: balancedb
+            - name: POSTGRES_USER
+              value: myuser
+            - name: POSTGRES_PASSWORD
+              value: secret
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-balance-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-balance
+spec:
+  ports:
+    - port: 5432
+  selector:
+    app: postgres-balance
