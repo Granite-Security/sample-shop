@@ -6,6 +6,11 @@ import type { MessageResponse, RecipientResponse } from '../types';
 
 type Box = 'inbox' | 'sent';
 
+/** What Compose opens with — empty for a new message, prefilled for a reply. */
+type Draft = { to: string; subject: string };
+
+const BLANK: Draft = { to: '', subject: '' };
+
 /**
  * The inbox (docs/users/messaging.md).
  *
@@ -17,7 +22,7 @@ export default function Messages() {
   const [messages, setMessages] = useState<MessageResponse[]>([]);
   const [selected, setSelected] = useState<MessageResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [composing, setComposing] = useState(false);
+  const [draft, setDraft] = useState<Draft | null>(null);
 
   const load = (which: Box) => {
     setLoading(true);
@@ -34,6 +39,7 @@ export default function Messages() {
     // otherwise the row stays bold until a manual refresh.
     const full = await api.messages.get(message.id);
     setSelected(full);
+    setDraft(null);
     if (!message.read && !message.outgoing) {
       setMessages(current => current.map(m => (m.id === message.id ? { ...m, read: true } : m)));
     }
@@ -45,39 +51,54 @@ export default function Messages() {
     load(box);
   };
 
+  /**
+   * Reply prefills the counterparty and an "Re:" subject — but only when there
+   * was a subject. Replying to a subjectless message stays subjectless rather
+   * than becoming a bare "Re: " (docs/users/messaging.md §5.1).
+   */
+  const reply = (message: MessageResponse) => {
+    const subject = message.subject
+      ? (/^re:/i.test(message.subject) ? message.subject : `Re: ${message.subject}`)
+      : '';
+    setDraft({ to: message.counterpartyUsername, subject });
+    setSelected(null);
+  };
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h1 style={{ margin: 0 }}>Messages</h1>
-        <button className="btn btn-primary" onClick={() => { setComposing(true); setSelected(null); }}>
+      <div className="messages-head">
+        <h1>Messages</h1>
+        <button className="btn btn-primary" onClick={() => { setDraft(BLANK); setSelected(null); }}>
           New Message
         </button>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <div className="messages-tabs">
         {(['inbox', 'sent'] as Box[]).map(which => (
           <button
             key={which}
             className={box === which ? 'btn btn-primary' : 'btn'}
-            onClick={() => { setBox(which); setComposing(false); }}
+            onClick={() => { setBox(which); setDraft(null); }}
           >
             {which === 'inbox' ? 'Inbox' : 'Sent'}
           </button>
         ))}
       </div>
 
-      {composing && (
+      {draft && (
         <Compose
-          onCancel={() => setComposing(false)}
-          onSent={() => { setComposing(false); setBox('sent'); load('sent'); }}
+          draft={draft}
+          onCancel={() => setDraft(null)}
+          onSent={() => { setDraft(null); setBox('sent'); load('sent'); }}
         />
       )}
 
-      {selected && !composing && (
+      {selected && !draft && (
         <MessageDetail
           message={selected}
           onClose={() => setSelected(null)}
           onDelete={() => remove(selected.id)}
+          onReply={() => reply(selected)}
         />
       )}
 
@@ -88,43 +109,24 @@ export default function Messages() {
           {box === 'inbox' ? 'No messages yet.' : 'You have not sent any messages.'}
         </p>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="message-list">
           {messages.map(message => (
             <button
               key={message.id}
+              className={`message-row${!message.read && !message.outgoing ? ' unread' : ''}`}
               onClick={() => open(message)}
-              style={{
-                display: 'flex',
-                gap: 12,
-                alignItems: 'center',
-                textAlign: 'left',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                padding: 12,
-                background: message.read || message.outgoing ? 'transparent' : 'var(--bg-secondary)',
-                cursor: 'pointer',
-                width: '100%',
-              }}
             >
               <Avatar src={message.counterpartyAvatarUrl} name={message.counterpartyDisplayName} size={36} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <strong style={{ fontWeight: message.read || message.outgoing ? 500 : 700 }}>
+              <div className="message-row-main">
+                <div className="message-row-top">
+                  <span className="message-from">
                     {box === 'sent' ? 'To: ' : ''}{message.counterpartyDisplayName}
-                  </strong>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', flexShrink: 0 }}>
-                    {new Date(message.createdAt).toLocaleString()}
                   </span>
+                  <span className="message-time">{formatWhen(message.createdAt)}</span>
                 </div>
                 {/* No subject falls back to a body preview, the way a mail client
                     does — never the literal string "(no subject)". */}
-                <div style={{
-                  color: message.subject ? 'var(--text)' : 'var(--text-secondary)',
-                  fontStyle: message.subject ? 'normal' : 'italic',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}>
+                <div className={`message-snippet${message.subject ? '' : ' no-subject'}`}>
                   {message.subject ?? message.preview}
                 </div>
               </div>
@@ -136,39 +138,53 @@ export default function Messages() {
   );
 }
 
-function MessageDetail({ message, onClose, onDelete }: {
+function MessageDetail({ message, onClose, onDelete, onReply }: {
   message: MessageResponse;
   onClose: () => void;
   onDelete: () => void;
+  onReply: () => void;
 }) {
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 16 }}>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+    <div className="message-panel">
+      <div className="message-detail-head">
         <Avatar src={message.counterpartyAvatarUrl} name={message.counterpartyDisplayName} size={40} />
-        <div style={{ flex: 1 }}>
+        <div className="message-detail-who">
           <strong>{message.outgoing ? 'To: ' : 'From: '}{message.counterpartyDisplayName}</strong>
-          <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+          <span className="message-time">
             @{message.counterpartyUsername} · {new Date(message.createdAt).toLocaleString()}
-          </div>
+          </span>
         </div>
-        <button className="btn" onClick={onClose}>Close</button>
-        <button className="btn" style={{ color: 'var(--danger)' }} onClick={onDelete}>Delete</button>
+        <div className="message-detail-actions">
+          <button className="btn btn-primary" onClick={onReply}>Reply</button>
+          <button className="btn" onClick={onClose}>Close</button>
+          <button className="btn" style={{ color: 'var(--danger)' }} onClick={onDelete}>Delete</button>
+        </div>
       </div>
-      {message.subject && <h3 style={{ marginBottom: 8 }}>{message.subject}</h3>}
-      {/* whiteSpace preserves the sender's line breaks without any markup. */}
-      <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{message.body}</p>
+      {message.subject && <h3 style={{ marginBottom: '0.5rem' }}>{message.subject}</h3>}
+      <p className="message-body">{message.body}</p>
     </div>
   );
 }
 
-function Compose({ onCancel, onSent }: { onCancel: () => void; onSent: () => void }) {
-  const [to, setTo] = useState('');
-  const [subject, setSubject] = useState('');
+function Compose({ draft, onCancel, onSent }: {
+  draft: Draft;
+  onCancel: () => void;
+  onSent: () => void;
+}) {
+  const [to, setTo] = useState(draft.to);
+  const [subject, setSubject] = useState(draft.subject);
   const [body, setBody] = useState('');
   const [results, setResults] = useState<RecipientResponse[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const debounce = useRef<number | undefined>(undefined);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  // A reply already knows its recipient, so put the cursor where the user
+  // actually has something to type.
+  useEffect(() => {
+    if (draft.to) bodyRef.current?.focus();
+  }, [draft.to]);
 
   const onToChange = (value: string) => {
     setTo(value);
@@ -201,39 +217,28 @@ function Compose({ onCancel, onSent }: { onCancel: () => void; onSent: () => voi
   };
 
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 16 }}>
-      <h3 style={{ marginBottom: 12 }}>New Message</h3>
+    <div className="message-panel">
+      <h3 style={{ marginBottom: '0.75rem' }}>{draft.to ? 'Reply' : 'New Message'}</h3>
 
-      <div style={{ position: 'relative', marginBottom: 8 }}>
+      <div className="recipient-box">
         <input
+          className="compose-field"
+          style={{ marginBottom: 0 }}
           placeholder="To — username or email"
           value={to}
           onChange={e => onToChange(e.target.value)}
-          style={{ width: '100%' }}
         />
         {results.length > 0 && (
-          <div style={{
-            position: 'absolute',
-            zIndex: 10,
-            width: '100%',
-            background: 'var(--bg)',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            maxHeight: 220,
-            overflowY: 'auto',
-          }}>
+          <div className="recipient-menu">
             {results.map(recipient => (
               <button
                 key={recipient.username}
+                className="recipient-option"
                 onClick={() => { setTo(recipient.username); setResults([]); }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                  padding: 8, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
-                }}
               >
                 <Avatar src={recipient.avatarUrl} name={recipient.displayName} size={28} />
                 <span>{recipient.displayName}</span>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>@{recipient.username}</span>
+                <span className="username">@{recipient.username}</span>
               </button>
             ))}
           </div>
@@ -241,24 +246,25 @@ function Compose({ onCancel, onSent }: { onCancel: () => void; onSent: () => voi
       </div>
 
       <input
+        className="compose-field"
         placeholder="Subject (optional)"
         value={subject}
         onChange={e => setSubject(e.target.value)}
         maxLength={200}
-        style={{ width: '100%', marginBottom: 8 }}
       />
       <textarea
+        ref={bodyRef}
+        className="compose-field"
         placeholder="Message"
         value={body}
         onChange={e => setBody(e.target.value)}
         maxLength={4000}
         rows={6}
-        style={{ width: '100%', marginBottom: 8 }}
       />
 
-      {error && <p style={{ color: 'var(--danger)', marginBottom: 8 }}>{error}</p>}
+      {error && <p style={{ color: 'var(--danger)', marginBottom: '0.5rem' }}>{error}</p>}
 
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div className="compose-actions">
         {/* Disabled while in flight: there is no idempotency key, so a double
             click would send twice (docs/users/messaging.md §7.2). */}
         <button
@@ -272,4 +278,16 @@ function Compose({ onCancel, onSent }: { onCancel: () => void; onSent: () => voi
       </div>
     </div>
   );
+}
+
+/** Today shows a time, this year a date, older a date with the year. */
+function formatWhen(iso: string): string {
+  const when = new Date(iso);
+  const now = new Date();
+  if (when.toDateString() === now.toDateString()) {
+    return when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  return when.getFullYear() === now.getFullYear()
+    ? when.toLocaleDateString([], { day: 'numeric', month: 'short' })
+    : when.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
 }
