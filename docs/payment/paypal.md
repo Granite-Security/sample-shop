@@ -71,6 +71,46 @@ next provider lands, because none of it was PayPal-specific:
 `kubectl -n granite rollout restart deploy/payment deploy/gateway`. A ConfigMap
 change alone does not restart pods.
 
+## Live payments taken (2026-08-05, sandbox)
+
+Three real PayPal payments through the deployed SPA, all reaching `PAID`:
+
+| Order | Amount | PayPal order | Captured by |
+|---|---|---|---|
+| 36 | 13.50 CHF | `5YY241025B4230640` | return endpoint |
+| 37 | 6.99 CHF | `73J38526UF127510D` | return endpoint |
+| 38 | 24.99 CHF | `9NJ72044EL7329617` | return endpoint, webhook arrived after |
+
+Order 36 confirmed against PayPal's API: order and capture both `COMPLETED`,
+capture `41G22029MK6672043`, `custom_id` `36`, 13.50 gross / 1.16 fee / 12.34
+net.
+
+**The return-vs-webhook race is proven against real events.** On order 38 the
+return endpoint captured at 14:07:11; `CHECKOUT.ORDER.APPROVED` arrived at
+14:07:14, entered `finalizeRedirectPayment`, and logged *"Order 38 already
+succeeded, nothing to finalize"* — no double capture, no error. That race runs
+on every successful PayPal payment, so it mattered more than the tab-closing
+case it was designed for.
+
+**Webhook transport verified**, signatures included: three real deliveries
+recorded in `provider_event` (`CHECKOUT.ORDER.APPROVED`, two
+`PAYMENT.CAPTURE.COMPLETED`), plus one via PayPal's simulator whose UUID
+`custom_id` was correctly warned about and skipped rather than acted on.
+
+**Still untested: capture driven solely by the webhook.** Nobody managed to
+close the tab before PayPal's redirect fired, so the `POST /capture` inside the
+webhook path has never run — everything up to it has. To force it, kill the
+network on PayPal's approval page before clicking Approve: the browser cannot
+reach the return URL, but PayPal still fires the webhook server-side.
+
+**Credentials were rotated mid-testing.** The app is now
+`APP-4KK1995734818154B`; the earlier `APP-7KH69090M92718109` pair is dead. The
+webhook subscription belongs to the app whose credentials are in use — that is
+worth checking first if deliveries ever stop, since a stale pair produces
+`{"webhooks":[]}` and a 404 on the webhook id while payments still work fine
+through the return endpoint. The subscription is registered for `*`, so events
+we do not act on land in `provider_event` as `skipped`.
+
 ## Verified against the live sandbox (2026-08-04)
 
 Four assumptions in this plan were checked against `api-m.sandbox.paypal.com`
