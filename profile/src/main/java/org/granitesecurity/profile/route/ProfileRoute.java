@@ -3,6 +3,7 @@ package org.granitesecurity.profile.route;
 import org.granitesecurity.profile.handler.AddressHandler;
 import org.granitesecurity.profile.handler.AdminUserHandler;
 import org.granitesecurity.profile.handler.AvatarHandler;
+import org.granitesecurity.profile.handler.MessageHandler;
 import org.granitesecurity.profile.handler.ProfileHandler;
 import org.granitesecurity.profile.handler.UserFileHandler;
 import org.springframework.context.annotation.Bean;
@@ -20,7 +21,8 @@ public class ProfileRoute {
             AddressHandler addressHandler,
             UserFileHandler userFileHandler,
             AvatarHandler avatarHandler,
-            AdminUserHandler adminUserHandler) {
+            AdminUserHandler adminUserHandler,
+            MessageHandler messageHandler) {
         return RouterFunctions.route()
                 .GET("/api/profiles/me", profileHandler::getMe)
                 .PUT("/api/profiles/me", profileHandler::updateMe)
@@ -35,6 +37,17 @@ public class ProfileRoute {
                 .GET("/api/profiles/me/files/duplicate", userFileHandler::checkDuplicate)
                 .POST("/api/profiles/me/files", userFileHandler::register)
                 .DELETE("/api/profiles/me/files/{id}", userFileHandler::delete)
+                // Messaging (docs/users/messaging.md). "recipients" and "unread-count"
+                // are registered before the {id} routes — otherwise they parse as a
+                // message id and fail on Long.valueOf, the same shadowing trap the
+                // admin routes below document.
+                .GET("/api/profiles/me/messages/recipients", messageHandler::searchRecipients)
+                .GET("/api/profiles/me/messages/unread-count", messageHandler::unreadCount)
+                .GET("/api/profiles/me/messages", messageHandler::list)
+                .POST("/api/profiles/me/messages", messageHandler::send)
+                .GET("/api/profiles/me/messages/{id}", messageHandler::get)
+                .POST("/api/profiles/me/messages/{id}/read", messageHandler::markRead)
+                .DELETE("/api/profiles/me/messages/{id}", messageHandler::delete)
                 .GET("/api/profiles/internal/{username}/addresses/{id}", addressHandler::getAddressById)
                 // User administration — before the {username} routes below, since
                 // "admin" would otherwise be read as a username.
