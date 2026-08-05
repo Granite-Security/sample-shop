@@ -144,9 +144,19 @@ function CheckoutInner() {
       .catch(() => {});
   }, [isAuthenticated]);
 
+  // With one provider the hook pre-selects it and the selector stays hidden, so this
+  // is never unsatisfied. With several, the shopper has to say who takes their money —
+  // shop rejects an order that names no provider, and a raw 400 is a poor way to
+  // discover that a radio button was missed.
+  const needsProviderChoice = providers.length > 1 && !selectedProvider;
+
   const handlePlaceOrder = async () => {
     if (!selectedAddress) {
       setError('Please select a delivery address');
+      return;
+    }
+    if (needsProviderChoice) {
+      setError('Please choose a payment method');
       return;
     }
     setStep('placing');
@@ -354,7 +364,7 @@ function CheckoutInner() {
               {error && <p className="error">{error}</p>}
               <button
                 className="btn btn-primary"
-                disabled={step === 'placing' || !selectedAddress}
+                disabled={step === 'placing' || !selectedAddress || needsProviderChoice}
                 onClick={handlePlaceOrder}
               >
                 {step === 'placing' ? 'Placing Order...' : 'Place Order'}

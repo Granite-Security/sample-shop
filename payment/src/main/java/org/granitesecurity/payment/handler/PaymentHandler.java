@@ -42,6 +42,45 @@ public class PaymentHandler {
         return ServerResponse.ok().bodyValue(body);
     }
 
+    /**
+     * Where a redirect provider sends the shopper back to. Captures the payment, then
+     * bounces the browser to the order page.
+     *
+     * <p><b>303, not 302.</b> The shopper arrives here by GET and must continue by GET;
+     * the same reasoning as auth-server's post-login redirect.
+     *
+     * <p>Everything on the query string is attacker-controllable — this URL is handed to
+     * a third party and the shopper's browser follows it. Only {@code orderId} is read,
+     * and it is used solely to look up a row whose provider is then checked against the
+     * path. The capture call is what decides whether money moved; nothing the caller
+     * sends can assert a payment succeeded.
+     *
+     * <p>Always redirects, even on failure. A shopper who sees a stack trace instead of
+     * their order has lost the thread entirely — the order page shows the payment as
+     * unpaid and offers a retry, which is the honest outcome.
+     */
+    public Mono<ServerResponse> handleReturn(ServerRequest request) {
+        String provider = request.pathVariable("provider");
+        Long orderId;
+        try {
+            orderId = Long.parseLong(request.queryParam("orderId").orElseThrow());
+        } catch (RuntimeException e) {
+            log.warn("Return from '{}' with no usable orderId", provider);
+            return redirectTo(paymentService.ordersPageUrl());
+        }
+
+        return paymentService.finalizeRedirectPayment(provider, orderId)
+                .then(redirectTo(paymentService.orderPageUrl(orderId)))
+                .onErrorResume(e -> {
+                    log.error("Return from '{}' for order {} failed: {}", provider, orderId, e.getMessage(), e);
+                    return redirectTo(paymentService.orderPageUrl(orderId));
+                });
+    }
+
+    private Mono<ServerResponse> redirectTo(String url) {
+        return ServerResponse.status(303).location(java.net.URI.create(url)).build();
+    }
+
     public Mono<ServerResponse> createPaymentIntent(ServerRequest request) {
         return request.bodyToMono(CreatePaymentIntentRequest.class)
                 .flatMap(req -> paymentService.createPaymentIntent(

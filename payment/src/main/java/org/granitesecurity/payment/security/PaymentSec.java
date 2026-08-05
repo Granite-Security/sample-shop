@@ -62,6 +62,12 @@ public class PaymentSec {
                         // exact matcher would 401 every delivery before the adapter
                         // that verifies its signature is ever reached.
                         .pathMatchers("/api/payments/webhook/**").permitAll()
+                        // The shopper comes back from the provider with no Authorization
+                        // header — the browser is following a third-party redirect. /** for
+                        // the same reason as the webhook matcher: the route is
+                        // /return/{provider}. The handler treats every parameter as
+                        // untrusted and re-derives payment state from the provider.
+                        .pathMatchers("/api/payments/return/**").permitAll()
                         .pathMatchers("/api/payments/providers").permitAll()
                         .pathMatchers("/api/payments/intent/**").permitAll()
                         .pathMatchers("/actuator/health", "/actuator/health/**").permitAll()

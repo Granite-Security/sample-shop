@@ -27,6 +27,9 @@ public class PaymentRoute {
                 .POST("/api/payments/internal/statuses", paymentHandler::getStatusesByOrderIds)
                 .GET("/api/payments/internal/order-ids", paymentHandler::getOrderIds)
                 .GET("/api/payments/providers", paymentHandler::listProviders)
+                // GET, because the shopper's browser arrives here by redirect from the
+                // provider — not a call anything makes on their behalf.
+                .GET("/api/payments/return/{provider}", paymentHandler::handleReturn)
                 .POST("/api/payments/webhook/{provider}", webhookHandler::handleWebhook)
                 .build();
     }

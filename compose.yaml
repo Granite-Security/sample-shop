@@ -273,6 +273,21 @@ services:
       # Set to true only with `stripe listen --forward-to .../api/payments/webhook/stripe`
       # running; otherwise /sync confirms payments and the endpoint answers 503.
       - PAYMENT_PROVIDER_STRIPE_WEBHOOK_ENABLED=${PAYMENT_PROVIDER_STRIPE_WEBHOOK_ENABLED:-false}
+      - PAYPAL_CLIENT_ID=${PAYPAL_CLIENT_ID:-}
+      - PAYPAL_CLIENT_SECRET=${PAYPAL_CLIENT_SECRET:-}
+      - PAYPAL_WEBHOOK_ID=${PAYPAL_WEBHOOK_ID:-}
+      - PAYPAL_ENV=${PAYPAL_ENV:-sandbox}
+      # Off by default: enabling PayPal makes the shop multi-provider, and that turns
+      # POST /api/shop/orders into requiring an explicit provider (400 without one).
+      - PAYMENT_PROVIDER_PAYPAL_ENABLED=${PAYMENT_PROVIDER_PAYPAL_ENABLED:-false}
+      # PayPal cannot reach a laptop, so this stays false locally unless you tunnel
+      # (ngrok/cloudflared) and register that URL in the PayPal dashboard. Without it,
+      # a shopper who closes the tab after approving is only recovered by /sync.
+      - PAYMENT_PROVIDER_PAYPAL_WEBHOOK_ENABLED=${PAYMENT_PROVIDER_PAYPAL_WEBHOOK_ENABLED:-false}
+      # Where PayPal sends the shopper back to — must reach payment through the gateway.
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:8080}
+      # Where they land afterwards: the SPA, which is a different port in local dev.
+      - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-http://localhost:5173}
     depends_on:
       gateway:
         condition: service_started

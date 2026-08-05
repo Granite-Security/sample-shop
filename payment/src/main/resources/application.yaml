@@ -39,10 +39,23 @@ stripe:
   webhook-secret: ${STRIPE_WEBHOOK_SECRET:whsec_321e0f4f965220007dec238f31d6ec4706ebdb81e0062631a2fedde90e1c2d70}
   currency: ${STRIPE_CURRENCY:chf}
 
+paypal:
+  client-id: ${PAYPAL_CLIENT_ID:}
+  client-secret: ${PAYPAL_CLIENT_SECRET:}
+  # Not a secret in the whsec_ sense — an identifier for the webhook subscription,
+  # required to verify a delivery. Blank means verification cannot succeed, which
+  # is why the webhook switch below stays off until it is set.
+  webhook-id: ${PAYPAL_WEBHOOK_ID:}
+  # sandbox | live. Decides the API base URL. Never inferred from the credentials:
+  # PayPal keys carry no test/live prefix the way Stripe's sk_test_ does, so an
+  # inferred mode would silently take real money.
+  env: ${PAYPAL_ENV:sandbox}
+
 payment:
   # The one currency the shop prices in. Validated at startup against the closed
-  # set (USD, EUR, RON, CHF) and against every enabled provider's supported set,
-  # so a provider that cannot charge it fails the boot rather than the first order.
+  # set (USD, EUR, CHF) and against every enabled provider's supported set, so a
+  # provider that cannot charge it fails the boot rather than the first order.
+  # RON was dropped when PayPal landed — PayPal does not settle it.
   shop-currency: ${PAYMENT_SHOP_CURRENCY:${STRIPE_CURRENCY:chf}}
   providers:
     stripe:
@@ -53,7 +66,28 @@ payment:
         # Stripe dashboard; until then payment refuses deliveries rather than
         # verifying them against an unset secret.
         enabled: ${PAYMENT_PROVIDER_STRIPE_WEBHOOK_ENABLED:false}
+    paypal:
+      # Off by default, deliberately. Enabling it is what makes the shop
+      # multi-provider, and that flips POST /api/shop/orders into *requiring* an
+      # explicit provider — a 400 for any caller that omits it. That should be a
+      # decision, not a side effect of picking up new config.
+      enabled: ${PAYMENT_PROVIDER_PAYPAL_ENABLED:false}
+      webhook:
+        # Unlike Stripe, where the webhook is belt-and-braces over /sync, PayPal
+        # needs it: a shopper who approves and then closes the tab never hits the
+        # return endpoint, and CHECKOUT.ORDER.APPROVED is what captures the money
+        # in that case. See docs/payment/paypal.md §3.4.
+        enabled: ${PAYMENT_PROVIDER_PAYPAL_WEBHOOK_ENABLED:false}
 
 app:
   outbox:
     poll-interval: 5000
+  # Where PayPal sends the shopper back to — must reach *this service* through the
+  # gateway, so it is the API origin, not the SPA's. Built here rather than from a
+  # request header because payments are opened by a Kafka consumer with no HTTP
+  # request in flight.
+  public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}
+  # Where the shopper finally lands after capture. The SPA's origin, which differs
+  # from the API's in local dev (5173 vs 8080) and is identical to it in k8s.
+  # Reuses the variable notification already builds password-reset links from.
+  frontend-origin: ${FRONTEND_ORIGIN:http://localhost:5173}

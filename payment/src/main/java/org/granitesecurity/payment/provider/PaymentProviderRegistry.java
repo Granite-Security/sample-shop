@@ -24,8 +24,12 @@ public class PaymentProviderRegistry {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentProviderRegistry.class);
 
-    /** The currencies the shop is allowed to price in — all two-decimal (see MinorUnits). */
-    private static final Set<String> SUPPORTED_SHOP_CURRENCIES = Set.of("USD", "EUR", "RON", "CHF");
+    /**
+     * The currencies the shop is allowed to price in — all two-decimal (see MinorUnits).
+     * RON was removed when PayPal landed: PayPal does not settle it, so with PayPal
+     * enabled a RON cutover could only ever fail {@link #validate()} anyway.
+     */
+    private static final Set<String> SUPPORTED_SHOP_CURRENCIES = Set.of("USD", "EUR", "CHF");
 
     private final Map<String, PaymentProvider> providers = new LinkedHashMap<>();
     private final String shopCurrency;
