@@ -3,7 +3,8 @@ import { Link, useLocation } from 'react-router';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { useShop } from '../store';
-import { AccountIcon, BagIcon, CloseIcon, HeartIcon, MenuIcon, SearchIcon } from './icons';
+import { useMessages } from '../messages';
+import { AccountIcon, BagIcon, BellIcon, CloseIcon, HeartIcon, MenuIcon, SearchIcon } from './icons';
 import { Avatar } from './Avatar';
 
 const NAV = [
@@ -19,6 +20,7 @@ const linkStyle =
 export function Header() {
   const { cartCount, wishlist, setCartOpen } = useShop();
   const { user, isAuthenticated, isAdmin, login, logout } = useAuth();
+  const { unreadCount } = useMessages();
   const { pathname } = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -120,6 +122,18 @@ export function Header() {
                   >
                     My Profile
                   </Link>
+                  <Link
+                    to="/profile/messages"
+                    onClick={() => setAccountOpen(false)}
+                    className="flex w-full items-center justify-between gap-2 px-4 py-1.5 text-left text-xs uppercase tracking-[0.14em] transition-colors hover:text-terracotta"
+                  >
+                    Messages
+                    {unreadCount > 0 && (
+                      <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-terracotta px-1 text-[10px] font-medium text-ivory">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
+                  </Link>
                   {isAdmin && (
                     <Link
                       to="/admin"
@@ -155,6 +169,22 @@ export function Header() {
                 <span className="hidden sm:inline text-xs tracking-[0.14em] uppercase">Sign in</span>
               </button>
             </>
+          )}
+          {isAuthenticated && (
+            <Link
+              to="/profile/messages"
+              className="relative p-2 transition-colors hover:text-gold"
+              aria-label={unreadCount > 0 ? `Messages, ${unreadCount} unread` : 'Messages'}
+            >
+              <BellIcon />
+              {/* Capped: the badge is a 16px disc, and "you have a lot" is the
+                  only thing a precise 3-digit count would add. */}
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-terracotta px-1 text-[10px] font-medium">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </Link>
           )}
           <button className="relative p-2 transition-colors hover:text-gold" aria-label="Wishlist">
             <HeartIcon />

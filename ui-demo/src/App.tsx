@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { BrowserRouter, Outlet, Route, Routes, useLocation } from 'react-router';
 import { ShopProvider } from './store';
 import { AuthProvider } from './auth';
+import { MessagesProvider } from './messages';
 import { Callback } from './components/Callback';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
@@ -22,6 +23,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { PasswordPage } from './pages/PasswordPage';
 import { FilesPage } from './pages/FilesPage';
 import { AddressesPage } from './pages/AddressesPage';
+import { MessagesPage } from './pages/MessagesPage';
 import { OrdersPage } from './pages/OrdersPage';
 import { OrderDetailPage } from './pages/OrderDetailPage';
 import { Register } from './pages/Register';
@@ -54,7 +56,9 @@ function Layout() {
 export default function App() {
   return (
     <AuthProvider>
-      <ShopProvider>
+      {/* Inside AuthProvider: the unread poll is gated on being signed in. */}
+      <MessagesProvider>
+        <ShopProvider>
         <BrowserRouter>
           <Routes>
             <Route path="/callback" element={<Callback />} />
@@ -75,6 +79,7 @@ export default function App() {
                   <Route path="profile/password" element={<PasswordPage />} />
                   <Route path="profile/files" element={<FilesPage />} />
                   <Route path="profile/addresses" element={<AddressesPage />} />
+                  <Route path="profile/messages" element={<MessagesPage />} />
                   <Route path="profile/orders" element={<OrdersPage />} />
                   <Route path="profile/orders/:id" element={<OrderDetailPage />} />
                 </Route>
@@ -84,8 +89,9 @@ export default function App() {
               <Route path="reset-password/confirm" element={<ResetPasswordConfirm />} />
             </Route>
           </Routes>
-        </BrowserRouter>
-      </ShopProvider>
+          </BrowserRouter>
+        </ShopProvider>
+      </MessagesProvider>
     </AuthProvider>
   );
 }

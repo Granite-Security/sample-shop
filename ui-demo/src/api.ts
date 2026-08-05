@@ -21,6 +21,9 @@ import type {
   AdminUserProfile,
   DeleteUserResult,
   AvatarSource,
+  MessageResponse,
+  RecipientResponse,
+  SendMessageRequest,
 } from './types';
 import { downscaleToSquare } from './utils/avatar';
 
@@ -304,6 +307,30 @@ export const api = {
   },
 
   deleteFile: (id: number) => request<void>(`/api/profiles/me/files/${id}`, { method: 'DELETE' }),
+
+  // User-to-user messaging — mirrors ui-shop/src/api/messages.ts. Served by
+  // profile under /api/profiles/me/messages, so these are authenticated by the
+  // same rule as every other account call above (docs/users/messaging.md).
+  getMessages: (box: 'inbox' | 'sent' = 'inbox') =>
+    request<MessageResponse[]>(`/api/profiles/me/messages?box=${box}`),
+
+  getMessage: (id: number) => request<MessageResponse>(`/api/profiles/me/messages/${id}`),
+
+  getUnreadMessageCount: () => request<{ count: number }>('/api/profiles/me/messages/unread-count'),
+
+  sendMessage: (body: SendMessageRequest) =>
+    request<MessageResponse>('/api/profiles/me/messages', { method: 'POST', body: JSON.stringify(body) }),
+
+  markMessageRead: (id: number) =>
+    request<void>(`/api/profiles/me/messages/${id}/read`, { method: 'POST' }),
+
+  deleteMessage: (id: number) =>
+    request<void>(`/api/profiles/me/messages/${id}`, { method: 'DELETE' }),
+
+  // Returns nothing for queries under 2 characters — enforced server-side, so a
+  // stray single keystroke cannot enumerate the user table.
+  searchRecipients: (q: string) =>
+    request<RecipientResponse[]>(`/api/profiles/me/messages/recipients?q=${encodeURIComponent(q)}`),
 };
 
 // Editorial fallback catalog — shown when the shop backend isn't reachable
