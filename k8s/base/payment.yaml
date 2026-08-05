@@ -56,6 +56,26 @@ spec:
                 configMapKeyRef:
                   name: granite-config
                   key: PAYMENT_PORT
+            # BalanceProvider reaches balance over the internal scope, so payment
+            # needs client credentials and a token endpoint. Both are no-ops while
+            # PAYMENT_PROVIDER_BALANCE_ENABLED is false.
+            - name: INTERNAL_CLIENT_ID
+              value: "internal-service"
+            - name: AUTH_SERVER_TOKEN_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: AUTH_SERVER_TOKEN_URI
+            - name: MICROSERVICES_BALANCE_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: MICROSERVICES_BALANCE_URI
+            - name: PAYMENT_PROVIDER_BALANCE_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: PAYMENT_PROVIDER_BALANCE_ENABLED
             - name: TRUSTED_JWT_ISSUERS
               valueFrom:
                 configMapKeyRef:

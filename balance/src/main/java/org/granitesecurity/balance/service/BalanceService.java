@@ -100,8 +100,18 @@ public class BalanceService {
                 .flatMap(pair -> {
                     Account from = pair.getT1();
                     Account to = pair.getT2();
-                    return debit(from, amountMinor)
-                            .then(accountRepository.credit(to.getId(), amountMinor))
+
+                    // Touch the two rows in ascending id order, always. Two users
+                    // paying each other at the same moment would otherwise each hold
+                    // the row the other wants, and Postgres would kill one of them
+                    // as a deadlock. Ordering makes that impossible rather than rare.
+                    Mono<Void> debit = debit(from, amountMinor);
+                    Mono<Void> credit = accountRepository.credit(to.getId(), amountMinor).then();
+                    Mono<Void> updates = from.getId() < to.getId()
+                            ? debit.then(credit)
+                            : credit.then(debit);
+
+                    return updates
                             .then(writeEntry(transferId, from.getId(), -amountMinor, kind, reference, memo))
                             .then(writeEntry(transferId, to.getId(), amountMinor, kind, reference, memo))
                             .doOnSuccess(v -> log.info("{} {} rappen: {} -> {} ({})",

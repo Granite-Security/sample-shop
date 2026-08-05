@@ -3,7 +3,9 @@ package org.granitesecurity.balance.handler;
 import org.granitesecurity.balance.domain.Account;
 import org.granitesecurity.balance.domain.LedgerEntry;
 import org.granitesecurity.balance.dto.GiftRequest;
+import org.granitesecurity.balance.dto.GiftResponse;
 import org.granitesecurity.balance.service.BalanceService;
+import org.granitesecurity.balance.service.IdempotencyService;
 import org.granitesecurity.balance.service.Money;
 import org.granitesecurity.balance.service.ReconcileService;
 import org.slf4j.Logger;
@@ -31,10 +33,14 @@ public class AdminBalanceHandler {
 
     private final BalanceService balanceService;
     private final ReconcileService reconcileService;
+    private final IdempotencyService idempotencyService;
 
-    public AdminBalanceHandler(BalanceService balanceService, ReconcileService reconcileService) {
+    public AdminBalanceHandler(BalanceService balanceService,
+                               ReconcileService reconcileService,
+                               IdempotencyService idempotencyService) {
         this.balanceService = balanceService;
         this.reconcileService = reconcileService;
+        this.idempotencyService = idempotencyService;
     }
 
     public Mono<ServerResponse> gift(ServerRequest request) {
@@ -47,23 +53,25 @@ public class AdminBalanceHandler {
                                 HttpStatus.BAD_REQUEST, "A recipient username is required"));
                     }
                     long amountMinor = Money.toRappen(gift.amountChf());
+                    String recipient = gift.username().trim();
+
                     // Unbacked issuance: house:gift goes further negative, and that
                     // number is the platform's total conjured credit (§2).
-                    return balanceService.move(
+                    Mono<GiftResponse> issue = balanceService.move(
                                     Account.HOUSE_GIFT,
-                                    gift.username().trim(),
+                                    recipient,
                                     amountMinor,
                                     LedgerEntry.KIND_GIFT,
                                     admin,
                                     gift.reason())
                             .doOnSuccess(id -> log.info(
                                     "Admin {} gifted {} rappen to {} ({})",
-                                    admin, amountMinor, gift.username(), id))
-                            .flatMap(id -> ServerResponse.status(HttpStatus.CREATED)
-                                    .bodyValue(Map.of(
-                                            "transferId", id.toString(),
-                                            "username", gift.username().trim(),
-                                            "amountMinor", amountMinor)));
+                                    admin, amountMinor, recipient, id))
+                            .map(id -> new GiftResponse(id.toString(), recipient, amountMinor,
+                                    Money.toChf(amountMinor), admin));
+
+                    return idempotencyService.once(gift.idempotencyKey(), GiftResponse.class, issue)
+                            .flatMap(body -> ServerResponse.status(HttpStatus.CREATED).bodyValue(body));
                 }))
                 // Money.toRappen rejects zero, negative and sub-rappen amounts; those
                 // are bad requests, not server errors.
