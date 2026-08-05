@@ -54,16 +54,18 @@ data:
   # sandbox | live. Never inferred from the credentials — PayPal client ids carry
   # no test/live marker, and guessing wrong means taking real money.
   PAYPAL_ENV: "sandbox"
-  # Held at false until the image carrying the PayPalConfig WebClient fix is
-  # deployed. Enabling it against an older image crash-loops payment and takes
-  # Stripe down with it — that already happened once on 2026-08-05.
-  PAYMENT_PROVIDER_PAYPAL_ENABLED: "false"
+  # Enabled 2026-08-05 on image 81f68939 (the first that boots with PayPal on —
+  # see PayPalConfigTest). The shop is multi-provider from here: the checkout
+  # renders a selector, and POST /api/shop/orders rejects an order naming no
+  # provider. A ConfigMap change alone does not restart pods — after flipping
+  # this, `kubectl -n granite rollout restart deploy/payment deploy/gateway`.
+  PAYMENT_PROVIDER_PAYPAL_ENABLED: "true"
   # Webhook subscription registered in the PayPal dashboard 2026-08-05 at
   # https://granite-security.org/api/payments/webhook/paypal; its id lives in
   # granite-secrets as paypal-webhook-id. Unlike Stripe this is not merely
   # belt-and-braces: it is what captures for a shopper who approves and then
   # closes the tab without returning.
-  PAYMENT_PROVIDER_PAYPAL_WEBHOOK_ENABLED: "false"
+  PAYMENT_PROVIDER_PAYPAL_WEBHOOK_ENABLED: "true"
   # API origin — where PayPal returns the shopper into the gateway. Same value as
   # FRONTEND_ORIGIN below, because one domain serves both the SPA and the API here.
   PUBLIC_BASE_URL: "https://granite-security.org"
