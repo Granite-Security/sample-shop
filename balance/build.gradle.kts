@@ -28,6 +28,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     // Liquibase runs over JDBC; everything else in this service is R2DBC.
     implementation("org.springframework:spring-jdbc")
+    // Swagger UI. Functional routes are invisible to springdoc unless annotated
+    // with @RouterOperation — see BalanceRoute.
+    implementation("org.springdoc:springdoc-openapi-starter-webflux-ui:3.0.1")
     compileOnly("org.projectlombok:lombok")
 //    developmentOnly("org.springframework.boot:spring-boot-docker-compose")
     runtimeOnly("org.postgresql:postgresql")
