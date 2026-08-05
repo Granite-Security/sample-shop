@@ -15,6 +15,7 @@ import org.granitesecurity.payment.provider.PaymentProvider;
 import org.granitesecurity.payment.provider.PaymentProviderException;
 import org.granitesecurity.payment.provider.PaymentProviderRegistry;
 import org.granitesecurity.payment.provider.ProviderIntent;
+import org.granitesecurity.payment.provider.RedirectPaymentProvider;
 import org.granitesecurity.payment.repository.OutboxRepository;
 import org.granitesecurity.payment.repository.PaymentAttemptRepository;
 import org.granitesecurity.payment.repository.PaymentRepository;
@@ -47,6 +48,14 @@ public class PaymentService {
 
     @Value("${payment.shop-currency:${stripe.currency:chf}}")
     private String currency;
+
+    /** API origin — where a REDIRECT provider sends the shopper back into this service. */
+    @Value("${app.public-base-url:http://localhost:8080}")
+    private String publicBaseUrl;
+
+    /** SPA origin — where the shopper ends up once the payment is finalized. */
+    @Value("${app.frontend-origin:http://localhost:5173}")
+    private String frontendOrigin;
 
     public PaymentService(PaymentRepository paymentRepository,
                           OutboxRepository outboxRepository,
@@ -196,13 +205,62 @@ public class PaymentService {
         }
     }
 
-    /** Serializes a provider's payload map for storage. Null when there is nothing to keep. */
-    private static String toProviderPayload(ProviderIntent intent) {
-        if (intent.payload() == null || intent.payload().isEmpty()) {
+    /**
+     * Builds the request for a provider, with the redirect URLs a REDIRECT provider
+     * needs. Both are always populated: a CLIENT_SDK adapter ignores them (Stripe does),
+     * and computing them here rather than per-adapter keeps the one piece of knowledge
+     * that is genuinely ours — our own public URLs — out of the adapters.
+     *
+     * <p>They are built from config, not from a request, because the main creation path
+     * is {@code OrderPlacedConsumer} — a Kafka consumer with no HTTP request in flight.
+     */
+    private CreateIntentRequest intentRequest(PaymentProvider provider, Long orderId, Money amount,
+                                              String username, String idempotencyKey) {
+        return new CreateIntentRequest(
+                orderId,
+                amount,
+                username,
+                idempotencyKey,
+                trimSlash(publicBaseUrl) + "/api/payments/return/" + provider.name() + "?orderId=" + orderId,
+                trimSlash(frontendOrigin) + "/orders/" + orderId + "?payment=cancelled");
+    }
+
+    /** Where the shopper is sent once a redirect payment is finalized, success or not. */
+    public String orderPageUrl(Long orderId) {
+        return trimSlash(frontendOrigin) + "/orders/" + orderId;
+    }
+
+    /** Fallback landing page when a return carries no usable order id. */
+    public String ordersPageUrl() {
+        return trimSlash(frontendOrigin) + "/orders";
+    }
+
+    private static String trimSlash(String url) {
+        if (url == null || url.isBlank()) {
+            return "";
+        }
+        String trimmed = url.trim();
+        return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+    }
+
+    /**
+     * Serializes a provider's payload map for storage. Null when there is nothing to keep.
+     *
+     * <p>{@code redirectUrl} is merged into the map rather than kept as the separate
+     * record field it arrives in. The frontend reads {@code providerPayload.redirectUrl}
+     * (see {@code RedirectPaymentWidget}), and the column is the only thing that reaches
+     * it — a value left in the record field alone would be silently dropped on save.
+     */
+    static String toProviderPayload(ProviderIntent intent) {
+        Map<String, Object> payload = new LinkedHashMap<>(intent.payload());
+        if (intent.redirectUrl() != null && !intent.redirectUrl().isBlank()) {
+            payload.put("redirectUrl", intent.redirectUrl());
+        }
+        if (payload.isEmpty()) {
             return null;
         }
         try {
-            return MAPPER.writeValueAsString(intent.payload());
+            return MAPPER.writeValueAsString(payload);
         } catch (Exception e) {
             log.error("Failed to serialize provider payload for {}", intent.providerPaymentId(), e);
             return null;
@@ -363,7 +421,8 @@ public class PaymentService {
                     PaymentProvider provider = providerFor(existing);
                     // Username is deliberately null here: retry never sent it before the
                     // seam, and the adapter omits the metadata key when it is null.
-                    var request = CreateIntentRequest.of(
+                    var request = intentRequest(
+                            provider,
                             orderId,
                             new Money(existing.getAmount(), existing.getCurrency()),
                             null,
@@ -390,6 +449,61 @@ public class PaymentService {
                                 log.error("{} API error retrying payment for order {}: {}",
                                         provider.name(), orderId, e.getMessage(), e);
                                 return Mono.error(e);
+                            });
+                });
+    }
+
+    /**
+     * Takes the money for a payment the shopper has just approved at a redirect
+     * provider, and applies whatever status comes back.
+     *
+     * <p>Called from two places that race by design: the shopper's return to
+     * {@code /api/payments/return/{provider}}, and the provider's own webhook. Both
+     * paths are needed — a shopper who approves and then closes the tab never returns,
+     * and a webhook that is disabled or delayed leaves the shopper staring at a pending
+     * order. {@link RedirectPaymentProvider#finalizePayment} is required to be
+     * idempotent precisely so this can be entered twice.
+     *
+     * <p>The {@code provider} argument is checked against the stored row rather than
+     * trusted: it arrives from a URL the shopper's browser was redirected to, so it is
+     * attacker-controllable. Nothing here reads the provider's other query parameters
+     * for the same reason — the capture call is the only authority on whether money
+     * moved.
+     */
+    public Mono<Payment> finalizeRedirectPayment(String providerName, Long orderId) {
+        return paymentRepository.findByOrderId(orderId)
+                .switchIfEmpty(Mono.error(new RuntimeException("Payment not found for order " + orderId)))
+                .flatMap(payment -> {
+                    PaymentProvider provider = providerFor(payment);
+                    if (!provider.name().equalsIgnoreCase(providerName)) {
+                        // Someone hit paypal's return URL for a Stripe order, or the
+                        // shopper retried with a different provider between approve and
+                        // return. Either way this row is not ours to finalize.
+                        log.warn("Return for '{}' on order {} but the payment is held by '{}' — ignoring",
+                                providerName, orderId, provider.name());
+                        return Mono.just(payment);
+                    }
+                    if (!(provider instanceof RedirectPaymentProvider redirect)) {
+                        log.warn("Return for order {} but provider '{}' is not redirect-shaped — ignoring",
+                                orderId, provider.name());
+                        return Mono.just(payment);
+                    }
+                    if (payment.getProviderPaymentId() == null) {
+                        return Mono.error(new RuntimeException("No provider payment for order " + orderId));
+                    }
+                    if (PaymentStatus.SUCCEEDED.name().equals(payment.getStatus())) {
+                        log.info("Order {} already succeeded, nothing to finalize", orderId);
+                        return Mono.just(payment);
+                    }
+                    return redirect.finalizePayment(payment.getProviderPaymentId())
+                            .flatMap(intent -> applyProviderStatus(payment, intent))
+                            // A provider failure must not blank the shopper's page: they
+                            // still get sent to the order, which shows it unpaid and
+                            // offers a retry. /sync and the webhook will reconcile.
+                            .onErrorResume(PaymentProviderException.class, e -> {
+                                log.error("{} failed to finalize order {}: {}",
+                                        provider.name(), orderId, e.getMessage(), e);
+                                return Mono.just(payment);
                             });
                 });
     }
@@ -634,7 +748,8 @@ public class PaymentService {
 
         // Username is passed as "" rather than null when unknown: create always sent the
         // metadata key before the seam, and the adapter omits it only for null.
-        var request = CreateIntentRequest.of(
+        var request = intentRequest(
+                provider,
                 orderId,
                 new Money(total, cur),
                 username != null ? username : "",

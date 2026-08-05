@@ -59,8 +59,14 @@ public interface PaymentProvider {
     /**
      * Verifies and translates an inbound webhook. Only called when {@link #webhookEnabled()}.
      *
-     * @throws WebhookVerificationException if the signature is missing or invalid
+     * <p>Returns a {@code Mono} because verification is I/O for most providers that are
+     * not Stripe: Stripe verifies with local HMAC over the payload, but PayPal's
+     * documented check is a call to its own API. A synchronous signature here would put
+     * that network call on an event loop thread — {@code WebhookHandler} invokes this
+     * inside a {@code flatMap} — so the shape has to admit it.
+     *
+     * <p>Signals {@link WebhookVerificationException} when the signature is missing or
+     * invalid. Adapters must not throw it synchronously.
      */
-    ProviderWebhookEvent parseWebhook(String payload, Map<String, String> headers)
-            throws WebhookVerificationException;
+    Mono<ProviderWebhookEvent> parseWebhook(String payload, Map<String, String> headers);
 }

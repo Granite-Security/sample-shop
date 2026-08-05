@@ -57,8 +57,10 @@ public class StripePaymentProvider implements PaymentProvider {
     /**
      * Two-decimal subset of Stripe's settlement currencies that the shop allows.
      * MDL is deliberately absent — Stripe does not settle it (refactor plan §1).
+     * RON was dropped when PayPal landed: PayPal does not settle it, so it could
+     * never be the shop currency again anyway (docs/payment/paypal.md §6).
      */
-    private static final Set<String> SUPPORTED_CURRENCIES = Set.of("USD", "EUR", "RON", "CHF");
+    private static final Set<String> SUPPORTED_CURRENCIES = Set.of("USD", "EUR", "CHF");
 
     @Value("${stripe.secret-key:}")
     private String secretKey;
@@ -193,8 +195,17 @@ public class StripePaymentProvider implements PaymentProvider {
                 .onErrorMap(StripeException.class, e -> wrap("retrieve refund " + providerRefundId, e));
     }
 
+    /**
+     * Stripe verifies with local HMAC over the payload, so this completes immediately
+     * and needs no scheduler. The {@code Mono} is the port's shape for providers whose
+     * verification is a network call, not a claim that anything here is async.
+     */
     @Override
-    public ProviderWebhookEvent parseWebhook(String payload, Map<String, String> headers)
+    public Mono<ProviderWebhookEvent> parseWebhook(String payload, Map<String, String> headers) {
+        return Mono.fromCallable(() -> verifyAndTranslate(payload, headers));
+    }
+
+    private ProviderWebhookEvent verifyAndTranslate(String payload, Map<String, String> headers)
             throws WebhookVerificationException {
         String sigHeader = header(headers, "Stripe-Signature");
         if (sigHeader == null || sigHeader.isBlank()) {

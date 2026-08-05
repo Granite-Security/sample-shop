@@ -54,7 +54,7 @@ public class NoopPaymentProvider implements PaymentProvider {
 
     @Override
     public Set<String> supportedCurrencies() {
-        return Set.of("USD", "EUR", "RON", "CHF");
+        return Set.of("USD", "EUR", "CHF");
     }
 
     @Override
@@ -90,7 +90,7 @@ public class NoopPaymentProvider implements PaymentProvider {
     }
 
     @Override
-    public ProviderWebhookEvent parseWebhook(String payload, Map<String, String> headers) {
-        return ProviderWebhookEvent.payment("evt_noop", "noop.event", null, null, null);
+    public Mono<ProviderWebhookEvent> parseWebhook(String payload, Map<String, String> headers) {
+        return Mono.just(ProviderWebhookEvent.payment("evt_noop", "noop.event", null, null, null));
     }
 }

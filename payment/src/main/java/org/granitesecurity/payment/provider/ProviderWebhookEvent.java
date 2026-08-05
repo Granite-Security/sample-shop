@@ -19,6 +19,11 @@ import org.granitesecurity.payment.domain.RefundStatus;
  * Refund events are the only signal that arrives <b>after</b> we have stopped
  * looking: a refund is recorded SUCCEEDED when the provider accepts it, and can
  * still fail later at the bank.
+ *
+ * @param requiresFinalization the shopper approved but no money has moved yet, and the
+ *                             provider is waiting for us to take it. Carries no
+ *                             {@code status} — approval is not payment. Only a
+ *                             {@link RedirectPaymentProvider} ever produces this.
  */
 public record ProviderWebhookEvent(
         String eventId,
@@ -27,7 +32,8 @@ public record ProviderWebhookEvent(
         PaymentStatus status,
         String providerPaymentId,
         RefundStatus refundStatus,
-        String providerRefundId) {
+        String providerRefundId,
+        boolean requiresFinalization) {
 
     /** A payment transition we act on. */
     public boolean isPaymentTransition() {
@@ -42,12 +48,24 @@ public record ProviderWebhookEvent(
     /** Convenience for a payment-only event, as produced before refunds were handled. */
     public static ProviderWebhookEvent payment(String eventId, String eventType, Long orderId,
                                                PaymentStatus status, String providerPaymentId) {
-        return new ProviderWebhookEvent(eventId, eventType, orderId, status, providerPaymentId, null, null);
+        return new ProviderWebhookEvent(eventId, eventType, orderId, status, providerPaymentId,
+                null, null, false);
     }
 
     public static ProviderWebhookEvent refund(String eventId, String eventType, RefundStatus refundStatus,
                                               String providerRefundId, String providerPaymentId) {
         return new ProviderWebhookEvent(eventId, eventType, null, null, providerPaymentId,
-                refundStatus, providerRefundId);
+                refundStatus, providerRefundId, false);
+    }
+
+    /**
+     * The shopper approved the payment and the provider is waiting to be told to take
+     * the money. This is the recovery path for a shopper who approves and then closes
+     * the tab without ever hitting the return URL.
+     */
+    public static ProviderWebhookEvent approval(String eventId, String eventType, Long orderId,
+                                                String providerPaymentId) {
+        return new ProviderWebhookEvent(eventId, eventType, orderId, null, providerPaymentId,
+                null, null, true);
     }
 }

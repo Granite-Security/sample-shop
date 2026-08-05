@@ -15,6 +15,7 @@ import org.granitesecurity.payment.repository.OutboxRepository;
 import org.granitesecurity.payment.repository.PaymentRepository;
 import org.granitesecurity.payment.repository.RefundRepository;
 import org.granitesecurity.payment.repository.ProviderEventRepository;
+import org.granitesecurity.payment.service.PaymentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -45,17 +46,20 @@ public class WebhookHandler {
     private final OutboxRepository outboxRepository;
     private final RefundRepository refundRepository;
     private final PaymentProviderRegistry providers;
+    private final PaymentService paymentService;
 
     public WebhookHandler(PaymentRepository paymentRepository,
                           ProviderEventRepository providerEventRepository,
                           OutboxRepository outboxRepository,
                           RefundRepository refundRepository,
-                          PaymentProviderRegistry providers) {
+                          PaymentProviderRegistry providers,
+                          PaymentService paymentService) {
         this.paymentRepository = paymentRepository;
         this.providerEventRepository = providerEventRepository;
         this.outboxRepository = outboxRepository;
         this.refundRepository = refundRepository;
         this.providers = providers;
+        this.paymentService = paymentService;
     }
 
     public Mono<ServerResponse> handleWebhook(ServerRequest request) {
@@ -83,16 +87,17 @@ public class WebhookHandler {
         });
 
         return request.bodyToMono(String.class)
-                .flatMap(payload -> {
-                    ProviderWebhookEvent event;
-                    try {
-                        event = provider.parseWebhook(payload, headers);
-                    } catch (WebhookVerificationException e) {
-                        log.warn("Webhook signature verification failed for {}: {}", providerName, e.getMessage());
-                        return ServerResponse.badRequest().bodyValue(Map.of("error", e.getMessage()));
-                    }
-                    return processEvent(provider, event);
-                });
+                .flatMap(payload -> provider.parseWebhook(payload, headers)
+                        .flatMap(event -> processEvent(provider, event))
+                        // Verification is now a Mono because some providers verify over
+                        // the network, so a failed signature arrives as an error signal
+                        // rather than a thrown exception.
+                        .onErrorResume(WebhookVerificationException.class, e -> {
+                            log.warn("Webhook signature verification failed for {}: {}",
+                                    providerName, e.getMessage());
+                            return ServerResponse.badRequest()
+                                    .bodyValue(Map.of("error", String.valueOf(e.getMessage())));
+                        }));
     }
 
     private Mono<ServerResponse> processEvent(PaymentProvider provider, ProviderWebhookEvent event) {
@@ -107,16 +112,19 @@ public class WebhookHandler {
     private Mono<ServerResponse> recordAndApply(PaymentProvider provider, ProviderWebhookEvent event) {
         log.info("Recording webhook event {} ({}) from {}", event.eventId(), event.eventType(), provider.name());
         return recordEvent(provider, event)
-                .flatMap(se -> apply(event))
+                .flatMap(se -> apply(provider, event))
                 .onErrorResume(e -> {
                     log.error("Webhook processing error for event {}: {}", event.eventId(), e.getMessage());
                     return ServerResponse.status(500).bodyValue(Map.of("error", String.valueOf(e.getMessage())));
                 });
     }
 
-    private Mono<ServerResponse> apply(ProviderWebhookEvent event) {
+    private Mono<ServerResponse> apply(PaymentProvider provider, ProviderWebhookEvent event) {
         if (event.isRefundTransition()) {
             return applyRefund(event);
+        }
+        if (event.requiresFinalization()) {
+            return applyFinalization(provider, event);
         }
         if (event.status() == null) {
             log.info("Ignoring unhandled event type: {} ({})", event.eventType(), event.eventId());
@@ -130,6 +138,27 @@ public class WebhookHandler {
                 .switchIfEmpty(Mono.error(new RuntimeException("Payment not found for order " + event.orderId())))
                 .flatMap(payment -> updatePaymentStatus(payment, event.status()))
                 .flatMap(payment -> publishStatusEvent(payment, event.status()).thenReturn(payment))
+                .flatMap(payment -> ServerResponse.ok().bodyValue(Map.of(
+                        "status", "processed",
+                        "orderId", payment.getOrderId(),
+                        "paymentStatus", payment.getStatus())));
+    }
+
+    /**
+     * The shopper approved but the money is still sitting there. Take it.
+     *
+     * <p>This is the path that saves the shopper who approves and then closes the tab:
+     * they never hit the return URL, so without this the order stays unpaid forever
+     * while PayPal holds an approved order. It races the return endpoint by design —
+     * {@code finalizePayment} is required to be idempotent for exactly this reason.
+     */
+    private Mono<ServerResponse> applyFinalization(PaymentProvider provider, ProviderWebhookEvent event) {
+        if (event.orderId() == null) {
+            return ServerResponse.ok().bodyValue(Map.of("status", "skipped", "reason", "no_order_id"));
+        }
+        log.info("Event {} ({}) reports order {} approved — finalizing",
+                event.eventId(), event.eventType(), event.orderId());
+        return paymentService.finalizeRedirectPayment(provider.name(), event.orderId())
                 .flatMap(payment -> ServerResponse.ok().bodyValue(Map.of(
                         "status", "processed",
                         "orderId", payment.getOrderId(),

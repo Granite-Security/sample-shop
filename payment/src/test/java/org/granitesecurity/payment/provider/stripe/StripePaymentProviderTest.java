@@ -77,7 +77,7 @@ class StripePaymentProviderTest {
     void describesItselfForTheProviderSelector() {
         assertThat(provider.name()).isEqualTo("stripe");
         assertThat(provider.confirmationMode()).isEqualTo(ConfirmationMode.CLIENT_SDK);
-        assertThat(provider.supportedCurrencies()).contains("CHF", "USD", "EUR", "RON");
+        assertThat(provider.supportedCurrencies()).containsExactlyInAnyOrder("CHF", "USD", "EUR");
         // MDL is out of scope — Stripe does not settle it.
         assertThat(provider.supportedCurrencies()).doesNotContain("MDL");
     }

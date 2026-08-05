@@ -151,9 +151,19 @@ export function CheckoutPage() {
     [stopPolling],
   );
 
+  // With one provider the hook pre-selects it and the selector stays hidden, so this is
+  // never unsatisfied. With several, the shopper has to say who takes their money —
+  // shop rejects an order that names no provider, and a raw 400 is a poor way to
+  // discover that a radio button was missed.
+  const needsProviderChoice = providers.length > 1 && !selectedProvider;
+
   const placeOrder = async () => {
     if (!address.recipientName || !address.addressLine1 || !address.city || !address.zipCode || !address.country) {
       setError('Please complete the delivery address.');
+      return;
+    }
+    if (needsProviderChoice) {
+      setError('Please choose a payment method.');
       return;
     }
     setStep('placing');
@@ -450,7 +460,7 @@ export function CheckoutPage() {
             )}
 
             <button
-              disabled={step === 'placing' || liveItems.length === 0}
+              disabled={step === 'placing' || liveItems.length === 0 || needsProviderChoice}
               onClick={placeOrder}
               className="w-full bg-cocoa py-4 text-xs uppercase tracking-[0.2em] text-ivory transition-colors duration-300 hover:bg-espresso disabled:cursor-not-allowed disabled:opacity-40"
             >

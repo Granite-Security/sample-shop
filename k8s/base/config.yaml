@@ -50,6 +50,23 @@ data:
   # belt to this braces — both write the same transition, either order is safe.
   PAYMENT_PROVIDER_STRIPE_WEBHOOK_ENABLED: "true"
 
+  # ── PayPal ───────────────────────────────────────────
+  # sandbox | live. Never inferred from the credentials — PayPal client ids carry
+  # no test/live marker, and guessing wrong means taking real money.
+  PAYPAL_ENV: "sandbox"
+  # Enabling this makes the shop multi-provider: the checkout renders a selector and
+  # POST /api/shop/orders starts rejecting requests that name no provider. Flip it
+  # deliberately, not as part of an unrelated rollout.
+  PAYMENT_PROVIDER_PAYPAL_ENABLED: "false"
+  # Requires a webhook subscription registered in the PayPal dashboard at
+  # https://granite-security.org/api/payments/webhook/paypal, with its id in
+  # paypal-webhook-id. Unlike Stripe this is not merely belt-and-braces: it is what
+  # captures for a shopper who approves and then closes the tab.
+  PAYMENT_PROVIDER_PAYPAL_WEBHOOK_ENABLED: "false"
+  # API origin — where PayPal returns the shopper into the gateway. Same value as
+  # FRONTEND_ORIGIN below, because one domain serves both the SPA and the API here.
+  PUBLIC_BASE_URL: "https://granite-security.org"
+
   # ── Profile ──────────────────────────────────────────
   PROFILE_PORT: "8064"
   PROFILE_R2DBC_URL: "r2dbc:postgresql://postgres-profile:5432/profiledb"

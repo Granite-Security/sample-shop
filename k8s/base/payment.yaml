@@ -115,6 +115,59 @@ spec:
                 configMapKeyRef:
                   name: granite-config
                   key: PAYMENT_PROVIDER_STRIPE_WEBHOOK_ENABLED
+            # optional: true on all three, unlike every other secretKeyRef here.
+            # PayPal is genuinely optional (payment.providers.paypal.enabled
+            # defaults false), and granite-secrets is applied by hand rather than
+            # by ArgoCD — so without this, rolling out this manifest before
+            # someone remembers to add the keys puts payment into
+            # CreateContainerConfigError and takes *all* payments down, Stripe
+            # included. A blank client id fails PayPal's health check loudly
+            # instead, which is a far better failure.
+            - name: PAYPAL_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: paypal-client-id
+                  optional: true
+            - name: PAYPAL_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: paypal-client-secret
+                  optional: true
+            - name: PAYPAL_WEBHOOK_ID
+              valueFrom:
+                secretKeyRef:
+                  name: granite-secrets
+                  key: paypal-webhook-id
+                  optional: true
+            - name: PAYPAL_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: PAYPAL_ENV
+            - name: PAYMENT_PROVIDER_PAYPAL_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: PAYMENT_PROVIDER_PAYPAL_ENABLED
+            - name: PAYMENT_PROVIDER_PAYPAL_WEBHOOK_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: PAYMENT_PROVIDER_PAYPAL_WEBHOOK_ENABLED
+            # Where PayPal returns the shopper to (the gateway), and where they land
+            # afterwards (the SPA). Identical here because one domain serves both.
+            - name: PUBLIC_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: PUBLIC_BASE_URL
+            - name: FRONTEND_ORIGIN
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: FRONTEND_ORIGIN
 ---
 apiVersion: v1
 kind: Service
