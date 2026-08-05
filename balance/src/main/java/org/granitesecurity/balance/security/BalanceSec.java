@@ -58,6 +58,12 @@ public class BalanceSec {
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .cors(Customizer.withDefaults())
                 .authorizeExchange(exchange -> exchange
+                        // Swagger UI itself is public; the operations it calls are
+                        // not. Reachable only by port-forward — there is no
+                        // HTTPRoute for balance, and there must not be one for
+                        // these paths (docs/finance/finance.md §7.2).
+                        .pathMatchers("/v3/api-docs/**", "/swagger-ui/**",
+                                "/swagger-ui.html", "/webjars/swagger-ui/**").permitAll()
                         // Service-to-service only: this is what payment's
                         // BalanceProvider calls to debit an order. A user token
                         // must never reach it, or anyone could spend anyone's

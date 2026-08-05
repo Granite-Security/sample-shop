@@ -52,6 +52,12 @@ spring:
           auth-server:
             token-uri: ${AUTH_SERVER_TOKEN_URI:http://localhost:9090/auth/oauth2/token}
 
+springdoc:
+  paths-to-match: /api/balance/**
+  swagger-ui:
+    # Sorted so the read-only endpoints come before the money-moving ones.
+    operations-sorter: method
+
 jwt:
   jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:9090/auth/oauth2/jwks}
   trusted-issuers: ${TRUSTED_JWT_ISSUERS:http://localhost:8080/auth}
