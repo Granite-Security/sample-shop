@@ -21,6 +21,9 @@ public class PaymentRoute {
                 .GET("/actuator/health", healthHandler::health)
                 .GET("/actuator/health/providers", healthHandler::providersHealth)
                 .POST("/api/payments/intent", paymentHandler::createPaymentIntent)
+                // Top-up: a payment that funds a balance rather than an order.
+                .POST("/api/payments/topup-intent", paymentHandler::createTopupIntent)
+                .POST("/api/payments/topup/{paymentId}/sync", paymentHandler::syncTopup)
                 .GET("/api/payments/intent/{orderId}", paymentHandler::getPaymentByOrderId)
                 .POST("/api/payments/intent/{orderId}/sync", paymentHandler::syncPaymentStatus)
                 .POST("/api/payments/intent/{orderId}/retry", paymentHandler::retryPaymentIntent)

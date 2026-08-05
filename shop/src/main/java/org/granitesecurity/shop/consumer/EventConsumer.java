@@ -27,6 +27,14 @@ public class EventConsumer {
     void onPaymentEvent(String message) {
         try {
             Map<String, Object> data = MAPPER.readValue(message, Map.class);
+
+            // A top-up funds a balance and has no order. It shares this topic with
+            // order payments, so skip it here rather than warning about a missing
+            // orderId on every one (docs/finance/finance.md §6.1).
+            if ("TOPUP".equals(String.valueOf(data.get("purpose")))) {
+                return;
+            }
+
             Long orderId = parseOrderId(data.get("orderId"));
             if (orderId == null) {
                 log.warn("Payment event missing orderId: {}", message);

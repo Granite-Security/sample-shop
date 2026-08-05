@@ -131,8 +131,11 @@ public class StripePaymentProvider implements PaymentProvider {
                     log.warn("Idempotency key collision for order {}, searching for existing PaymentIntent",
                             request.orderId());
                     return Mono.fromCallable(() -> {
+                        // Search on `reference`, not order_id: a top-up has no order,
+                        // and metadata['order_id']:'null' would match every other
+                        // top-up's intent. For an order the two are the same value.
                         var searchParams = PaymentIntentSearchParams.builder()
-                                .setQuery("metadata['order_id']:'" + request.orderId() + "'")
+                                .setQuery("metadata['reference']:'" + request.reference() + "'")
                                 .setLimit(1L)
                                 .build();
                         return PaymentIntent.search(searchParams).getData().stream()
@@ -292,7 +295,10 @@ public class StripePaymentProvider implements PaymentProvider {
                         PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
                                 .setEnabled(true)
                                 .build())
-                .putMetadata("order_id", String.valueOf(request.orderId()));
+                .putMetadata("order_id", String.valueOf(request.orderId()))
+                // Unique per payment, unlike order_id which is "null" for top-ups.
+                // This is what the collision-recovery search above matches on.
+                .putMetadata("reference", request.reference());
         // Conditional because the two callers differed before the seam: create always
         // sent the key (empty string when unknown), retry never sent it. Callers keep
         // that distinction by passing "" or null, so live Stripe metadata is unchanged.

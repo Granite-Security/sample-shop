@@ -222,12 +222,19 @@ public class PaymentService {
                 username,
                 idempotencyKey,
                 trimSlash(publicBaseUrl) + "/api/payments/return/" + provider.name() + "?orderId=" + orderId,
-                trimSlash(frontendOrigin) + "/orders/" + orderId + "?payment=cancelled");
+                trimSlash(frontendOrigin) + "/orders/" + orderId + "?payment=cancelled",
+                // Null means "same as the order id" — unchanged behaviour for orders.
+                null);
     }
 
     /** Where the shopper is sent once a redirect payment is finalized, success or not. */
     public String orderPageUrl(Long orderId) {
         return trimSlash(frontendOrigin) + "/orders/" + orderId;
+    }
+
+    /** Where the shopper lands after a top-up, success or not. */
+    public String balancePageUrl() {
+        return trimSlash(frontendOrigin) + "/profile/balance";
     }
 
     /** Fallback landing page when a return carries no usable order id. */
@@ -508,6 +515,91 @@ public class PaymentService {
                 });
     }
 
+    /**
+     * Opens a payment that funds a balance rather than an order (finance.md §6.1).
+     *
+     * <p>Same providers, same intents. The differences are that there is no order, so
+     * the intent is referenced by its own payment id, and that the shopper returns to
+     * {@code ?paymentId=} rather than {@code ?orderId=}.
+     *
+     * <p><b>Confirmation is the return endpoint plus {@link #syncTopup}.</b> Provider
+     * webhooks cannot resolve a top-up: both adapters map an inbound event back to a
+     * payment through an order id, and a top-up has none. A shopper who abandons the
+     * provider tab therefore needs a sync to reconcile — see finance.md §6.1.
+     */
+    public Mono<Payment> createTopupIntent(String username, BigDecimal amount,
+                                           String currencyOverride, String providerName) {
+        String cur = currencyOverride != null ? currencyOverride : currency;
+        PaymentProvider provider = providerName == null ? providers.defaultProvider() : providers.get(providerName);
+
+        Payment payment = Payment.topup(username, amount, cur.toUpperCase(), provider.name());
+        String reference = payment.getId().toString();
+
+        var request = new CreateIntentRequest(
+                null,
+                new Money(amount, cur),
+                username,
+                "payment-topup-" + reference,
+                trimSlash(publicBaseUrl) + "/api/payments/return/" + provider.name() + "?paymentId=" + reference,
+                trimSlash(frontendOrigin) + "/profile/balance?topup=cancelled",
+                reference);
+
+        return provider.createIntent(request)
+                .flatMap(intent -> {
+                    payment.setProviderPaymentId(intent.providerPaymentId());
+                    payment.setProviderPayload(toProviderPayload(intent));
+                    payment.setStatus(PaymentStatus.CREATED.name());
+                    payment.setCreatedAt(Instant.now());
+                    payment.setUpdatedAt(Instant.now());
+                    return paymentRepository.save(payment);
+                })
+                .doOnSuccess(saved -> log.info("Top-up {} opened at {} for {} ({} {})",
+                        saved.getId(), provider.name(), username, amount, cur));
+    }
+
+    /** Confirms a top-up against the provider. The only reliable path for one. */
+    public Mono<Payment> syncTopup(UUID paymentId) {
+        return paymentRepository.findById(paymentId)
+                .switchIfEmpty(Mono.error(new RuntimeException("No payment " + paymentId)))
+                .flatMap(payment -> {
+                    if (payment.getProviderPaymentId() == null) {
+                        return Mono.error(new RuntimeException("No provider payment for " + paymentId));
+                    }
+                    return providerFor(payment).retrieveIntent(payment.getProviderPaymentId())
+                            .flatMap(intent -> applyProviderStatus(payment, intent));
+                });
+    }
+
+    /**
+     * The redirect return for a top-up. Same two-step as an order: capture, then apply.
+     * Idempotent, because the shopper can refresh it.
+     */
+    public Mono<Payment> finalizeRedirectTopup(String providerName, UUID paymentId) {
+        return paymentRepository.findById(paymentId)
+                .switchIfEmpty(Mono.error(new RuntimeException("No payment " + paymentId)))
+                .flatMap(payment -> {
+                    PaymentProvider provider = providerFor(payment);
+                    if (!provider.name().equalsIgnoreCase(providerName)) {
+                        log.warn("Return for '{}' on top-up {} but it is held by '{}' — ignoring",
+                                providerName, paymentId, provider.name());
+                        return Mono.just(payment);
+                    }
+                    if (PaymentStatus.SUCCEEDED.name().equals(payment.getStatus())) {
+                        return Mono.just(payment);
+                    }
+                    if (!(provider instanceof RedirectPaymentProvider redirect)) {
+                        return syncTopup(paymentId);
+                    }
+                    return redirect.finalizePayment(payment.getProviderPaymentId())
+                            .flatMap(intent -> applyProviderStatus(payment, intent))
+                            .onErrorResume(PaymentProviderException.class, e -> {
+                                log.error("{} failed to finalize top-up {}: {}",
+                                        provider.name(), paymentId, e.getMessage(), e);
+                                return Mono.just(payment);
+                            });
+                });
+    }
+
     public Mono<CreatePaymentIntentResponse> syncPaymentStatus(Long orderId) {
         return paymentRepository.findByOrderId(orderId)
                 .switchIfEmpty(Mono.error(new RuntimeException("Payment not found for order " + orderId)))
@@ -687,10 +779,21 @@ public class PaymentService {
             // existing branch during a rollout.
             eventPayload.put("stripePaymentIntentId", payment.getProviderPaymentId());
             eventPayload.put("status", payment.getStatus());
+            // A top-up is money entering the system, so balance needs to know who
+            // and how much. paymentId is what makes crediting idempotent on the
+            // consumer side (docs/finance/finance.md §6.1, D9).
+            eventPayload.put("purpose", payment.getPurpose());
+            eventPayload.put("paymentId", payment.getId().toString());
+            eventPayload.put("username", payment.getUsername());
+            eventPayload.put("amount", payment.getAmount());
+            eventPayload.put("currency", payment.getCurrency());
             String json = MAPPER.writeValueAsString(eventPayload);
             OutboxEvent outbox = new OutboxEvent(
                     "payment",
-                    String.valueOf(payment.getOrderId()),
+                    // A top-up has no order, so it keys on the payment itself.
+                    payment.getOrderId() != null
+                            ? String.valueOf(payment.getOrderId())
+                            : payment.getId().toString(),
                     eventName,
                     json,
                     "PENDING"

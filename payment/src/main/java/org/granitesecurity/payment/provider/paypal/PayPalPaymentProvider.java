@@ -184,12 +184,14 @@ public class PayPalPaymentProvider implements RedirectPaymentProvider {
 
     private Map<String, Object> purchaseUnit(CreateIntentRequest request) {
         Map<String, Object> unit = new LinkedHashMap<>();
-        unit.put("reference_id", String.valueOf(request.orderId()));
+        // reference rather than orderId: a top-up has no order and would otherwise
+        // send the literal string "null" to PayPal.
+        unit.put("reference_id", request.reference());
         // custom_id is what comes back on the capture webhook, and it is how an inbound
         // event is traced to a payment row — the equivalent of Stripe's metadata.order_id.
         // invoice_id is deliberately NOT set: PayPal enforces uniqueness on it, so a
         // retry of the same shop order would be rejected as a duplicate invoice.
-        unit.put("custom_id", String.valueOf(request.orderId()));
+        unit.put("custom_id", request.reference());
         unit.put("amount", Map.of(
                 "currency_code", request.amount().currency(),
                 "value", decimalString(request.amount())));
