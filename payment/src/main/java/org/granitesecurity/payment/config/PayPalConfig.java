@@ -39,10 +39,14 @@ public class PayPalConfig {
      * failure mode of guessing wrong is taking real money.
      */
     @Bean
-    public WebClient payPalWebClient(WebClient.Builder builder) {
+    public WebClient payPalWebClient() {
         String baseUrl = baseUrl();
         log.info("PayPal client configured for {} ({})", env, baseUrl);
-        return builder
+        // WebClient.builder() rather than an injected WebClient.Builder: there is no
+        // auto-configured Builder bean in this service, and depending on one failed
+        // startup outright the first time PayPal was enabled. Every other WebClient in
+        // this codebase is built the same way (see profile's InternalClientConfig).
+        return WebClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .build();
