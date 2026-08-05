@@ -1,8 +1,8 @@
 services:
 
   postgres:
-    image: postgres:17-alpine
-    container_name: postgres
+    image: 'postgres:latest'
+    container_name: 'auth-postgres'
     environment:
       - POSTGRES_DB=authdb
       - POSTGRES_USER=postgres
@@ -60,6 +60,15 @@ services:
       - 'POSTGRES_USER=myuser'
     ports:
       - '5437:5432'
+
+  balance-postgres:
+    image: 'postgres:latest'
+    environment:
+      - 'POSTGRES_DB=balancedb'
+      - 'POSTGRES_PASSWORD=secret'
+      - 'POSTGRES_USER=myuser'
+    ports:
+      - '5438:5432'
 
   garage:
     image: dxflrs/garage:v2.3.0

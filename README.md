@@ -63,7 +63,9 @@ Browser (5173) ── Gateway (8080) ──┬── Auth Server (9090) ── P
 | `payment` | 8062 | Spring WebFlux + R2DBC + Stripe API | Payment intent creation, Stripe webhooks |
 | `delivery` | 8063 | Spring WebFlux + R2DBC + Kafka | Delivery tracking, consumes `orders.events` |
 | `profile` | 8064 | Spring WebFlux + R2DBC | User profile & delivery addresses; provisions profiles from `identity.events` |
+| `storage` | 8065 | Spring WebFlux + S3 (Garage) | Presigned uploads for avatars, user files and product media |
 | `notification` | 8066 | Spring WebFlux + R2DBC + Kafka | Transactional email (Resend); consumes `identity.events` |
+| `balance` | 8067 | Spring WebFlux + R2DBC + Kafka | CHF ledger: balances, transfers, admin gifts; pays orders as a payment provider |
 | `ui-shop` | 5173 | React + Vite + oidc-client-ts | SPA storefront with Stripe Elements |
 | `postgres` | 5432 | PostgreSQL 17 | Auth server database |
 | `shop-postgres` | 5433 | PostgreSQL | Shop database |
