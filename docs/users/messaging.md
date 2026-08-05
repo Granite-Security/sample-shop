@@ -1,6 +1,7 @@
 # User-to-user messaging (inbox)
 
 Status: **Phase 1 shipped** (#77), plus Reply and the unread bell from Phase 2 (#78, #79).
+Ported to `ui-demo` in #80 — same endpoints, that storefront's own styling.
 Conversation grouping, pagination and all of Phase 3 not started.
 
 Goal: any signed-in user can send a message to another user by username or email, and read

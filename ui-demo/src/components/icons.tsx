@@ -91,6 +91,13 @@ export const MenuIcon = ({ className = 'h-5 w-5' }: IconProps) => (
   </svg>
 );
 
+export const BellIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg viewBox="0 0 24 24" className={className} {...base} aria-hidden="true">
+    <path d="M18 15.5V10a6 6 0 1 0-12 0v5.5L4.5 18h15Z" />
+    <path d="M10 20.5a2 2 0 0 0 4 0" />
+  </svg>
+);
+
 export const InstagramIcon = ({ className = 'h-5 w-5' }: IconProps) => (
   <svg viewBox="0 0 24 24" className={className} {...base} aria-hidden="true">
     <rect x="3.5" y="3.5" width="17" height="17" rx="4.5" />

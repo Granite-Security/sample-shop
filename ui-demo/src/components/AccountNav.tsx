@@ -3,6 +3,7 @@ import { NavLink } from 'react-router';
 const LINKS = [
   { to: '/profile', label: 'Profile', end: true },
   { to: '/profile/orders', label: 'Orders', end: false },
+  { to: '/profile/messages', label: 'Messages', end: false },
   { to: '/profile/password', label: 'Password', end: false },
   { to: '/profile/files', label: 'Files', end: false },
   { to: '/profile/addresses', label: 'Addresses', end: false },
