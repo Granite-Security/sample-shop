@@ -11,3 +11,5 @@ databaseChangeLog:
       file: db/changelog/005-admin-action.sql
   - include:
       file: db/changelog/006-user-avatar.sql
+  - include:
+      file: db/changelog/007-user-messaging.sql

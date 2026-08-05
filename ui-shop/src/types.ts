@@ -296,3 +296,41 @@ export interface DeleteUserResult {
   paidOrderCount: number;
   deletedOrderCount: number;
 }
+
+// ── Messaging ───────────────────────────────────────────────────────
+// docs/users/messaging.md. The counterparty fields describe the *other*
+// party — the sender in the inbox, the recipient in Sent — resolved
+// server-side so a list of 20 messages is not 20 profile lookups.
+export interface MessageResponse {
+  id: number;
+  senderUsername: string;
+  recipientUsername: string;
+  counterpartyUsername: string;
+  counterpartyDisplayName: string;
+  counterpartyAvatarUrl: string | null;
+  // Optional: null when the sender did not write one, in which case the
+  // list falls back to `preview`.
+  subject: string | null;
+  body: string;
+  preview: string;
+  read: boolean;
+  readAt: string | null;
+  outgoing: boolean;
+  createdAt: string;
+}
+
+// No email field, deliberately: the search matches on email so a user can
+// be found by an address you already know, but returning it would make the
+// picker an address-book harvester (docs/users/messaging.md §5).
+export interface RecipientResponse {
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export interface SendMessageRequest {
+  // A username or an email address — whichever was typed.
+  to: string;
+  subject?: string;
+  body: string;
+}
