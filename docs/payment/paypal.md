@@ -25,9 +25,51 @@ it. **The live secret had none of these before the rollout**, which is why the
 three `secretKeyRef`s are `optional: true`: without that, this deploy would have
 put payment into `CreateContainerConfigError` and taken Stripe down with it.
 
-**To flip on:** set `PAYMENT_PROVIDER_PAYPAL_ENABLED: "true"` in
-`k8s/base/config.yaml`, push, then `kubectl -n granite rollout restart deploy/payment`
-(a ConfigMap change alone does not restart the pod).
+## Enabled 2026-08-05 — and the outage on the way there
+
+PayPal is now live at `granite-security.org` on image `81f68939`:
+
+```
+Payment providers enabled: [paypal, stripe] (shop currency CHF)
+GET /api/payments/providers
+  → paypal (REDIRECT, webhookEnabled true) + stripe (CLIENT_SDK)
+/actuator/health/providers → both UP; paypal "connected", mode sandbox
+```
+
+**The first attempt to enable it took payment down.** Worth reading before the
+next provider lands, because none of it was PayPal-specific:
+
+1. **`PayPalConfig` asked for an injected `WebClient.Builder`.** There is no
+   auto-configured bean of that type in this service, so the context failed to
+   start and the pod crash-looped — with Stripe inside it. Every other
+   `WebClient` in the repo uses the static `WebClient.builder()`
+   (`profile/InternalClientConfig`); this was the one deviation. Fixed, and
+   `PayPalConfigTest` now loads the config through `ApplicationContextRunner` —
+   no DB, no broker, no PayPal account. It was confirmed to fail against the
+   broken version. Nothing covered this before: the only context test is
+   `PaymentApplicationTests`, which needs Postgres and never runs with PayPal
+   enabled, so local testing would not have caught it either.
+2. **The gateway kept 500ing after payment recovered.** `payment` was ready and
+   answering `[stripe]` on a port-forward while every public `/api/payments/*`
+   call returned 500. `kubectl -n granite rollout restart deploy/gateway`
+   cleared it — the gateway was holding connections to pod IPs that churned
+   during the crash loop. **Restart the gateway after payment does anything
+   worse than a clean rolling update.**
+3. **git said `enabled: true` while the cluster was hand-patched to `false`.**
+   ArgoCD (automated sync) would have restored `true` from git onto the still
+   broken image and crashed it a second time. Reverting the flag in git, rather
+   than only in the cluster, is what closes that window.
+4. **The gitops bump lost a push race.** Two pushes in quick succession made
+   `update-gitops` fail with a non-fast-forward *after* the image was already
+   built and pushed, so the image existed on Docker Hub while
+   `kustomization.yaml` still pinned the old SHA. Recovery is the hand-edit the
+   file's own comment describes — verify the image exists first
+   (`docker manifest inspect`), then bump.
+
+**To flip on** (or off): set `PAYMENT_PROVIDER_PAYPAL_ENABLED` in
+`k8s/base/config.yaml`, push, then
+`kubectl -n granite rollout restart deploy/payment deploy/gateway`. A ConfigMap
+change alone does not restart pods.
 
 ## Verified against the live sandbox (2026-08-04)
 
