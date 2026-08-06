@@ -75,6 +75,13 @@ spec:
                 configMapKeyRef:
                   name: granite-config
                   key: MICROSERVICES_DELIVERY_URI
+            # Without this the gateway falls back to its localhost default and
+            # /api/balance/** 500s with a connection refused.
+            - name: MICROSERVICES_BALANCE_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: MICROSERVICES_BALANCE_URI
             - name: MICROSERVICES_STORAGE_URI
               valueFrom:
                 configMapKeyRef:
