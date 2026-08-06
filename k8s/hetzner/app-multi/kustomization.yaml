@@ -52,7 +52,7 @@ images:
     newTag: e2ec7ca971ac69aee5f029ce928910fabf0a655b
   - name: granite-balance
     newName: docker.io/moldovean/granite-balance
-    newTag: 390ac4b74de21abd570668aee29a8d4d94131207
+    newTag: 989fbf56b2ccf62b9c80692dee603b5efb9b292b
   - name: granite-profile
     newName: docker.io/moldovean/granite-profile
     newTag: 82697d33636658c9610e86b482a232fc7bcedd3f
