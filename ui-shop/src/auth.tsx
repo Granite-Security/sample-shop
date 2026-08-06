@@ -19,6 +19,13 @@ interface AuthContext {
 
 const AuthCtx = createContext<AuthContext | null>(null);
 
+/**
+ * The last id_token seen for this session. Kept outside React state because it is
+ * needed during logout, which may run after a renewal dropped it from the stored
+ * user (see logout below).
+ */
+let lastIdToken: string | null = null;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const name = (claims.preferred_username as string) ?? (claims.sub as string);
       setUser({ name, claims });
       setAccessToken(oidcUser.access_token);
+      if (oidcUser.id_token) lastIdToken = oidcUser.id_token;
     } else {
       setUser(null);
       setAccessToken(null);
@@ -59,8 +67,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [updateUser]);
 
-  const logout = useCallback(() => {
-    userManager.signoutRedirect({ post_logout_redirect_uri: window.location.origin });
+  const logout = useCallback(async () => {
+    // auth-server cannot validate post_logout_redirect_uri without knowing which
+    // client is asking, and it learns that from id_token_hint. Send one and the
+    // logout completes; send none and it answers 400 with a whitelabel error page.
+    //
+    // The stored user can lose its id_token across a silent renewal (a refresh
+    // grant does not always return a fresh one), so the last one seen is kept
+    // above and used as a fallback. An expired hint is still a valid hint --
+    // it identifies the client, which is all this needs.
+    const current = await userManager.getUser().catch(() => null);
+    const hint = current?.id_token ?? lastIdToken;
+
+    if (hint) {
+      await userManager.signoutRedirect({
+        id_token_hint: hint,
+        post_logout_redirect_uri: window.location.origin,
+      });
+      return;
+    }
+
+    // Nothing to prove who we are with. Clear the local session rather than
+    // send the user to an error page; the auth-server cookie outlives this,
+    // so the next sign-in may not prompt.
+    await userManager.removeUser();
+    window.location.assign('/');
   }, []);
 
   const isAuthenticated = user !== null;
