@@ -43,6 +43,35 @@ export function setAccessToken(token: string | null) {
   accessToken = token;
 }
 
+/**
+ * How to get a fresh access token. Injected by AuthProvider rather than
+ * imported, so this module stays free of oidc-client-ts — same reasoning as
+ * setAccessToken.
+ */
+let refreshAccessToken: (() => Promise<string | null>) | null = null;
+
+/**
+ * One refresh in flight at a time. Without this, a page that fires several
+ * requests on mount would start several silent renewals when the token expires.
+ */
+let refreshInFlight: Promise<string | null> | null = null;
+
+export function setTokenRefresher(refresher: (() => Promise<string | null>) | null) {
+  refreshAccessToken = refresher;
+}
+
+function refreshOnce(): Promise<string | null> {
+  if (!refreshAccessToken) return Promise.resolve(null);
+  if (!refreshInFlight) {
+    refreshInFlight = refreshAccessToken()
+      .catch(() => null)
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
 export class ApiError extends Error {
   status: number;
   data: unknown;
@@ -58,18 +87,32 @@ type RequestOptions = RequestInit & { skipAuth?: boolean };
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { skipAuth, ...fetchOptions } = options;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(fetchOptions.headers as Record<string, string>),
+
+  const send = () => {
+    // Headers are rebuilt per attempt so a retry picks up the refreshed token.
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(fetchOptions.headers as Record<string, string>),
+    };
+    if (accessToken && !skipAuth) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+    return fetch(`${BASE}${path}`, { ...fetchOptions, headers, cache: 'no-store' });
   };
-  if (accessToken && !skipAuth) {
-    headers['Authorization'] = `Bearer ${accessToken}`;
+
+  let res = await send();
+
+  // Access tokens live ~5 minutes. Without this, a page open longer than that
+  // fails every call until the user reloads — the token is stale, not the
+  // session. Refresh silently and retry exactly once; a second 401 means the
+  // session itself is gone and the caller should see it.
+  if (res.status === 401 && !skipAuth && refreshAccessToken) {
+    const fresh = await refreshOnce();
+    if (fresh) {
+      res = await send();
+    }
   }
-  const res = await fetch(`${BASE}${path}`, {
-    ...fetchOptions,
-    headers,
-    cache: 'no-store',
-  });
+
   if (res.status === 204) return undefined as T;
   if (res.status === 401) {
     throw new Error('Unauthorized');

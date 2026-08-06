@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { userManager } from './oauth';
-import { setAccessToken } from './api';
+import { setAccessToken, setTokenRefresher } from './api';
 import type { User as OidcUser } from 'oidc-client-ts';
 
 // Same auth model as ui-shop/src/auth.tsx: oidc-client-ts against the
@@ -38,6 +38,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Lets the api client recover from an expired access token on its own.
+    // signinSilent updates the stored user, which fires addUserLoaded below, so
+    // setAccessToken is refreshed as a side effect of this too.
+    setTokenRefresher(async () => {
+      const renewed = await userManager.signinSilent();
+      return renewed?.access_token ?? null;
+    });
+
     userManager.getUser().then(updateUser).finally(() => setLoading(false));
 
     const handleUserLoaded = (oidcUser: OidcUser) => updateUser(oidcUser);
@@ -47,6 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     userManager.events.addUserUnloaded(handleUserUnloaded);
 
     return () => {
+      setTokenRefresher(null);
       userManager.events.removeUserLoaded(handleUserLoaded);
       userManager.events.removeUserUnloaded(handleUserUnloaded);
     };
