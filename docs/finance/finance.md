@@ -1,8 +1,8 @@
 # `balance` — the platform's central bank
 
-Status: **Steps 0–5 built (backend complete).** Balance is enabled at checkout beside
-Stripe and PayPal. The storefront UI — balance page, admin gift control, top-up screen — is
-the remaining work.
+Status: **complete.** Steps 0–5 are built and deployed, balance is enabled at checkout
+beside Stripe and PayPal, and both storefronts have a balance page (amount, history, send,
+top-up) plus an admin gift control. Remaining follow-ups are in §7.2 and §6.1.
 
 `PAYMENT_PROVIDER_BALANCE_ENABLED` is **on** in `k8s/base/config.yaml`, so balance appears at
 checkout beside Stripe and PayPal. The application default stays `false`, so a `payment` run

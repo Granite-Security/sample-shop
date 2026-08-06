@@ -382,7 +382,7 @@ function CheckoutInner() {
                 displayName={find(activeProvider)?.displayName}
                 confirmationMode={activeMode}
                 payload={paymentPayload}
-                orderId={order.id}
+                returnUrl={`${window.location.origin}/orders/${order.id}`}
                 onPaymentConfirmed={handlePaymentConfirmed}
                 onError={handlePaymentError}
               />

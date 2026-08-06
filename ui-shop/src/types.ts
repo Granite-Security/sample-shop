@@ -334,3 +334,56 @@ export interface SendMessageRequest {
   subject?: string;
   body: string;
 }
+
+// ── Balance (docs/finance/finance.md) ───────────────────────────────
+// Amounts are rappen in `*Minor` fields; the CHF field is derived
+// server-side. A balance can be negative when credit has been extended.
+export interface BalanceResponse {
+  username: string;
+  balanceMinor: number;
+  balanceChf: number;
+  currency: string;
+}
+
+// Signed: negative means money left this account.
+export interface BalanceTransaction {
+  id: number;
+  transferId: string | null;
+  amountMinor: number;
+  amountChf: number;
+  kind: 'TOPUP' | 'SPEND' | 'REFUND' | 'TRANSFER' | 'GIFT';
+  reference: string | null;
+  memo: string | null;
+  createdAt: string;
+}
+
+export interface TransferRequest {
+  to: string;
+  amountChf: number;
+  memo?: string;
+  // Optional; supply one and a retry replays the original result.
+  idempotencyKey?: string;
+}
+
+export interface TransferResponse {
+  transferId: string;
+  from: string;
+  to: string;
+  amountMinor: number;
+  amountChf: number;
+}
+
+export interface GiftRequest {
+  username: string;
+  amountChf: number;
+  reason?: string;
+  idempotencyKey?: string;
+}
+
+export interface GiftResponse {
+  transferId: string;
+  username: string;
+  amountMinor: number;
+  amountChf: number;
+  grantedBy: string;
+}

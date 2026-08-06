@@ -23,6 +23,7 @@ import ResetPasswordConfirm from './pages/ResetPasswordConfirm'
 import Callback from './pages/Callback'
 import Addresses from './pages/Addresses'
 import Messages from './pages/Messages'
+import Balance from './pages/Balance'
 import Profile from './pages/Profile'
 import Password from './pages/Password'
 import Files from './pages/Files'
@@ -42,6 +43,7 @@ export default function App() {
             <Route path="profile" element={<Profile />} />
             <Route path="profile/password" element={<Password />} />
             <Route path="profile/files" element={<Files />} />
+            <Route path="profile/balance" element={<Balance />} />
             <Route path="addresses" element={<Addresses />} />
             <Route path="messages" element={<Messages />} />
             <Route path="orders" element={<Orders />} />

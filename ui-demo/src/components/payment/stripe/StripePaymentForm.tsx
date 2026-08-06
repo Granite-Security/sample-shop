@@ -7,9 +7,12 @@ import { PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
  * components/payment/stripe/.
  */
 export default function StripePaymentForm({
+  returnUrl,
   onPaymentConfirmed,
   onError,
 }: {
+  /** Where Stripe sends the shopper after confirming — an order or the balance page. */
+  returnUrl: string;
   onPaymentConfirmed: () => void;
   onError: (msg: string) => void;
 }) {
@@ -24,7 +27,7 @@ export default function StripePaymentForm({
     try {
       const { error } = await stripe.confirmPayment({
         elements,
-        confirmParams: { return_url: window.location.origin + '/checkout' },
+        confirmParams: { return_url: returnUrl },
         redirect: 'if_required',
       });
       if (error) {
