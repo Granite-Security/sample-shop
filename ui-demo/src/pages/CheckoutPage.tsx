@@ -289,7 +289,7 @@ export function CheckoutPage() {
               displayName={find(activeProvider)?.displayName}
               confirmationMode={activeMode}
               payload={paymentPayload}
-              orderId={order.id}
+              returnUrl={`${window.location.origin}/checkout`}
               onPaymentConfirmed={onPaymentConfirmed}
               onError={(msg) => {
                 setError(msg);

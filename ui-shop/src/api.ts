@@ -1,5 +1,6 @@
 import { accountApi } from './api/account';
 import { authApi } from './api/auth';
+import { balanceApi } from './api/balance';
 import { catalogApi } from './api/catalog';
 import { deliveryApi } from './api/delivery';
 import { messagesApi } from './api/messages';
@@ -12,6 +13,7 @@ import { storageApi } from './api/storage';
 export const api = {
   account: accountApi,
   auth: authApi,
+  balance: balanceApi,
   shop: shopApi,
   catalog: catalogApi,
   orders: ordersApi,

@@ -13,12 +13,12 @@ const stripePromise = loadStripe(window.__ENV__?.STRIPE_PUBLISHABLE_KEY ?? '');
 
 export default function StripePaymentWidget({
   payload,
-  orderId,
+  returnUrl,
   onPaymentConfirmed,
   onError,
 }: {
   payload: ProviderPayload;
-  orderId: number;
+  returnUrl: string;
   onPaymentConfirmed: () => void;
   onError: (msg: string) => void;
 }) {
@@ -36,8 +36,8 @@ export default function StripePaymentWidget({
   }
 
   return (
-    <Elements key={orderId} stripe={stripePromise} options={options}>
-      <StripePaymentForm onPaymentConfirmed={onPaymentConfirmed} onError={onError} />
+    <Elements key={clientSecret} stripe={stripePromise} options={options}>
+      <StripePaymentForm returnUrl={returnUrl} onPaymentConfirmed={onPaymentConfirmed} onError={onError} />
     </Elements>
   );
 }

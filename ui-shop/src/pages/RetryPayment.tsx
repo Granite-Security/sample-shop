@@ -102,7 +102,7 @@ export default function RetryPayment() {
             displayName={find(provider)?.displayName}
             confirmationMode={find(provider)?.confirmationMode ?? 'CLIENT_SDK'}
             payload={payload}
-            orderId={orderId}
+            returnUrl={`${window.location.origin}/orders/${orderId}`}
             onPaymentConfirmed={handlePaymentConfirmed}
             onError={handlePaymentError}
           />

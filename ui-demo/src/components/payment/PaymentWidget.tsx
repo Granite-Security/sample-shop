@@ -15,7 +15,7 @@ export default function PaymentWidget({
   displayName,
   confirmationMode,
   payload,
-  orderId,
+  returnUrl,
   onPaymentConfirmed,
   onError,
 }: {
@@ -23,7 +23,8 @@ export default function PaymentWidget({
   displayName?: string;
   confirmationMode: ConfirmationMode;
   payload: ProviderPayload;
-  orderId: number;
+  /** Where a CLIENT_SDK provider returns to. Orders and top-ups differ only here. */
+  returnUrl: string;
   onPaymentConfirmed: () => void;
   onError: (msg: string) => void;
 }) {
@@ -33,7 +34,7 @@ export default function PaymentWidget({
         return (
           <StripePaymentWidget
             payload={payload}
-            orderId={orderId}
+            returnUrl={returnUrl}
             onPaymentConfirmed={onPaymentConfirmed}
             onError={onError}
           />

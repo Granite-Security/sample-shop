@@ -4,6 +4,7 @@ const LINKS = [
   { to: '/profile', label: 'Profile', end: true },
   { to: '/profile/password', label: 'Password', end: false },
   { to: '/profile/files', label: 'Files', end: false },
+  { to: '/profile/balance', label: 'Balance', end: false },
   { to: '/messages', label: 'Messages', end: false },
   { to: '/addresses', label: 'Addresses', end: false },
   { to: '/orders', label: 'Orders', end: false },

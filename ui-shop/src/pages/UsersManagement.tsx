@@ -170,6 +170,33 @@ export default function UsersManagement() {
                   >
                     Delete
                   </button>
+
+                  {/* Unbacked issuance: this conjures CHF out of nothing and is
+                      authorized server-side by ROLE_ADMIN, not by this button
+                      existing (docs/finance/finance.md D11). */}
+                  <button
+                    className="btn"
+                    disabled={working}
+                    onClick={() => {
+                      const raw = window.prompt(`Gift how many CHF to ${u.username}?`, '10');
+                      if (raw === null) return;
+                      const amountChf = Number(raw);
+                      if (!Number.isFinite(amountChf) || amountChf <= 0) {
+                        setError('Enter a positive amount in CHF.');
+                        return;
+                      }
+                      run(u.username,
+                        () => api.balance.gift({
+                          username: u.username,
+                          amountChf,
+                          reason: 'Admin gift',
+                          idempotencyKey: crypto.randomUUID(),
+                        }),
+                        `Gifted CHF ${amountChf.toFixed(2)} to ${u.username}.`);
+                    }}
+                  >
+                    Gift balance
+                  </button>
                 </div>
               </div>
             );

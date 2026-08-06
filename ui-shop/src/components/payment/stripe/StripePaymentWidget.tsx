@@ -16,12 +16,14 @@ const stripePromise = loadStripe(window.__ENV__?.STRIPE_PUBLISHABLE_KEY ?? '');
 
 export default function StripePaymentWidget({
   payload,
-  orderId,
+  returnUrl,
   onPaymentConfirmed,
   onError,
 }: {
   payload: ProviderPayload;
-  orderId: number;
+  /** Where Stripe sends the shopper after confirming. An order page, or the
+   *  balance page for a top-up — this widget does not care which. */
+  returnUrl: string;
   onPaymentConfirmed: () => void;
   onError: (msg: string) => void;
 }) {
@@ -40,7 +42,7 @@ export default function StripePaymentWidget({
   return (
     <Elements key={clientSecret} stripe={stripePromise} options={options}>
       <StripePaymentForm
-        orderId={orderId}
+        returnUrl={returnUrl}
         onPaymentConfirmed={onPaymentConfirmed}
         onError={onError}
       />

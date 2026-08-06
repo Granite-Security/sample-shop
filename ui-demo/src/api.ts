@@ -21,6 +21,11 @@ import type {
   AdminUserProfile,
   DeleteUserResult,
   AvatarSource,
+  BalanceResponse,
+  BalanceTransaction,
+  TransferRequest,
+  TransferResponse,
+  GiftResponse,
   MessageResponse,
   RecipientResponse,
   SendMessageRequest,
@@ -307,6 +312,37 @@ export const api = {
   },
 
   deleteFile: (id: number) => request<void>(`/api/profiles/me/files/${id}`, { method: 'DELETE' }),
+
+  // Balance — mirrors ui-shop/src/api/balance.ts. Top-ups go through payment,
+  // because balance never talks to Stripe or PayPal itself.
+  getBalance: () => request<BalanceResponse>('/api/balance/me'),
+
+  getBalanceTransactions: (page = 0, size = 20) =>
+    request<BalanceTransaction[]>(`/api/balance/me/transactions?page=${page}&size=${size}`),
+
+  transferBalance: (body: TransferRequest) =>
+    request<TransferResponse>('/api/balance/me/transfers', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  // Admin only; a 403 is the server refusing, not the UI.
+  giftBalance: (body: { username: string; amountChf: number; reason?: string; idempotencyKey?: string }) =>
+    request<GiftResponse>('/api/balance/admin/gifts', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  createTopupIntent: (amountChf: number, provider: string, currency = 'CHF') =>
+    request<CreatePaymentIntentResponse>('/api/payments/topup-intent', {
+      method: 'POST',
+      body: JSON.stringify({ amount: amountChf, currency, provider }),
+    }),
+
+  // The only reliable confirmation for a top-up: provider webhooks resolve
+  // payments through an order id, and a top-up has none (finance.md §6.1).
+  syncTopup: (paymentId: string) =>
+    request<CreatePaymentIntentResponse>(`/api/payments/topup/${paymentId}/sync`, { method: 'POST' }),
 
   // User-to-user messaging — mirrors ui-shop/src/api/messages.ts. Served by
   // profile under /api/profiles/me/messages, so these are authenticated by the

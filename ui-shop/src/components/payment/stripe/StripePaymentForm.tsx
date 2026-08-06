@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
 export default function PaymentForm({
-  orderId,
+  returnUrl,
   onPaymentConfirmed,
   onError,
 }: {
-  orderId: number;
+  returnUrl: string;
   onPaymentConfirmed: () => void;
   onError: (msg: string) => void;
 }) {
@@ -21,7 +21,7 @@ export default function PaymentForm({
     try {
       const { error } = await stripe.confirmPayment({
         elements,
-        confirmParams: { return_url: window.location.origin + `/orders/${orderId}` },
+        confirmParams: { return_url: returnUrl },
         redirect: 'if_required',
       });
       if (error) {
