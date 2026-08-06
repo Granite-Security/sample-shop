@@ -1,51 +1,72 @@
 package org.granitesecurity.payment.provider;
 
 import org.granitesecurity.payment.domain.PaymentStatus;
-import org.granitesecurity.payment.domain.RefundStatus;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A webhook event is either a payment transition or a refund transition. Confusing
- * the two would apply a refund's status to a payment row, so the discrimination is
- * worth pinning.
+ * The distinction this type has to carry: an order payment resolves by order id,
+ * a top-up by reference. Before `reference` existed, a top-up webhook resolved to
+ * nothing and was skipped with a 200 — the provider never retried, and money was
+ * captured but never credited (docs/finance/finance.md §6.1).
  */
 class ProviderWebhookEventTest {
 
+    private static final String TOPUP_REFERENCE = "16c10f9e-7f50-4c16-a751-0bc638ddbd86";
+
     @Test
-    void aPaymentEventIsNotARefundEvent() {
-        var e = ProviderWebhookEvent.payment("evt_1", "payment_intent.succeeded", 42L,
+    void anOrderPaymentIsATransitionAndIsNotOrderless() {
+        var event = ProviderWebhookEvent.payment(
+                "evt_1", "PAYMENT.CAPTURE.COMPLETED", 42L, "42",
                 PaymentStatus.SUCCEEDED, "pi_1");
 
-        assertThat(e.isPaymentTransition()).isTrue();
-        assertThat(e.isRefundTransition()).isFalse();
+        assertTrue(event.isPaymentTransition());
+        assertFalse(event.isOrderless(), "an order payment has an order id");
     }
 
     @Test
-    void aRefundEventIsNotAPaymentEvent() {
-        var e = ProviderWebhookEvent.refund("evt_2", "refund.updated", RefundStatus.FAILED, "re_1", "pi_1");
+    void aTopupIsATransitionEvenWithNoOrderId() {
+        var event = ProviderWebhookEvent.payment(
+                "evt_2", "PAYMENT.CAPTURE.COMPLETED", null, TOPUP_REFERENCE,
+                PaymentStatus.SUCCEEDED, "pi_2");
 
-        assertThat(e.isRefundTransition()).isTrue();
-        assertThat(e.isPaymentTransition()).isFalse();
-        assertThat(e.refundStatus()).isEqualTo(RefundStatus.FAILED);
+        // This is the assertion that would have caught the bug: before `reference`,
+        // isPaymentTransition() required an order id and this was false.
+        assertTrue(event.isPaymentTransition(), "a top-up is still a payment transition");
+        assertTrue(event.isOrderless());
     }
 
     @Test
-    void aRefundEventNeedsNoOrderId() {
-        // Refunds are looked up by the provider's refund id: the Refund object carries
-        // no order metadata, only the payment intent it belongs to.
-        var e = ProviderWebhookEvent.refund("evt_3", "refund.updated", RefundStatus.SUCCEEDED, "re_2", "pi_2");
+    void anEventWithNeitherIdentifierIsNotATransition() {
+        var event = ProviderWebhookEvent.payment(
+                "evt_3", "PAYMENT.CAPTURE.COMPLETED", null, null,
+                PaymentStatus.SUCCEEDED, "pi_3");
 
-        assertThat(e.orderId()).isNull();
-        assertThat(e.isRefundTransition()).isTrue();
+        // Nothing to resolve it by: skipped rather than retried forever.
+        assertFalse(event.isPaymentTransition());
+        assertFalse(event.isOrderless());
     }
 
     @Test
-    void anUnmappableEventIsNeither() {
-        var e = ProviderWebhookEvent.payment("evt_4", "charge.updated", null, null, null);
+    void aRefundNeedsNoOrderOrReference() {
+        var event = ProviderWebhookEvent.refund(
+                "evt_4", "PAYMENT.CAPTURE.REFUNDED",
+                org.granitesecurity.payment.domain.RefundStatus.SUCCEEDED, "re_1", "pi_1");
 
-        assertThat(e.isPaymentTransition()).isFalse();
-        assertThat(e.isRefundTransition()).isFalse();
+        assertTrue(event.isRefundTransition(), "refunds are keyed by refund id");
+        assertFalse(event.isPaymentTransition());
+    }
+
+    @Test
+    void anApprovalCarriesItsReferenceForFinalization() {
+        var topupApproval = ProviderWebhookEvent.approval(
+                "evt_5", "CHECKOUT.ORDER.APPROVED", null, TOPUP_REFERENCE, "pp_1");
+
+        // The path that rescues a shopper who approves and closes the tab. Without a
+        // reference there is nothing to finalize a top-up against.
+        assertTrue(topupApproval.requiresFinalization());
+        assertTrue(topupApproval.isOrderless());
     }
 }
