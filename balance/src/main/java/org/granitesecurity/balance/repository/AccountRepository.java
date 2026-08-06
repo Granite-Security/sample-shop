@@ -43,4 +43,8 @@ public interface AccountRepository extends ReactiveCrudRepository<Account, Long>
     Mono<Long> debitUnchecked(Long id, long amountMinor);
 
     Flux<Account> findAllByKind(String kind);
+
+    /** House accounts first, then users by name — the order the treasury page wants. */
+    @Query("SELECT * FROM account ORDER BY kind DESC, username")
+    Flux<Account> findAllForTreasury();
 }

@@ -107,6 +107,27 @@ public class BalanceRoute {
                                     mediaType = MediaType.APPLICATION_JSON_VALUE,
                                     schema = @Schema(implementation = GiftRequest.class))))),
             @RouterOperation(
+                    path = "/api/balance/admin/accounts",
+                    method = RequestMethod.GET,
+                    beanClass = AdminBalanceHandler.class,
+                    beanMethod = "listAccounts",
+                    operation = @Operation(
+                            operationId = "listAccounts",
+                            summary = "Every account and its balance (ROLE_ADMIN)",
+                            description = "House accounts first. A house account's negative "
+                                    + "balance is what it has issued.",
+                            security = @SecurityRequirement(name = "bearer-jwt"))),
+            @RouterOperation(
+                    path = "/api/balance/admin/ledger",
+                    method = RequestMethod.GET,
+                    beanClass = AdminBalanceHandler.class,
+                    beanMethod = "ledger",
+                    operation = @Operation(
+                            operationId = "ledger",
+                            summary = "Every movement, newest first (ROLE_ADMIN)",
+                            description = "Two rows share a transferId and sum to zero.",
+                            security = @SecurityRequirement(name = "bearer-jwt"))),
+            @RouterOperation(
                     path = "/api/balance/admin/reconcile",
                     method = RequestMethod.GET,
                     beanClass = AdminBalanceHandler.class,
@@ -135,6 +156,8 @@ public class BalanceRoute {
                 // authenticated but not role-checked.
                 .POST("/api/balance/admin/gifts", adminHandler::gift)
                 .GET("/api/balance/admin/reconcile", adminHandler::reconcile)
+                .GET("/api/balance/admin/accounts", adminHandler::listAccounts)
+                .GET("/api/balance/admin/ledger", adminHandler::ledger)
                 // Service-to-service, SCOPE_internal. Undocumented in Swagger on
                 // purpose: nothing a human should be driving by hand, and the
                 // operations are reachable only with an internal token anyway.
