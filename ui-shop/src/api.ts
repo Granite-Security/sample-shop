@@ -24,4 +24,4 @@ export const api = {
   storage: storageApi,
 };
 
-export { setAccessToken } from './api/client';
+export { setAccessToken, setTokenRefresher } from './api/client';

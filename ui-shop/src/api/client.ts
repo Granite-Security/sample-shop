@@ -2,6 +2,20 @@ const BASE = '';
 
 let accessToken: string | null = null;
 
+/**
+ * How to get a fresh access token. Injected by AuthProvider rather than imported,
+ * so this module stays free of oidc-client-ts — the same reasoning as
+ * setAccessToken below.
+ */
+let refreshAccessToken: (() => Promise<string | null>) | null = null;
+
+/**
+ * One refresh in flight at a time. Without this, a page that fires five requests
+ * on mount would start five silent renewals when the token expires, and four of
+ * them would race the fifth's session update.
+ */
+let refreshInFlight: Promise<string | null> | null = null;
+
 export type ApiRequestOptions = RequestInit & {
   skipAuth?: boolean;
 };
@@ -21,6 +35,20 @@ export function setAccessToken(token: string | null) {
   accessToken = token;
 }
 
+export function setTokenRefresher(refresher: (() => Promise<string | null>) | null) {
+  refreshAccessToken = refresher;
+}
+
+function refreshOnce(): Promise<string | null> {
+  if (!refreshAccessToken) return Promise.resolve(null);
+  if (!refreshInFlight) {
+    refreshInFlight = refreshAccessToken()
+      .catch(() => null)
+      .finally(() => { refreshInFlight = null; });
+  }
+  return refreshInFlight;
+}
+
 function createHeaders(headers?: HeadersInit): Headers {
   const nextHeaders = new Headers(headers);
 
@@ -37,17 +65,28 @@ function createHeaders(headers?: HeadersInit): Headers {
 
 export async function request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   const { skipAuth, ...fetchOptions } = options;
-  const headers = createHeaders(fetchOptions.headers);
 
-  if (skipAuth) {
-    headers.delete('Authorization');
+  const send = () => {
+    const headers = createHeaders(fetchOptions.headers);
+    if (skipAuth) {
+      headers.delete('Authorization');
+    }
+    // Headers are rebuilt per attempt so a retry picks up the refreshed token.
+    return fetch(`${BASE}${path}`, { ...fetchOptions, headers, cache: 'no-store' });
+  };
+
+  let response = await send();
+
+  // Access tokens live ~5 minutes. Without this, a page open longer than that
+  // fails every call until the user reloads — the token is stale, not the
+  // session. Refresh silently and retry exactly once; a second 401 means the
+  // session itself is gone and the caller should see it.
+  if (response.status === 401 && !skipAuth && refreshAccessToken) {
+    const fresh = await refreshOnce();
+    if (fresh) {
+      response = await send();
+    }
   }
-
-  const response = await fetch(`${BASE}${path}`, {
-    ...fetchOptions,
-    headers,
-    cache: 'no-store',
-  });
 
   if (response.status === 204) {
     return undefined as T;
