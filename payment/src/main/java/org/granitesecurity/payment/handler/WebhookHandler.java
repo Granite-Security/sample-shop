@@ -130,17 +130,23 @@ public class WebhookHandler {
             log.info("Ignoring unhandled event type: {} ({})", event.eventType(), event.eventId());
             return ServerResponse.ok().bodyValue(Map.of("status", "skipped", "reason", "unhandled_event_type"));
         }
-        if (event.orderId() == null) {
-            return ServerResponse.ok().bodyValue(Map.of("status", "skipped", "reason", "no_order_id"));
+        // Nothing to look the payment up by. Previously this was the "no order id"
+        // case; it now also covers a reference we did not write. Skipped with a 200
+        // on purpose: an event for a payment created outside this system (straight
+        // from a provider dashboard) is not ours, and erroring would have the
+        // provider retry it forever.
+        if (event.orderId() == null && paymentId(event) == null) {
+            log.info("Event {} ({}) carries nothing we can resolve — skipping",
+                    event.eventId(), event.eventType());
+            return ServerResponse.ok().bodyValue(Map.of("status", "skipped", "reason", "unresolvable"));
         }
-
-        return paymentRepository.findByOrderId(event.orderId())
-                .switchIfEmpty(Mono.error(new RuntimeException("Payment not found for order " + event.orderId())))
+        return resolvePayment(event)
+                .switchIfEmpty(Mono.error(new RuntimeException("Payment not found for " + describe(event))))
                 .flatMap(payment -> updatePaymentStatus(payment, event.status()))
                 .flatMap(payment -> publishStatusEvent(payment, event.status()).thenReturn(payment))
                 .flatMap(payment -> ServerResponse.ok().bodyValue(Map.of(
                         "status", "processed",
-                        "orderId", payment.getOrderId(),
+                        "reference", describe(event),
                         "paymentStatus", payment.getStatus())));
     }
 
@@ -153,16 +159,57 @@ public class WebhookHandler {
      * {@code finalizePayment} is required to be idempotent for exactly this reason.
      */
     private Mono<ServerResponse> applyFinalization(PaymentProvider provider, ProviderWebhookEvent event) {
-        if (event.orderId() == null) {
-            return ServerResponse.ok().bodyValue(Map.of("status", "skipped", "reason", "no_order_id"));
+        log.info("Event {} ({}) reports {} approved — finalizing",
+                event.eventId(), event.eventType(), describe(event));
+
+        Mono<Payment> finalized;
+        if (event.orderId() != null) {
+            finalized = paymentService.finalizeRedirectPayment(provider.name(), event.orderId());
+        } else if (event.isOrderless() && paymentId(event) != null) {
+            // A top-up: no order to key on, so it finalizes by payment id. Without
+            // this the shopper who approves and closes the tab is charged and never
+            // credited (docs/finance/finance.md §6.1).
+            finalized = paymentService.finalizeRedirectTopup(provider.name(), paymentId(event));
+        } else {
+            return ServerResponse.ok().bodyValue(Map.of("status", "skipped", "reason", "unresolvable"));
         }
-        log.info("Event {} ({}) reports order {} approved — finalizing",
-                event.eventId(), event.eventType(), event.orderId());
-        return paymentService.finalizeRedirectPayment(provider.name(), event.orderId())
-                .flatMap(payment -> ServerResponse.ok().bodyValue(Map.of(
-                        "status", "processed",
-                        "orderId", payment.getOrderId(),
-                        "paymentStatus", payment.getStatus())));
+
+        return finalized.flatMap(payment -> ServerResponse.ok().bodyValue(Map.of(
+                "status", "processed",
+                "reference", describe(event),
+                "paymentStatus", payment.getStatus())));
+    }
+
+    /**
+     * Finds the payment an event belongs to.
+     *
+     * <p>An order payment resolves by order id, as it always has. A top-up has no
+     * order, so it resolves by the payment id we put in the provider's metadata as
+     * `reference`. Before this existed, such an event was skipped with a 200 — the
+     * provider never retried, and the money was captured but never credited.
+     */
+    private Mono<Payment> resolvePayment(ProviderWebhookEvent event) {
+        if (event.orderId() != null) {
+            return paymentRepository.findByOrderId(event.orderId());
+        }
+        java.util.UUID id = paymentId(event);
+        return id == null ? Mono.empty() : paymentRepository.findById(id);
+    }
+
+    /** The reference as a payment id, or null when it is not one (an order id, say). */
+    private static java.util.UUID paymentId(ProviderWebhookEvent event) {
+        if (event.reference() == null) {
+            return null;
+        }
+        try {
+            return java.util.UUID.fromString(event.reference());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private static String describe(ProviderWebhookEvent event) {
+        return event.orderId() != null ? "order " + event.orderId() : "payment " + event.reference();
     }
 
     /**

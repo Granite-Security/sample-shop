@@ -262,9 +262,15 @@ public class StripePaymentProvider implements PaymentProvider {
         PaymentStatus status = mapEventType(event.getType());
         String providerPaymentId = null;
         Long orderId = null;
+        // Our own handle on the payment: the order id for an order, the payment id for
+        // a top-up. Written by intentParams below, and the only thing that resolves a
+        // top-up — order_id is the literal string "null" for one.
+        String reference = null;
         if (objectOpt.isPresent() && objectOpt.get() instanceof PaymentIntent intent) {
             providerPaymentId = intent.getId();
-            orderId = parseOrderId(intent.getMetadata() == null ? null : intent.getMetadata().get("order_id"),
+            var metadata = intent.getMetadata();
+            reference = metadata == null ? null : metadata.get("reference");
+            orderId = parseOrderId(metadata == null ? null : metadata.get("order_id"),
                     intent.getId());
         } else if (status != null) {
             // The SDK deserializer fails when the event was produced by a different API
@@ -276,6 +282,8 @@ public class StripePaymentProvider implements PaymentProvider {
                 var dataObj = MAPPER.readTree(payload).get("data").get("object");
                 providerPaymentId = dataObj.get("id").asText();
                 var meta = dataObj.get("metadata");
+                reference = meta != null && meta.get("reference") != null
+                        ? meta.get("reference").asText(null) : null;
                 orderId = parseOrderId(
                         meta != null && meta.get("order_id") != null ? meta.get("order_id").asText(null) : null,
                         providerPaymentId);
@@ -284,7 +292,8 @@ public class StripePaymentProvider implements PaymentProvider {
             }
         }
 
-        return ProviderWebhookEvent.payment(event.getId(), event.getType(), orderId, status, providerPaymentId);
+        return ProviderWebhookEvent.payment(event.getId(), event.getType(), orderId, reference,
+                status, providerPaymentId);
     }
 
     private PaymentIntentCreateParams.Builder intentParams(CreateIntentRequest request) {
@@ -328,6 +337,11 @@ public class StripePaymentProvider implements PaymentProvider {
     private Long parseOrderId(String raw, String intentId) {
         if (raw == null || raw.isBlank()) {
             log.warn("PaymentIntent {} has no order_id metadata", intentId);
+            return null;
+        }
+        if ("null".equals(raw)) {
+            // A top-up: created with no order, so intentParams wrote the string "null".
+            // It is resolved through metadata.reference instead, and is not a fault.
             return null;
         }
         try {

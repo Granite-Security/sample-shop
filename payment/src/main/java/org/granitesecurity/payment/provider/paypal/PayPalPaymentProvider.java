@@ -392,7 +392,7 @@ public class PayPalPaymentProvider implements RedirectPaymentProvider {
 
         if ("CHECKOUT.ORDER.APPROVED".equals(eventType)) {
             return ProviderWebhookEvent.approval(eventId, eventType,
-                    orderIdOf(resource, eventId), text(resource, "id"));
+                    orderIdOf(resource, eventId), referenceOf(resource), text(resource, "id"));
         }
 
         RefundStatus refundStatus = mapRefundEventType(eventType);
@@ -405,11 +405,15 @@ public class PayPalPaymentProvider implements RedirectPaymentProvider {
         // The capture resource's own order id lives under supplementary_data; its
         // custom_id is the shop order id we put on the purchase unit.
         return ProviderWebhookEvent.payment(eventId, eventType, orderIdOf(resource, eventId),
-                status, relatedOrderId(resource));
+                referenceOf(resource), status, relatedOrderId(resource));
     }
 
-    /** Our shop order id, from the custom_id echoed back on the resource. */
-    private Long orderIdOf(JsonNode resource, String eventId) {
+    /**
+     * Our own handle on the payment, from the custom_id echoed back on the resource.
+     * An order id for an order, a payment id for a top-up — this is what identifies
+     * the payment, and it is never null for anything we created.
+     */
+    private String referenceOf(JsonNode resource) {
         String raw = text(resource, "custom_id");
         if (raw == null) {
             // On CHECKOUT.ORDER.* the resource is the order itself, so custom_id sits on
@@ -419,14 +423,24 @@ public class PayPalPaymentProvider implements RedirectPaymentProvider {
                 raw = text(units.get(0), "custom_id");
             }
         }
-        if (raw == null || raw.isBlank()) {
-            log.warn("PayPal event {} carries no custom_id — cannot resolve the order", eventId);
+        return raw == null || raw.isBlank() ? null : raw.trim();
+    }
+
+    /**
+     * The shop order id, when this payment has one. A non-numeric custom_id is a
+     * top-up rather than a fault — it is resolved through {@link #referenceOf}
+     * instead, so this stays quiet about it.
+     */
+    private Long orderIdOf(JsonNode resource, String eventId) {
+        String raw = referenceOf(resource);
+        if (raw == null) {
+            log.warn("PayPal event {} carries no custom_id — cannot resolve the payment", eventId);
             return null;
         }
         try {
-            return Long.parseLong(raw.trim());
+            return Long.parseLong(raw);
         } catch (NumberFormatException e) {
-            log.warn("PayPal event {} has non-numeric custom_id: {}", eventId, raw);
+            // A top-up: reference is a payment id, and there is no order.
             return null;
         }
     }
