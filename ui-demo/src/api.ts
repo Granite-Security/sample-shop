@@ -21,8 +21,11 @@ import type {
   AdminUserProfile,
   DeleteUserResult,
   AvatarSource,
+  AccountView,
   BalanceResponse,
   BalanceTransaction,
+  LedgerEntryView,
+  ReconcileReport,
   TransferRequest,
   TransferResponse,
   GiftResponse,
@@ -375,6 +378,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  // Treasury, ROLE_ADMIN. `manager` has ROLE_ADMIN too, so one gate covers both.
+  reconcileBalances: () => request<ReconcileReport>('/api/balance/admin/reconcile'),
+
+  getBalanceAccounts: () => request<AccountView[]>('/api/balance/admin/accounts'),
+
+  getBalanceLedger: (page = 0, size = 50) =>
+    request<LedgerEntryView[]>(`/api/balance/admin/ledger?page=${page}&size=${size}`),
 
   createTopupIntent: (amountChf: number, provider: string, currency = 'CHF') =>
     request<CreatePaymentIntentResponse>('/api/payments/topup-intent', {

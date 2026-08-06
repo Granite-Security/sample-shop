@@ -3,7 +3,11 @@ package org.granitesecurity.balance.handler;
 import org.granitesecurity.balance.domain.Account;
 import org.granitesecurity.balance.domain.LedgerEntry;
 import org.granitesecurity.balance.dto.GiftRequest;
+import org.granitesecurity.balance.dto.AccountView;
 import org.granitesecurity.balance.dto.GiftResponse;
+import org.granitesecurity.balance.dto.LedgerEntryView;
+import org.granitesecurity.balance.repository.AccountRepository;
+import org.granitesecurity.balance.repository.LedgerEntryRepository;
 import org.granitesecurity.balance.service.BalanceService;
 import org.granitesecurity.balance.service.IdempotencyService;
 import org.granitesecurity.balance.service.Money;
@@ -34,13 +38,59 @@ public class AdminBalanceHandler {
     private final BalanceService balanceService;
     private final ReconcileService reconcileService;
     private final IdempotencyService idempotencyService;
+    private final AccountRepository accountRepository;
+    private final LedgerEntryRepository ledgerEntryRepository;
 
     public AdminBalanceHandler(BalanceService balanceService,
                                ReconcileService reconcileService,
-                               IdempotencyService idempotencyService) {
+                               IdempotencyService idempotencyService,
+                               AccountRepository accountRepository,
+                               LedgerEntryRepository ledgerEntryRepository) {
         this.balanceService = balanceService;
         this.reconcileService = reconcileService;
         this.idempotencyService = idempotencyService;
+        this.accountRepository = accountRepository;
+        this.ledgerEntryRepository = ledgerEntryRepository;
+    }
+
+    /** Every account, house and user, with its balance. */
+    public Mono<ServerResponse> listAccounts(ServerRequest request) {
+        return accountRepository.findAllForTreasury()
+                .map(a -> new AccountView(a.getId(), a.getUsername(), a.getKind(),
+                        a.getBalanceMinor(), Money.toChf(a.getBalanceMinor())))
+                .collectList()
+                .flatMap(body -> ServerResponse.ok().bodyValue(body));
+    }
+
+    /**
+     * Every movement, newest first. Entries come back with account_id rather than
+     * a username: the account list is small and the caller already has it, so this
+     * avoids a join and a projection for no gain.
+     */
+    public Mono<ServerResponse> ledger(ServerRequest request) {
+        int size = Math.min(Math.max(intParam(request, "size", 50), 1), 200);
+        long offset = (long) Math.max(intParam(request, "page", 0), 0) * size;
+        return ledgerEntryRepository.findAllNewestFirst(size, offset)
+                .map(e -> new LedgerEntryView(
+                        e.getId(),
+                        e.getTransferId() == null ? null : e.getTransferId().toString(),
+                        e.getAccountId(),
+                        e.getAmountMinor(),
+                        Money.toChf(e.getAmountMinor()),
+                        e.getKind(),
+                        e.getReference(),
+                        e.getMemo(),
+                        e.getCreatedAt()))
+                .collectList()
+                .flatMap(body -> ServerResponse.ok().bodyValue(body));
+    }
+
+    private static int intParam(ServerRequest request, String name, int fallback) {
+        try {
+            return request.queryParam(name).map(Integer::parseInt).orElse(fallback);
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
     }
 
     public Mono<ServerResponse> gift(ServerRequest request) {

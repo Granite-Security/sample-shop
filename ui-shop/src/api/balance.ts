@@ -1,6 +1,9 @@
 import { request } from './client';
 import type {
+  AccountView,
   BalanceResponse,
+  LedgerEntryView,
+  ReconcileReport,
   BalanceTransaction,
   CreatePaymentIntentResponse,
   GiftRequest,
@@ -33,6 +36,14 @@ export const balanceApi = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  // Treasury, ROLE_ADMIN. `manager` has ROLE_ADMIN too, so one gate covers both.
+  reconcile: () => request<ReconcileReport>('/api/balance/admin/reconcile'),
+
+  accounts: () => request<AccountView[]>('/api/balance/admin/accounts'),
+
+  ledger: (page = 0, size = 50) =>
+    request<LedgerEntryView[]>(`/api/balance/admin/ledger?page=${page}&size=${size}`),
 
   // Opens a provider payment that funds the balance. Returns the same shape as
   // an order intent, so the existing payment widgets can complete it.

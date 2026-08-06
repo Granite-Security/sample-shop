@@ -322,3 +322,43 @@ export interface GiftResponse {
   amountChf: number;
   grantedBy: string;
 }
+
+// ── Treasury (admin) ────────────────────────────────────────────────
+export interface AccountView {
+  id: number;
+  username: string;
+  kind: 'USER' | 'HOUSE';
+  balanceMinor: number;
+  balanceChf: number;
+}
+
+export interface LedgerEntryView {
+  id: number;
+  transferId: string | null;
+  accountId: number;
+  amountMinor: number;
+  amountChf: number;
+  kind: 'TOPUP' | 'SPEND' | 'REFUND' | 'TRANSFER' | 'GIFT';
+  reference: string | null;
+  memo: string | null;
+  createdAt: string;
+}
+
+export interface AccountDrift {
+  username: string;
+  cachedMinor: number;
+  ledgerSumMinor: number;
+}
+
+/** The central bank's own books (docs/finance/finance.md §7.1). */
+export interface ReconcileReport {
+  balanced: boolean;
+  ledgerSumMinor: number;
+  userTotalMinor: number;
+  houseTotalMinor: number;
+  unbackedIssuedMinor: number;
+  backedIssuedMinor: number;
+  redeemedMinor: number;
+  creditOutstandingMinor: number;
+  drift: AccountDrift[];
+}

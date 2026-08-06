@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router';
+import { useAuth } from '../auth';
 
 const LINKS = [
   { to: '/profile', label: 'Profile', end: true },
@@ -11,11 +12,18 @@ const LINKS = [
 ];
 
 export default function AccountNav() {
+  const { isAdmin } = useAuth();
+  // Treasury shows every user's balance, so it is admin-only. The server
+  // enforces that too — this only decides what is worth rendering.
+  const links = isAdmin
+    ? [...LINKS, { to: '/profile/treasury', label: 'Treasury', end: false }]
+    : LINKS;
+
   return (
     <div className="account-nav">
       <h3>My Account</h3>
       <ul>
-        {LINKS.map(link => (
+        {links.map(link => (
           <li key={link.to}>
             <NavLink to={link.to} end={link.end} className={({ isActive }) => (isActive ? 'active' : '')}>
               {link.label}
