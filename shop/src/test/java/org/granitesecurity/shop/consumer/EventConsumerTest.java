@@ -10,6 +10,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import java.math.BigDecimal;
 import java.util.Map;
@@ -41,7 +42,7 @@ class EventConsumerTest {
         when(customerOrderRepository.findById(1L)).thenReturn(Mono.just(order));
         when(customerOrderRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        eventConsumer.onPaymentEvent(json(Map.of("orderId", 1, "paymentId", "pay-123", "amount", 99.99)));
+        eventConsumer.onPaymentEvent(json(Map.of("orderId", 1, "paymentId", "pay-123", "amount", 99.99))).block();
 
         assertEquals("PAID", order.getStatus());
     }
@@ -52,7 +53,7 @@ class EventConsumerTest {
         when(customerOrderRepository.findById(1L)).thenReturn(Mono.just(order));
         when(customerOrderRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        eventConsumer.onPaymentEvent(json(Map.of("orderId", 1, "reason", "Insufficient funds")));
+        eventConsumer.onPaymentEvent(json(Map.of("orderId", 1, "reason", "Insufficient funds"))).block();
 
         assertEquals("PAYMENT_FAILED", order.getStatus());
     }
@@ -63,7 +64,7 @@ class EventConsumerTest {
         when(customerOrderRepository.findById(1L)).thenReturn(Mono.just(order));
         when(customerOrderRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        eventConsumer.onShipmentEvent(json(Map.of("orderId", 1, "shipmentId", "ship-1", "carrier", "UPS")));
+        eventConsumer.onShipmentEvent(json(Map.of("orderId", 1, "shipmentId", "ship-1", "carrier", "UPS"))).block();
 
         assertEquals("SHIPPED", order.getStatus());
     }
@@ -74,7 +75,7 @@ class EventConsumerTest {
         when(customerOrderRepository.findById(1L)).thenReturn(Mono.just(order));
         when(customerOrderRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        eventConsumer.onShipmentEvent(json(Map.of("orderId", 1, "shipmentId", "ship-1", "deliveredAt", "2026-06-13T12:00:00Z")));
+        eventConsumer.onShipmentEvent(json(Map.of("orderId", 1, "shipmentId", "ship-1", "deliveredAt", "2026-06-13T12:00:00Z"))).block();
 
         assertEquals("DELIVERED", order.getStatus());
     }
@@ -84,7 +85,7 @@ class EventConsumerTest {
         CustomerOrder order = orderWithStatus(OrderStatus.PAID);
         when(customerOrderRepository.findById(1L)).thenReturn(Mono.just(order));
 
-        eventConsumer.onPaymentEvent(json(Map.of("orderId", 1, "paymentId", "pay-123", "amount", 99.99)));
+        eventConsumer.onPaymentEvent(json(Map.of("orderId", 1, "paymentId", "pay-123", "amount", 99.99))).block();
 
         assertEquals("PAID", order.getStatus());
         verify(customerOrderRepository, never()).save(any());
@@ -94,7 +95,7 @@ class EventConsumerTest {
     void unknownOrderDoesNotThrow() {
         when(customerOrderRepository.findById(99L)).thenReturn(Mono.empty());
 
-        eventConsumer.onPaymentEvent(json(Map.of("orderId", 99, "paymentId", "pay-123", "amount", 99.99)));
+        eventConsumer.onPaymentEvent(json(Map.of("orderId", 99, "paymentId", "pay-123", "amount", 99.99))).block();
 
         verify(customerOrderRepository, never()).save(any());
     }
@@ -105,13 +106,13 @@ class EventConsumerTest {
         when(customerOrderRepository.findById(1L)).thenReturn(Mono.just(order));
         when(customerOrderRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        eventConsumer.onPaymentEvent(json(Map.of("orderId", 1, "paymentId", "pay-1", "amount", 99.99)));
+        eventConsumer.onPaymentEvent(json(Map.of("orderId", 1, "paymentId", "pay-1", "amount", 99.99))).block();
         assertEquals("PAID", order.getStatus());
 
-        eventConsumer.onShipmentEvent(json(Map.of("orderId", 1, "shipmentId", "ship-1", "carrier", "UPS")));
+        eventConsumer.onShipmentEvent(json(Map.of("orderId", 1, "shipmentId", "ship-1", "carrier", "UPS"))).block();
         assertEquals("SHIPPED", order.getStatus());
 
-        eventConsumer.onShipmentEvent(json(Map.of("orderId", 1, "shipmentId", "ship-1", "deliveredAt", "2026-06-13T12:00:00Z")));
+        eventConsumer.onShipmentEvent(json(Map.of("orderId", 1, "shipmentId", "ship-1", "deliveredAt", "2026-06-13T12:00:00Z"))).block();
         assertEquals("DELIVERED", order.getStatus());
 
         verify(customerOrderRepository, times(3)).save(any());
@@ -123,7 +124,7 @@ class EventConsumerTest {
         when(customerOrderRepository.findById(1L)).thenReturn(Mono.just(order));
         when(customerOrderRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        eventConsumer.onDeliveryEvent(json(Map.of("orderId", 1, "status", "FAILED")));
+        eventConsumer.onDeliveryEvent(json(Map.of("orderId", 1, "status", "FAILED"))).block();
 
         assertEquals("FAILED", order.getDeliveryStatus());
         assertEquals("SHIPPED", order.getStatus());
@@ -136,7 +137,7 @@ class EventConsumerTest {
         when(customerOrderRepository.findById(1L)).thenReturn(Mono.just(order));
         when(customerOrderRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        eventConsumer.onDeliveryEvent(json(Map.of("orderId", 1, "status", "DISPATCHED")));
+        eventConsumer.onDeliveryEvent(json(Map.of("orderId", 1, "status", "DISPATCHED"))).block();
 
         assertEquals("SHIPPED", order.getStatus());
         assertEquals("DISPATCHED", order.getDeliveryStatus());
@@ -148,9 +149,49 @@ class EventConsumerTest {
         when(customerOrderRepository.findById(1L)).thenReturn(Mono.just(order));
         when(customerOrderRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        eventConsumer.onPaymentEvent(json(Map.of("orderId", 1, "status", "REFUNDED")));
+        eventConsumer.onPaymentEvent(json(Map.of("orderId", 1, "status", "REFUNDED"))).block();
 
         assertEquals("REIMBURSED", order.getStatus());
+    }
+
+    /**
+     * The distinction the retry policy turns on: unparseable is permanent, so it must be
+     * a MalformedEventException the pipeline can route straight to the dead-letter topic
+     * instead of retrying it four times first.
+     */
+    @Test
+    void unparseableMessageFailsAsMalformed() {
+        StepVerifier.create(eventConsumer.onPaymentEvent("{not json"))
+                .expectError(MalformedEventException.class)
+                .verify();
+    }
+
+    /**
+     * The regression this refactor exists for. The handler used to block inside a
+     * try/catch, so a database failure was logged and the offset committed — the money
+     * had moved and the order stayed PENDING for good. The error must now escape.
+     */
+    @Test
+    void databaseFailurePropagatesInsteadOfBeingSwallowed() {
+        when(customerOrderRepository.findById(1L))
+                .thenReturn(Mono.error(new RuntimeException("connection reset")));
+
+        StepVerifier.create(eventConsumer.onPaymentEvent(
+                        json(Map.of("orderId", 1, "status", "SUCCEEDED"))))
+                .expectErrorMessage("connection reset")
+                .verify();
+    }
+
+    /** A transient failure is not a MalformedEventException, so the pipeline retries it. */
+    @Test
+    void databaseFailureIsNotClassifiedAsMalformed() {
+        when(customerOrderRepository.findById(1L))
+                .thenReturn(Mono.error(new RuntimeException("connection reset")));
+
+        StepVerifier.create(eventConsumer.onPaymentEvent(
+                        json(Map.of("orderId", 1, "status", "SUCCEEDED"))))
+                .expectErrorMatches(error -> !(error instanceof MalformedEventException))
+                .verify();
     }
 
     private static CustomerOrder orderWithStatus(OrderStatus status) {
