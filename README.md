@@ -6,73 +6,57 @@ an async event-driven order/payment/delivery pipeline, and a fully reactive back
 ## Why this stack
 
 - **Customer management, not just checkout.** A dedicated `profile` service owns each user's profile and delivery addresses, auto-provisioned the moment `auth-server` publishes `UserRegistered` — customer data lives in your own database from signup, not a third-party CRM.
-- **OAuth2/OIDC integrated everywhere, not bolted on.** `auth-server` is a real Spring Authorization Server (OIDC provider) issuing JWTs; every downstream service — shop, payment, delivery, profile — independently validates the token as a resource server, and the gateway relays it via `TokenRelayGatewayFilterFactory`. One login, enforced consistently at every service boundary, with Google federated login supported alongside form login.
+- **OAuth2/OIDC integrated everywhere, not bolted on.** `auth-server` is a real Spring Authorization Server (OIDC provider) issuing JWTs; every downstream service — shop, payment, delivery, profile — independently validates the token as a resource server. The SPA holds the token (authorization code + PKCE) and sends it as a `Bearer` header; the gateway forwards it untouched and decides nothing. Authorization is enforced at each service boundary, never in one place that could be bypassed, with Google federated login supported alongside form login.
 - **Fully asynchronous, event-driven architecture.** Orders, payments, and identity events all flow through Kafka. Shop and payment use the transactional outbox pattern (`OrderPlaced` → `orders.events` → payment/delivery; `PaymentReceived` → `payments.events` → shop) so state transitions are durable and decoupled — no synchronous cross-service calls on the critical path.
 - **Stripe integration that doesn't depend on webhooks.** Production uses Stripe webhooks for payment confirmation and refunds, but every flow also has a synchronous fallback (`POST /api/payments/intent/{orderId}/sync`) that advances payment/refund state directly — useful for local dev, restricted network environments, or anywhere inbound webhooks aren't practical.
 - **Reactive end-to-end.** Every service except `auth-server` runs Spring WebFlux over R2DBC (non-blocking DB access) rather than blocking JDBC — the whole request path, database included, is non-blocking under load.
 
 ## Architecture
 
+Everything enters through the gateway, a pass-through reverse proxy: it routes
+by path and enforces no authorization of its own. Each service behind it
+validates the caller's JWT itself.
+
 ```
-                            Stripe                              Resend
-                              │                                   ▲
-                webhook ──────┤                                   │ email
-                              ▼                                   │
-Browser (5173) ── Gateway (8080) ──┬── Auth Server (9090) ── PostgreSQL (5432)
-     ui-shop      (Spring Cloud    │    (OIDC provider)          authdb
-     (React +      Gateway)        │        │  produces identity.events
-     Stripe                        │        │  (fire-and-forget, no outbox)
-     Elements)                     │        │
-                                   ├── Greetings (8060)
-                                   │
-                                   ├── Shop (8061) ─────────── PostgreSQL (5433)
-                                   │    (WebFlux + R2DBC)       shopdb
-                                   │       │       ▲
-                                   │   ┌───▼───────┴───────────────┐
-                                   │   │           Kafka           │
-                                   │   │  orders.events            │
-                                   │   │  payments.events          │
-                                   │   │  identity.events  (1h TTL)│
-                                   │   └─▲──┬──────┬─────────┬─────┘
-                                   │     │  │      │         │
-                                   │     │  ▼      ▼         ▼
-                                   ├── Payment (8062)   Delivery (8063)
-                                   │    (WebFlux + R2DBC  (WebFlux + R2DBC
-                                   │     + Stripe API)     + Kafka consumer)
-                                   │     │                 │
-                                   │     ▼                 ▼
-                                   │  PostgreSQL (5434)  PostgreSQL (5435)
-                                   │  paymentdb          deliverydb
-                                   │
-                                   ├── Profile (8064) ─────── PostgreSQL (5436)
-                                   │    (WebFlux + R2DBC)      profiledb
-                                   │    consumes UserRegistered
-                                   │
-                                   └── Notification (8066) ── PostgreSQL (5437)
-                                        (WebFlux + R2DBC)      notificationdb
-                                        consumes identity.events,
-                                        sends email via Resend
+ui-shop (5173) ┐                          ┌─ Auth Server (9090) ── OIDC provider,
+ui-demo        ├─> Gateway (8080) ────────┤   (servlet + JPA)      JWT + roles claim
+Stripe/PayPal  ┘   path routing,          │
+  webhooks         no auth of its own     ├─ Greetings 8060   Shop 8061   Payment 8062
+                                          └─ Delivery 8063    Profile 8064
+                                             Storage 8065     Balance 8067
+                                             Notification 8066 (no inbound API)
+```
+
+Every service except `auth-server` is WebFlux + R2DBC end to end. Seven own a
+database (`authdb` 5432, `shopdb` 5433, `paymentdb` 5434, `deliverydb` 5435,
+`profiledb` 5436, `notificationdb` 5437, `balancedb` 5438); `storage` owns a
+Garage S3 bucket instead, and `gateway`/`greetings` own no state.
+
+Services never call each other on the critical path — they exchange facts over
+Kafka. `shop`, `payment` and `delivery` publish through a transactional outbox;
+`auth-server` publishes fire-and-forget, no outbox, by design.
+
+```
+orders.events     shop        ──>  payment, delivery
+payments.events   payment     ──>  shop, delivery, balance
+delivery.events   delivery    ──>  shop
+identity.events   auth-server ──>  profile (provisions), notification (emails)
 ```
 
 | Service | Port | Stack | Role |
 |---------|------|-------|------|
-| `gateway` | 8080 | Spring Cloud Gateway (WebFlux) | OAuth2 client, route & token relay |
-| `auth-server` | 9090 | Spring Authorization Server | OIDC provider, form + Google login |
-| `greetings` | 8060 | Spring WebFlux | Public + secured endpoints (demo) |
-| `shop` | 8061 | Spring WebFlux + R2DBC | E-commerce catalog, orders |
-| `payment` | 8062 | Spring WebFlux + R2DBC + Stripe API | Payment intent creation, Stripe webhooks |
-| `delivery` | 8063 | Spring WebFlux + R2DBC + Kafka | Delivery tracking, consumes `orders.events` |
-| `profile` | 8064 | Spring WebFlux + R2DBC | User profile & delivery addresses; provisions profiles from `identity.events` |
-| `storage` | 8065 | Spring WebFlux + S3 (Garage) | Presigned uploads for avatars, user files and product media |
-| `notification` | 8066 | Spring WebFlux + R2DBC + Kafka | Transactional email (Resend); consumes `identity.events` |
-| `balance` | 8067 | Spring WebFlux + R2DBC + Kafka | CHF ledger: balances, transfers, admin gifts; pays orders as a payment provider |
+| `gateway` | 8080 | Spring Cloud Gateway (WebFlux) | Path routing; proxies `/auth/**` to auth-server |
+| `auth-server` | 9090 | Spring Authorization Server (JPA) | OIDC provider, form + Google login |
+| `greetings` | 8060 | WebFlux | Reference resource server (demo) |
+| `shop` | 8061 | WebFlux + R2DBC + Kafka | Catalog and orders |
+| `payment` | 8062 | WebFlux + R2DBC + Kafka + Stripe/PayPal | Payment intents, webhooks, refunds |
+| `delivery` | 8063 | WebFlux + R2DBC + Kafka | Delivery tracking |
+| `profile` | 8064 | WebFlux + R2DBC + Kafka | Profiles & delivery addresses |
+| `storage` | 8065 | WebFlux + S3 (Garage) | Presigned uploads: avatars, files, product media |
+| `notification` | 8066 | WebFlux + R2DBC + Kafka | Transactional email (Resend); owns all copy |
+| `balance` | 8067 | WebFlux + R2DBC + Kafka | CHF ledger; pays orders as a payment provider |
 | `ui-shop` | 5173 | React + Vite + oidc-client-ts | SPA storefront with Stripe Elements |
-| `postgres` | 5432 | PostgreSQL 17 | Auth server database |
-| `shop-postgres` | 5433 | PostgreSQL | Shop database |
-| `notification-postgres` | 5437 | PostgreSQL | Notification database |
-| `payment-postgres` | 5434 | PostgreSQL | Payment database |
-| `delivery-postgres` | 5435 | PostgreSQL | Delivery database |
-| `profile-postgres` | 5436 | PostgreSQL | Profile database |
+| `ui-demo` | — | Static (nginx) | Alternate storefront, same backend |
 
 ## Prerequisites
 
@@ -224,19 +208,25 @@ Register / change password / request reset
 
 ## API routes
 
+The gateway itself permits every exchange — the **Auth** column is what the
+receiving service enforces on the `Bearer` token the caller sends.
+
 | Path | Auth | Proxied to |
 |------|------|------------|
 | `/api/greetings/**` | Public | Greetings service |
-| `/api/secured/**` | JWT required | Greetings service (token relayed) |
+| `/api/secured/**` | JWT required | Greetings service |
 | `/api/shop/products` | GET public, POST/DELETE ADMIN | Shop service |
 | `/api/shop/categories` | GET public, POST/DELETE ADMIN | Shop service |
-| `/api/shop/orders` | JWT required | Shop service (token relayed) |
-| `/api/shop/orders/{id}/refund` | JWT required (admin: any paid order; user: own order, failed delivery only) | Shop service (token relayed) |
+| `/api/shop/orders` | JWT required | Shop service |
+| `/api/shop/orders/{id}/refund` | JWT required (admin: any paid order; user: own order, failed delivery only) | Shop service |
 | `/api/payments/intent/**` | Public (clientSecret fetch) | Payment service |
 | `/api/payments/webhook/{provider}` | Public (provider signature) | Payment service |
 | `/api/payments/providers` | Public | Payment service |
-| `/api/delivery/**` | JWT required | Delivery service (token relayed) |
-| `/api/profiles/**` | JWT required | Profile service (token relayed) |
+| `/api/delivery/**` | JWT required | Delivery service |
+| `/api/profiles/**` | JWT required | Profile service |
+| `/api/balance/**` | JWT required | Balance service |
+| `/api/storage/**` | JWT required | Storage service (route retries on failure) |
+| `/auth/**` | Public | Auth server (login, token, JWKS, discovery) |
 | `/v3/api-docs/**`, `/swagger-ui/**` | Public | Shop service |
 
 ## Stripe setup (payment service)
