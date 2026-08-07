@@ -29,6 +29,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-liquibase")
     implementation("org.springdoc:springdoc-openapi-starter-webflux-ui:3.0.1") //3.0.3
     implementation("org.springframework.kafka:spring-kafka")
+    // Not managed by the Spring Boot BOM — reactor-kafka ships on its own cadence.
+    implementation("io.projectreactor.kafka:reactor-kafka:1.3.23")
 
     compileOnly("org.projectlombok:lombok")
 //    developmentOnly("org.springframework.boot:spring-boot-docker-compose")

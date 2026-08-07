@@ -1,6 +1,9 @@
 package org.granitesecurity.shop.consumer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.granitesecurity.shop.domain.CustomerOrder;
 import org.granitesecurity.shop.domain.OrderStatus;
 import org.granitesecurity.shop.repository.CustomerOrderRepository;
@@ -8,7 +11,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.test.EmbeddedKafkaBroker;
+import org.springframework.kafka.test.utils.KafkaTestUtils;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -17,13 +23,18 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 @SpringBootTest
 @Testcontainers
-@EmbeddedKafka(topics = {"payments.events", "shipments.events"}, partitions = 1)
+@EmbeddedKafka(topics = {"payments.events", "shipments.events", "delivery.events",
+        "payments.events.DLT"}, partitions = 1)
 class EventConsumerIntegrationTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -53,6 +64,9 @@ class EventConsumerIntegrationTest {
 
     @Autowired
     private KafkaTemplate<String, String> kafkaTemplate;
+
+    @Autowired
+    private EmbeddedKafkaBroker embeddedKafka;
 
     @BeforeEach
     void setUp() {
@@ -128,6 +142,31 @@ class EventConsumerIntegrationTest {
         // Should stay PAID, not error
         CustomerOrder updated = awaitStatus(order.getId(), "PAID");
         assertEquals("PAID", updated.getStatus());
+    }
+
+    /**
+     * The record that can never be processed must end up somewhere a human can find it.
+     * Before the pipeline existed it was caught, logged and the offset committed — the
+     * only trace was a line in stdout.
+     */
+    @Test
+    void unparseableMessageIsDeadLettered() {
+        kafkaTemplate.send("payments.events", "{ this is not json");
+
+        Map<String, Object> props = KafkaTestUtils.consumerProps(
+                embeddedKafka.getBrokersAsString(), "dlt-assertions", true);
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        try (Consumer<String, String> consumer =
+                     new DefaultKafkaConsumerFactory<String, String>(props).createConsumer()) {
+            consumer.subscribe(List.of("payments.events.DLT"));
+            ConsumerRecord<String, String> dead =
+                    KafkaTestUtils.getSingleRecord(consumer, "payments.events.DLT", Duration.ofSeconds(30));
+
+            assertEquals("{ this is not json", dead.value());
+            assertNotNull(dead.headers().lastHeader("x-exception"));
+            assertEquals("payments.events",
+                    new String(dead.headers().lastHeader("x-original-topic").value(), StandardCharsets.UTF_8));
+        }
     }
 
     @Test
