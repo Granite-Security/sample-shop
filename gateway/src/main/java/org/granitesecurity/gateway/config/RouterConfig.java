@@ -13,6 +13,7 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 
 import java.io.IOException;
 import java.net.URI;
+import java.time.Duration;
 
 @Configuration
 public class RouterConfig {
@@ -72,7 +73,8 @@ public class RouterConfig {
                 .route("storage-service", r -> r
                         .path("/api/storage/**")
                         .filters(f -> f.retry(retryConfig -> retryConfig
-                                .setRetries(2)
+                                .setRetries(3)
+                                .setBackoff(Duration.ofMillis(100),Duration.ofMillis(250),2, true)
                                 .setSeries(HttpStatus.Series.SERVER_ERROR)
                                 .setMethods(HttpMethod.GET, HttpMethod.POST, HttpMethod.DELETE)
                                 .setExceptions(IOException.class)))

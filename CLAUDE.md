@@ -9,7 +9,7 @@ This is a multi-service microservices platform. Each service is a sibling direct
 ```
 granite-security/
 ├── auth-server/   (9090)  — Spring Authorization Server (OIDC provider)
-├── gateway/       (8080)  — Spring Cloud Gateway (WebFlux), OAuth2 client + routing
+├── gateway/       (8080)  — Spring Cloud Gateway (WebFlux), path routing / reverse proxy
 ├── greetings/     (8060)  — WebFlux demo/resource-server microservice
 ├── shop/          (8061)  — E-commerce catalog & orders (WebFlux + R2DBC)
 ├── payment/       (8062)  — Stripe payment intents + webhooks (WebFlux + R2DBC)
@@ -50,14 +50,14 @@ Every service except `auth-server` is reactive end-to-end: Spring WebFlux for th
 ### Request flow
 
 ```
-Browser → gateway:8080 (OAuth2 client)
-             ↓ authorization code flow
-         auth-server:9090 (Spring Authorization Server)
-             ↓ JWT issued
-         gateway relays JWT (TokenRelayGatewayFilterFactory) → downstream service
+Browser (SPA) → gateway:8080 → auth-server:9090 (/auth/**, proxied)
+             ↓ authorization code + PKCE, run by the SPA (oidc-client-ts)
+         JWT issued to the SPA, held in the browser
+             ↓ SPA sends Authorization: Bearer on each call
+         gateway:8080 → downstream service (header forwarded untouched)
 ```
 
-Downstream services (greetings, shop, payment, delivery, profile) are OAuth2 resource servers that validate the JWT issued by auth-server independently — the gateway does not do authorization itself beyond deciding which routes require a session.
+The gateway is a **pass-through reverse proxy**: `GateSec` is `anyExchange().permitAll()`, there is no OAuth2 client configuration and no `TokenRelay` filter. It never obtains, holds or attaches a token — the SPA is the OAuth2 client, and the caller supplies its own `Authorization` header. Downstream services (greetings, shop, payment, delivery, profile, balance, storage) are OAuth2 resource servers that validate that JWT independently, and are the *only* place authorization is enforced. Adding a route to `RouterConfig` therefore protects nothing by itself: the receiving service must guard it.
 
 ### auth-server
 
@@ -65,13 +65,14 @@ Downstream services (greetings, shop, payment, delivery, profile) are OAuth2 res
 - RSA key pair is **generated fresh on each startup** — existing JWTs become invalid after a restart.
 - Injects a custom `roles` claim into every issued JWT (`OAuth2TokenCustomizer` in `SecurityConfig`).
 - User store: PostgreSQL (`authdb`), schema managed by Liquibase. Seed users: `user`/`user` (ROLE_USER), `admin`/`admin` (ROLE_ADMIN), `manager`/`manager` (ROLE_USER + ROLE_ADMIN).
-- `RegisteredClientRepository` is in-memory; the gateway's OIDC client (`oidc-client`) is configured here.
+- `RegisteredClientRepository` is in-memory: the SPA clients (`spa-client-shop`, `spa-client-chocolate`, public + PKCE), the service-to-service clients (`internal-service`, `identity-admin`, `external-service`) and a legacy `oidc-client` no longer used by the gateway.
 
 ### gateway
 
-- Spring Cloud Gateway (WebFlux, reactive). Routes defined in `RouterConfig`; security policy in `GateSec`.
-- `/api/greetings/**` is permit-all, no token relay. Most other `/api/**` routes require an OAuth2 session and relay the JWT as a Bearer token to the downstream service.
-- OIDC provider URI defaults to `http://localhost:9090`, overridden via `OIDC_ISSUER_URI` in Docker/K8s.
+- Spring Cloud Gateway (WebFlux, reactive). Routes defined in `RouterConfig`; `GateSec` permits every exchange.
+- Routes `/api/**` by path to each service and `/auth/**` to auth-server, so the SPA reaches the OIDC endpoints on the same origin as the API. Downstream URIs come from `microservices.*.uri` (`MICROSERVICES_*_URI` env vars) — no OIDC issuer setting is read here.
+- It still pulls in `spring-boot-starter-security-oauth2-client`, but nothing configures a client registration. Don't infer from that dependency that a session or token relay exists.
+- `application.yaml` carries hard-won comments about connection-pool eviction (dead pods after a deploy), `server.forward-headers-strategy` and the absent `globalcors`. Read them before changing anything there.
 
 ### notification
 
