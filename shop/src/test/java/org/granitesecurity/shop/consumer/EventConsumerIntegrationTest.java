@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.EmbeddedKafkaBroker;
 import org.springframework.kafka.test.utils.KafkaTestUtils;
@@ -163,9 +164,10 @@ class EventConsumerIntegrationTest {
                     KafkaTestUtils.getSingleRecord(consumer, "payments.events.DLT", Duration.ofSeconds(30));
 
             assertEquals("{ this is not json", dead.value());
-            assertNotNull(dead.headers().lastHeader("x-exception"));
             assertEquals("payments.events",
-                    new String(dead.headers().lastHeader("x-original-topic").value(), StandardCharsets.UTF_8));
+                    new String(dead.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_TOPIC).value(),
+                            StandardCharsets.UTF_8));
+            assertNotNull(dead.headers().lastHeader(KafkaHeaders.DLT_EXCEPTION_MESSAGE));
         }
     }
 
