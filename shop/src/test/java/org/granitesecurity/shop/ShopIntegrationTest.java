@@ -58,7 +58,11 @@ class ShopIntegrationTest extends AbstractTestcontainers {
     }
 
     private OrderResponse placeOrder(Long productId, int quantity) {
-        var request = Map.of("items", List.of(Map.of("productId", productId, "quantity", quantity)));
+        var request = Map.of(
+                "items", List.of(Map.of("productId", productId, "quantity", quantity)),
+                // Required since shop stopped letting payment guess; shop does not
+                // validate the name, it only refuses to invent one.
+                "provider", "stripe");
 
         return webTestClient
                 .mutateWith(mockJwt().jwt(jwt -> jwt.subject("testuser")))

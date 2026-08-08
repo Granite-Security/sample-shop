@@ -28,10 +28,21 @@ public class OrderPlacedConsumer {
     void onOrderPlaced(String message) {
         try {
             Map<String, Object> data = MAPPER.readValue(message, Map.class);
+            // Absent on messages published before shop tagged OrderPlaced. Drop the
+            // null once no untagged message can still be in flight or sitting PENDING
+            // in shop's outbox — until then, absent means OrderPlaced.
+            Object eventType = data.get("eventType");
+            if (eventType != null && !"OrderPlaced".equals(eventType)
+                    && !"OrdersPurged".equals(eventType) && !"RefundRequested".equals(eventType)) {
+                // Not "malformed": a type this build does not know. Falling through to
+                // the OrderPlaced path instead would misreport it as a missing orderId.
+                log.warn("Ignoring unknown event type '{}' on orders.events: {}", eventType, message);
+                return;
+            }
             // Carries "orderIds" (plural) and no "orderId" — so it must be
             // handled before the orderId lookup below, which would otherwise
             // reject it as a malformed OrderPlaced.
-            if ("OrdersPurged".equals(data.get("eventType"))) {
+            if ("OrdersPurged".equals(eventType)) {
                 List<Long> orderIds = parseLongList(data.get("orderIds"));
                 if (orderIds.isEmpty()) {
                     log.warn("OrdersPurged event with no orderIds: {}", message);
@@ -41,7 +52,7 @@ public class OrderPlacedConsumer {
                 paymentService.purgeOrders(orderIds).block();
                 return;
             }
-            if ("RefundRequested".equals(data.get("eventType"))) {
+            if ("RefundRequested".equals(eventType)) {
                 Long refundOrderId = parseLong(data.get("orderId"));
                 if (refundOrderId == null) {
                     log.warn("RefundRequested event missing orderId: {}", message);
@@ -58,14 +69,18 @@ public class OrderPlacedConsumer {
             }
             BigDecimal total = parseBigDecimal(data.get("total"));
             String username = data.get("username") != null ? data.get("username").toString() : null;
-            // Both optional: events published before shop carried them, and events for a
-            // shopper who expressed no preference, simply omit them. Null currency falls
-            // back to the configured shop currency; null provider to the only enabled one.
+            // Both optional only for events published before shop carried them: current
+            // orders always name a provider, and shop rejects one that does not. Null
+            // currency falls back to the configured shop currency; null provider to the
+            // only enabled one, which fails loudly when several are.
             String currency = data.get("currency") != null ? data.get("currency").toString() : null;
             String provider = data.get("provider") != null ? data.get("provider").toString() : null;
             paymentService.processOrderPlaced(orderId, total, username, currency, provider).block();
         } catch (Exception e) {
-            log.error("Failed to parse OrderPlaced event: {}", message, e);
+            // Covers parse failures and anything processing threw — including an
+            // unresolvable provider, which is a configuration problem rather than a
+            // bad message, so it must not be reported as a parse error.
+            log.error("Failed to handle orders.events message: {}", message, e);
         }
     }
 

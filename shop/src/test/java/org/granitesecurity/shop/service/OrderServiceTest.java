@@ -11,6 +11,8 @@ import org.granitesecurity.shop.repository.OutboxRepository;
 import org.granitesecurity.shop.repository.ProductRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -39,6 +41,9 @@ class OrderServiceTest {
 
     @Mock
     private OutboxRepository outboxRepository;
+
+    @Captor
+    private ArgumentCaptor<OutboxEvent> outboxCaptor;
 
     @InjectMocks
     private OrderService orderService;
@@ -75,7 +80,7 @@ class OrderServiceTest {
         PlaceOrderRequest request = new PlaceOrderRequest(List.of(
                 new PlaceOrderRequest.LineItem(1L, 2),
                 new PlaceOrderRequest.LineItem(2L, 3)
-        ), ADDRESS, null);
+        ), ADDRESS, "stripe");
 
         StepVerifier.create(orderService.placeOrder("testuser", request))
                 .assertNext(response -> {
@@ -93,9 +98,64 @@ class OrderServiceTest {
         verify(outboxRepository).save(any(OutboxEvent.class));
     }
 
+    /**
+     * The tag is what keeps a consumer from reaching OrderPlaced by falling through the
+     * branches for every other type on orders.events, so it is worth asserting rather
+     * than trusting the payload builder.
+     */
+    @Test
+    void shouldTagOrderPlacedEventAndCarryTheProvider() {
+        Product product = new Product("Widget", BigDecimal.valueOf(10.00), 50, 1L);
+        product.setId(1L);
+
+        when(productRepository.findAllById(List.of(1L))).thenReturn(Flux.just(product));
+
+        CustomerOrder savedOrder = new CustomerOrder("testuser", "PENDING", BigDecimal.valueOf(20.00), "CHF",
+                "Alice Smith", "123 Main St", "", "Springfield", "IL", "62701", "USA");
+        savedOrder.setId(101L);
+        savedOrder.setCreatedAt(Instant.now());
+
+        when(customerOrderRepository.save(any(CustomerOrder.class))).thenReturn(Mono.just(savedOrder));
+        when(orderItemRepository.saveAll(any(List.class)))
+                .thenReturn(Flux.just(new OrderItem(101L, 1L, 2, BigDecimal.valueOf(10.00))));
+        when(productRepository.save(any(Product.class))).thenReturn(Mono.just(product));
+        when(outboxRepository.save(any(OutboxEvent.class))).thenReturn(Mono.just(new OutboxEvent()));
+
+        PlaceOrderRequest request = new PlaceOrderRequest(List.of(
+                new PlaceOrderRequest.LineItem(1L, 2)
+        ), ADDRESS, "paypal");
+
+        StepVerifier.create(orderService.placeOrder("testuser", request))
+                .expectNextCount(1)
+                .verifyComplete();
+
+        verify(outboxRepository).save(outboxCaptor.capture());
+        OutboxEvent event = outboxCaptor.getValue();
+        assert "OrderPlaced".equals(event.getEventType()) : "outbox row should be typed";
+        assert event.getPayload().contains("\"eventType\":\"OrderPlaced\"")
+                : "payload should carry the type a consumer dispatches on: " + event.getPayload();
+        assert event.getPayload().contains("\"provider\":\"paypal\"")
+                : "payload should carry the chosen provider: " + event.getPayload();
+    }
+
+    @Test
+    void shouldRejectOrderWithoutProvider() {
+        PlaceOrderRequest request = new PlaceOrderRequest(List.of(
+                new PlaceOrderRequest.LineItem(1L, 2)
+        ), ADDRESS, null);
+
+        StepVerifier.create(orderService.placeOrder("testuser", request))
+                .expectErrorMatches(e -> e instanceof ShopException
+                        && e.getMessage().contains("must name a payment provider"))
+                .verify();
+
+        // Rejected before any lookup: naming no provider is not a partially valid order.
+        verifyNoInteractions(productRepository, customerOrderRepository, orderItemRepository, outboxRepository);
+    }
+
     @Test
     void shouldRejectEmptyOrder() {
-        PlaceOrderRequest request = new PlaceOrderRequest(List.of(), ADDRESS, null);
+        PlaceOrderRequest request = new PlaceOrderRequest(List.of(), ADDRESS, "stripe");
 
         StepVerifier.create(orderService.placeOrder("testuser", request))
                 .expectErrorMatches(e -> e instanceof ShopException
@@ -112,7 +172,7 @@ class OrderServiceTest {
 
         PlaceOrderRequest request = new PlaceOrderRequest(List.of(
                 new PlaceOrderRequest.LineItem(999L, 1)
-        ), ADDRESS, null);
+        ), ADDRESS, "stripe");
 
         StepVerifier.create(orderService.placeOrder("testuser", request))
                 .expectErrorMatches(e -> e instanceof ShopException
@@ -133,7 +193,7 @@ class OrderServiceTest {
 
         PlaceOrderRequest request = new PlaceOrderRequest(List.of(
                 new PlaceOrderRequest.LineItem(1L, 5)
-        ), ADDRESS, null);
+        ), ADDRESS, "stripe");
 
         StepVerifier.create(orderService.placeOrder("testuser", request))
                 .expectErrorMatches(e -> e instanceof ShopException

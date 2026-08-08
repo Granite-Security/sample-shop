@@ -8,8 +8,9 @@ public record PlaceOrderRequest(
         @Schema(description = "Items to order") List<LineItem> items,
         @Schema(description = "Delivery address") DeliveryAddress address,
         @Schema(description = "Payment provider id from GET /api/payments/providers. "
-                + "Optional while only one provider is enabled, in which case it is "
-                + "filled in by payment.", example = "stripe") String provider
+                + "Required: an order that names none is a 400, because payment cannot "
+                + "pick one on the shopper's behalf once several are enabled.",
+                requiredMode = Schema.RequiredMode.REQUIRED, example = "stripe") String provider
 ) {
     @Schema(description = "Product and quantity pair")
     public record LineItem(

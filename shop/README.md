@@ -36,10 +36,21 @@ publishes. Nothing is sent from the request path.
 
 | Topic | Direction | Event | Fields that matter |
 |-------|-----------|-------|--------------------|
-| `orders.events` | out | `OrderPlaced` | `orderId` (also the Kafka key), `provider` — which payment provider must handle it |
-| `orders.events` | out | `RefundRequested` | `orderId`, `eventType` — same topic, so consumers must branch on it |
+| `orders.events` | out | `OrderPlaced` | `eventType`, `orderId` (also the Kafka key), `provider` — which payment provider must handle it, never null |
+| `orders.events` | out | `RefundRequested` | `orderId`, `eventType` |
+| `orders.events` | out | `OrdersPurged` | `orderIds` (plural), `eventType`; keyed by **username**, not order id |
 | `payments.events` | in | — | `orderId`, `status` → `SUCCEEDED`→PAID, `FAILED`→PAYMENT_FAILED, `REFUNDED`→REIMBURSED |
 | `delivery.events` | in | — | `orderId`, `status` → `DISPATCHED`→SHIPPED, `DELIVERED`→DELIVERED |
+
+**Every event on `orders.events` carries `eventType`, including `OrderPlaced`.**
+It was untagged until consumers reached it by falling through the branches for
+the tagged types — which meant any type they did not know was processed as an
+order and logged as a malformed one. Consumers still treat an absent `eventType`
+as `OrderPlaced` so nothing published before the change is lost; that tolerance
+comes out once no untagged message can be in flight or PENDING in the outbox.
+
+`OrdersPurged` is keyed by username while everything else is keyed by order id,
+so it is not ordered against that user's own `OrderPlaced`.
 
 `shipments.events` also has a listener, but nothing in this platform publishes
 that topic.

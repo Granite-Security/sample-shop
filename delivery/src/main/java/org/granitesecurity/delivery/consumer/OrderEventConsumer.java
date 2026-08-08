@@ -28,9 +28,22 @@ public class OrderEventConsumer {
         try {
             Map<String, Object> data = MAPPER.readValue(message, Map.class);
 
+            // Absent on messages published before shop tagged OrderPlaced. Drop the
+            // null once no untagged message can still be in flight or sitting PENDING
+            // in shop's outbox — until then, absent means OrderPlaced.
+            Object eventType = data.get("eventType");
+            if (eventType != null && !"OrderPlaced".equals(eventType) && !"OrdersPurged".equals(eventType)) {
+                // Includes RefundRequested, which delivery has no part in. Logged at
+                // debug rather than warn: this consumer is meant not to know every type
+                // on a shared topic, and falling through would have it try to build a
+                // delivery out of one.
+                log.debug("Ignoring event type '{}' on orders.events", eventType);
+                return;
+            }
+
             // Carries "orderIds" (plural) and no "orderId"/"address", so it has
             // to be handled before the checks below reject it as malformed.
-            if ("OrdersPurged".equals(data.get("eventType"))) {
+            if ("OrdersPurged".equals(eventType)) {
                 List<Long> orderIds = parseOrderIds(data.get("orderIds"));
                 if (orderIds.isEmpty()) {
                     log.warn("OrdersPurged event with no orderIds: {}", message);
