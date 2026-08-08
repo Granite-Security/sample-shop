@@ -12,10 +12,16 @@ import java.time.Instant;
  * <p>{@code preview} is the truncated body the list renders when there is no subject
  * (docs/users/messaging.md §5.1). It is the same untrusted text as {@code body}, just
  * shorter, and is escaped by React like anything else.
+ *
+ * <p>{@code senderUsername} and {@code counterpartyUsername} are null for a contact-form
+ * message sent by someone who was not signed in (§11). Clients must treat a null
+ * counterparty as "there is no profile to link to and no inbox to reply into" — that is
+ * what {@code senderEmail} is for, and it is the whole reason the form asks for one.
  */
 public record MessageResponse(
         Long id,
         String senderUsername,
+        String senderEmail,
         String recipientUsername,
         String counterpartyUsername,
         String counterpartyDisplayName,

@@ -65,6 +65,10 @@ export default function Messages() {
    * than becoming a bare "Re: " (docs/users/messaging.md §5.1).
    */
   const reply = (message: MessageResponse) => {
+    // A contact-form message from someone who was not signed in has no account to
+    // reply into (docs/users/messaging.md §11). MessageDetail offers a mailto for
+    // those instead of this, so there is nothing to do here.
+    if (!message.counterpartyUsername) return;
     const subject = message.subject
       ? (/^re:/i.test(message.subject) ? message.subject : `Re: ${message.subject}`)
       : '';
@@ -152,6 +156,10 @@ function MessageDetail({ message, onClose, onDelete, onReply }: {
   onDelete: () => void;
   onReply: () => void;
 }) {
+  // Sent from the contact form by someone who was not signed in: no profile, no
+  // inbox, no @handle. Their email is the only way back to them (§11).
+  const guest = !message.counterpartyUsername;
+
   return (
     <div className="message-panel">
       <div className="message-detail-head">
@@ -159,11 +167,29 @@ function MessageDetail({ message, onClose, onDelete, onReply }: {
         <div className="message-detail-who">
           <strong>{message.outgoing ? 'To: ' : 'From: '}{message.counterpartyDisplayName}</strong>
           <span className="message-time">
-            @{message.counterpartyUsername} · {new Date(message.createdAt).toLocaleString()}
+            {guest
+              ? `${message.senderEmail ?? 'no address given'} · via the contact form`
+              : `@${message.counterpartyUsername}`}
+            {' · '}{new Date(message.createdAt).toLocaleString()}
           </span>
         </div>
         <div className="message-detail-actions">
-          <button className="btn btn-primary" onClick={onReply}>Reply</button>
+          {guest ? (
+            // An email client, not a compose box — replying in-app would write a row
+            // into an inbox that does not exist. Nothing to reply to at all when they
+            // left no address, so the button goes away rather than opening a blank one.
+            message.senderEmail && (
+              <a
+                className="btn btn-primary"
+                href={`mailto:${encodeURIComponent(message.senderEmail)}?subject=${
+                  encodeURIComponent(message.subject ? `Re: ${message.subject}` : 'Your message')}`}
+              >
+                Reply by email
+              </a>
+            )
+          ) : (
+            <button className="btn btn-primary" onClick={onReply}>Reply</button>
+          )}
           <button className="btn" onClick={onClose}>Close</button>
           <button className="btn" style={{ color: 'var(--danger)' }} onClick={onDelete}>Delete</button>
         </div>

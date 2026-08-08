@@ -3,6 +3,7 @@
 Status: **Phase 1 shipped** (#77), plus Reply and the unread bell from Phase 2 (#78, #79).
 Ported to `ui-demo` in #80 — same endpoints, that storefront's own styling.
 Conversation grouping, pagination and all of Phase 3 not started.
+The public contact form is shipped and documented in §11.
 
 Goal: any signed-in user can send a message to another user by username or email, and read
 what they were sent from an inbox. `manager` sends to `net.vrabie`; `net.vrabie` sees it
@@ -362,3 +363,98 @@ What to actually check, in order:
     the query that matched was an email.
 11. A message sent with no subject appears in the inbox list with a body preview, is
     clickable, and replying to it does not produce a subject of `Re: `.
+
+## 11. The public contact form
+
+Added after Phase 2. A visitor on the storefront — **signed in or not** — opens
+*Contact*, writes a note, and it lands in `manager`'s ordinary inbox.
+
+This reuses everything above rather than becoming a second product. The submission is a
+`user_message` row like any other, so the manager reads it in the same Messages page, with
+the same unread bell, and no second inbox to remember to open (D10).
+
+**No Kafka and no outbox**, for the reason in §1 and more so: the person who clicked Send
+is standing there waiting to be told it arrived. A 202 with a dead-letter behind it would
+turn "nobody received this" into silence.
+
+**No gateway change.** `/api/profiles/**` already routes to profile, and the gateway is a
+pass-through that forwards whatever `Authorization` header the caller sent — including
+none. Authorization for this endpoint is, as always, entirely `ProfileSec`'s job.
+
+### 11.1 What is different about it
+
+| | User-to-user message (§5) | Contact form |
+|---|---|---|
+| Auth | Required | **Optional** — the point of the feature |
+| Recipient | Typed by the sender | **Configuration** (`profile.contact.recipient`, default `manager`) |
+| Sender | JWT subject | JWT subject, **or null** |
+| Response | The `MessageResponse` row | `{"status":"RECEIVED"}` — an anonymous sender has no inbox to use an id in |
+| Blocked check | Fails closed (§6) | **Skipped** — see below |
+
+**The sender is never read from the body.** `name` and `email` are collected for people
+with no account and are *dropped* when a token is present, exactly as `SendMessageRequest`
+has no `from`. A signed-in user cannot submit a message that claims to be from someone
+else, and no caller can choose who receives one — a recipient field on an unauthenticated
+endpoint would be a way to write into any user's inbox.
+
+**`sender_username` is nullable now** (Liquibase `009`). NULL means "nobody was signed
+in". Inventing a reserved username the way order notices do (`system`) was the other
+option and it loses the only route back to the person. Both list queries are unaffected:
+the inbox selects by recipient, and the Sent folder selects by an equality NULL never
+matches — which is the right answer for a row with no account behind it.
+
+**Rendering a sender with no profile.** `counterpartyUsername` is null in that case and
+the UI must not print `@null` or offer Reply: there is no inbox to reply into.
+`MessageDetail` shows the address and a `mailto:` instead, and `senderEmail` is required
+at submit time precisely so that button exists.
+
+**The blocked check is skipped.** `manager` is the recipient of every submission; if that
+account were disabled, failing closed (§6) would take the contact form down for everyone
+rather than protect anybody. The *recipient profile row* is still checked — a typo in
+`profile.contact.recipient` returns 503 instead of black-holing every message a customer
+ever sends.
+
+**Abuse: a honeypot, and that is all.** A hidden `website` field that a person never sees;
+anything that fills it in is dropped and answered `201` anyway, because telling a bot it
+was detected tells it which field to leave alone. This stops naive bots and nothing
+targeted. **A per-sender/per-IP cap is still owed** — §7.3 already owed one for the
+authenticated path, and an endpoint reachable without a token makes it matter more, not
+less. Deliberate, and the first thing to add here.
+
+### 11.2 Decisions
+
+| # | Question | Decision |
+|---|---|---|
+| D10 | Own table, or the inbox? | **The inbox.** A `user_message` row to `manager`, read in the page that already exists. A `contact_message` table would need a second admin UI nobody opens (§11). |
+| D11 | Who receives it? | **Configuration, never the request.** `profile.contact.recipient`, default `manager`. Verified to exist at submit time; 503 if not. |
+| D12 | Anonymous sender identity | **`sender_username IS NULL`**, with `sender_name`/`sender_email` alongside. Not a reserved `guest` username — that discards the reply address (§11.1). |
+| D13 | Signed-in sender | **JWT subject; the body's `name`/`email` are dropped.** The form's From field is a display convenience, not an input (§11.1). |
+| D14 | Abuse control | **Honeypot only**, answered 201 on rejection. A rate limit is owed and not shipped (§7.3, §11.1). |
+| D15 | Email the manager on submit? | **No**, same as D9. It would pull in Kafka and an outbox to be correct. The bell is the notification. |
+
+### 11.3 How we verify
+
+```bash
+kubectl config current-context
+kubectl -n granite rollout restart deployment profile
+kubectl -n granite logs -f deploy/profile | grep -i liquibase   # 009 applied?
+
+HOST=https://<host>
+
+# anonymous — the case the feature exists for
+curl -s -X POST $HOST/api/profiles/contact -H 'Content-Type: application/json' \
+  -d '{"name":"Ada","email":"ada@example.com","subject":"Shipping","body":"Do you ship to CH?"}' -i
+
+# honeypot — expect 201 and NO new row in manager's inbox
+curl -s -X POST $HOST/api/profiles/contact -H 'Content-Type: application/json' \
+  -d '{"name":"Bot","email":"b@x.com","body":"buy","website":"http://spam.example"}' -i
+
+# signed in — expect the row to be from $USER, not from the body
+curl -s -X POST $HOST/api/profiles/contact \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"Someone Else","email":"spoof@example.com","body":"hi"}' -i
+
+# then, as manager: the first shows "Ada · via the contact form" with a Reply by
+# email button, the third shows the real username with the normal Reply button.
+curl -s $HOST/api/profiles/me/messages -H "Authorization: Bearer $MANAGER_TOKEN"
+```

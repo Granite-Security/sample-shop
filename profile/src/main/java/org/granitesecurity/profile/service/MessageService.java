@@ -279,6 +279,13 @@ public class MessageService {
         boolean outgoing = viewer.equals(message.getSenderUsername());
         String counterparty = outgoing ? message.getRecipientUsername() : message.getSenderUsername();
 
+        // A contact-form message from someone who was not signed in has no sender
+        // username, so there is no profile to look up (§11). Skip the query rather
+        // than issue one for null and rely on it missing.
+        if (counterparty == null) {
+            return Mono.just(toResponse(message, viewer, null));
+        }
+
         return userProfileRepository.findByUsername(counterparty)
                 .map(profile -> toResponse(message, viewer, profile))
                 .defaultIfEmpty(toResponse(message, viewer, null));
@@ -293,9 +300,10 @@ public class MessageService {
         return new MessageResponse(
                 message.getId(),
                 message.getSenderUsername(),
+                message.getSenderEmail(),
                 message.getRecipientUsername(),
                 counterpartyUsername,
-                counterparty != null ? displayNameOf(counterparty) : counterpartyUsername,
+                counterparty != null ? displayNameOf(counterparty) : displayNameOfGuest(message, counterpartyUsername),
                 counterparty != null ? ProfileService.effectiveAvatarUrl(counterparty) : null,
                 message.getSubject(),
                 message.getBody(),
@@ -339,6 +347,21 @@ public class MessageService {
         return firstLine.length() <= PREVIEW_MAX
                 ? firstLine
                 : firstLine.substring(0, PREVIEW_MAX).trim() + "…";
+    }
+
+    /**
+     * The best name available when there is no profile row — either a contact-form
+     * visitor who was never signed in, or a counterparty deleted since. Never null:
+     * the inbox renders this, and "no name" is not a thing a mail client shows.
+     */
+    private static String displayNameOfGuest(UserMessage message, String counterpartyUsername) {
+        if (message.getSenderName() != null && !message.getSenderName().isBlank()) {
+            return message.getSenderName();
+        }
+        if (message.getSenderEmail() != null && !message.getSenderEmail().isBlank()) {
+            return message.getSenderEmail();
+        }
+        return counterpartyUsername != null ? counterpartyUsername : "Website visitor";
     }
 
     private static String displayNameOf(UserProfile profile) {

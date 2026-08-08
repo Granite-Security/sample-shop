@@ -52,6 +52,13 @@ public class ProfileSec {
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .cors(Customizer.withDefaults())
                 .authorizeExchange(exchange -> exchange
+                        // The public contact form (docs/users/messaging.md §11).
+                        // Ahead of every rule below, because the catch-all
+                        // "/api/profiles/**" would otherwise require a token and this
+                        // form exists precisely for people who do not have one.
+                        // Scoped to POST: nothing here is readable without signing in,
+                        // and "contact" is a legal value for the {username} wildcard.
+                        .pathMatchers(HttpMethod.POST, "/api/profiles/contact").permitAll()
                         .pathMatchers("/api/profiles/internal/**").hasAuthority("SCOPE_internal")
                         // Must precede the admin {username} wildcard below — "me" is a
                         // valid value for {username}, so without this rule first,

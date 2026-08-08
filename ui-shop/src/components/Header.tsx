@@ -35,6 +35,7 @@ export default function Header() {
       <Link to="/" className="logo">Shop</Link>
       <nav className="nav">
         <Link to="/catalog">Catalog</Link>
+        <Link to="/contact">Contact</Link>
         {isAuthenticated && <Link to="/orders">Orders</Link>}
         {isAdmin && <Link to="/admin">Admin</Link>}
       </nav>

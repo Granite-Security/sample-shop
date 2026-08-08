@@ -4,6 +4,7 @@ import RequireAuth from './components/RequireAuth'
 import AccountLayout from './components/AccountLayout'
 import Home from './pages/Home'
 import Catalog from './pages/Catalog'
+import Contact from './pages/Contact'
 import ProductDetail from './pages/ProductDetail'
 import Cart from './pages/Cart'
 import Checkout from './pages/Checkout'
@@ -37,6 +38,8 @@ export default function App() {
         <Route path="catalog" element={<Catalog />} />
         <Route path="catalog/:id" element={<ProductDetail />} />
         <Route path="cart" element={<Cart />} />
+        {/* Public on purpose — signed out is the case it exists for. */}
+        <Route path="contact" element={<Contact />} />
         <Route path="checkout" element={<Checkout />} />
         <Route path="orders/:id/pay" element={<RetryPayment />} />
         <Route element={<RequireAuth />}>
