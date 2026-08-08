@@ -1,9 +1,11 @@
 package org.granitesecurity.shop.config;
 
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.config.TopicConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.granitesecurity.shop.consumer.MalformedEventException;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,6 +13,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
@@ -29,6 +32,30 @@ public class KafkaConfig {
 
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String bootstrapServers;
+
+    /**
+     * Declared rather than auto-created, to bound the retention. profile consumes this
+     * topic with {@code auto-offset-reset: earliest}, so whatever is retained is what a
+     * reset consumer group would re-announce — a week of broker default would mean a
+     * week of orders landing in admin's inbox at once. A day is enough for a consumer
+     * outage and small enough that a mistake is survivable.
+     *
+     * <p>SEGMENT_MS is not decoration: retention only makes closed segments eligible for
+     * deletion, and on a low-volume topic the active segment would otherwise stay open
+     * far longer than the retention window (see notification's KafkaTopicConfig).
+     *
+     * <p>KafkaAdmin applies this at creation only and will not alter an existing topic.
+     */
+    @Bean
+    NewTopic shopNotifications() {
+        return TopicBuilder.name("shop.notifications")
+                .partitions(3)
+                .replicas(1)
+                .config(TopicConfig.RETENTION_MS_CONFIG, "86400000")
+                .config(TopicConfig.SEGMENT_MS_CONFIG, "600000")
+                .config(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_DELETE)
+                .build();
+    }
 
     @Bean
     ProducerFactory<String, String> producerFactory() {

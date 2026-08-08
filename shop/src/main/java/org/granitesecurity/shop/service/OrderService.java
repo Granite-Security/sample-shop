@@ -38,6 +38,10 @@ public class OrderService {
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
+    /** Consumed by profile, which turns it into an in-app message to admin. */
+    static final String SHOP_NOTIFICATIONS_TOPIC = "shop.notifications";
+    static final String ORDER_PLACED_NOTICE_EVENT = "OrderPlacedNotice";
+
     private final CustomerOrderRepository customerOrderRepository;
     private final OrderItemRepository orderItemRepository;
     private final ProductRepository productRepository;
@@ -65,11 +69,7 @@ public class OrderService {
         if (request.items() == null || request.items().isEmpty()) {
             return Mono.error(new ShopException("Order must contain at least one item"));
         }
-        // Rejected here, where the caller can see it. An order that names no provider
-        // used to travel to payment as "provider": null and be resolved to the only
-        // enabled one — but with several enabled that resolution throws inside the
-        // Kafka consumer, so the order was accepted with a 200 and then silently never
-        // got a payment intent. shop still does not choose: it insists the caller did.
+
         if (request.provider() == null || request.provider().isBlank()) {
             return Mono.error(new ShopException(
                     "Order must name a payment provider; see GET /api/payments/providers"));
@@ -143,7 +143,14 @@ public class OrderService {
         return afterSave.flatMap(order -> {
             CustomerOrder co = order;
             OutboxEvent outbox = createOutboxEvent(co, itemsWithOrderId, ctx.provider());
+            // Second row, second topic, same transaction as the order. Not
+            // REQUIRES_NEW or NESTED: a notice that can commit while the order rolls
+            // back would tell admin about an order that does not exist. "Desirable,
+            // not critical" is handled by it being an outbox row — if Kafka is down
+            // the relay keeps retrying and nothing blocks checkout.
+            OutboxEvent notice = createOrderNoticeEvent(co);
             return outboxRepository.save(outbox)
+                    .then(outboxRepository.save(notice))
                     .flatMap(saved -> buildOrderResponse(co, itemsWithOrderId, null));
         });
     }
@@ -152,6 +159,31 @@ public class OrderService {
         try {
             String payload = OBJECT_MAPPER.writeValueAsString(buildPayload(order, items, provider));
             return new OutboxEvent("order", String.valueOf(order.getId()), "OrderPlaced", payload, "PENDING");
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to serialize outbox payload", e);
+        }
+    }
+
+    /**
+     * "This user placed an order", for the admin notice profile turns into an in-app
+     * message. Deliberately not a copy of OrderPlaced: admin is told <em>that</em>
+     * someone ordered, not what they bought, so the items, address and total stay on
+     * the topic the services that need them read.
+     */
+    private OutboxEvent createOrderNoticeEvent(CustomerOrder order) {
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("eventType", ORDER_PLACED_NOTICE_EVENT);
+            payload.put("username", order.getUsername());
+            // Not shown to admin. orderId is the idempotency key profile dedupes on —
+            // delivery is at-least-once, and without it a redelivery is a second
+            // message in the inbox. occurredAt is what lets a consumer that has been
+            // offline drop a replay instead of announcing week-old orders.
+            payload.put("orderId", order.getId());
+            payload.put("occurredAt", Instant.now().toString());
+            String json = OBJECT_MAPPER.writeValueAsString(payload);
+            return new OutboxEvent("order", String.valueOf(order.getId()), ORDER_PLACED_NOTICE_EVENT, json,
+                    "PENDING", SHOP_NOTIFICATIONS_TOPIC);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to serialize outbox payload", e);
         }

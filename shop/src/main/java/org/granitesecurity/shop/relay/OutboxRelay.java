@@ -53,9 +53,13 @@ public class OutboxRelay {
     }
 
     private Mono<Void> publish(OutboxEvent event) {
-        return Mono.fromFuture(kafkaTemplate.send("orders.events", event.getAggregateId(), event.getPayload()))
-                .doOnSuccess(result -> log.info("Published event {} ({}) to orders.events", event.getId(), event.getEventType()))
-                .doOnError(e -> log.error("Failed to publish event {} to Kafka: {}", event.getId(), e.getMessage()))
+        // The column is NOT NULL DEFAULT 'orders.events', so null means a row this
+        // build did not write and did not read back either — fall back rather than
+        // NPE, which would take down the whole poll and every other pending row.
+        String topic = event.getTopic() != null ? event.getTopic() : OutboxEvent.DEFAULT_TOPIC;
+        return Mono.fromFuture(kafkaTemplate.send(topic, event.getAggregateId(), event.getPayload()))
+                .doOnSuccess(result -> log.info("Published event {} ({}) to {}", event.getId(), event.getEventType(), topic))
+                .doOnError(e -> log.error("Failed to publish event {} to {}: {}", event.getId(), topic, e.getMessage()))
                 .then();
     }
 

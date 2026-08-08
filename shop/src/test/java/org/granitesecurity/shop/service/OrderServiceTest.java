@@ -95,7 +95,8 @@ class OrderServiceTest {
         verify(productRepository, times(2)).save(any(Product.class));
         verify(customerOrderRepository).save(any(CustomerOrder.class));
         verify(orderItemRepository).saveAll(any(List.class));
-        verify(outboxRepository).save(any(OutboxEvent.class));
+        // Two rows: OrderPlaced for payment/delivery, and the admin notice.
+        verify(outboxRepository, times(2)).save(any(OutboxEvent.class));
     }
 
     /**
@@ -129,13 +130,60 @@ class OrderServiceTest {
                 .expectNextCount(1)
                 .verifyComplete();
 
-        verify(outboxRepository).save(outboxCaptor.capture());
-        OutboxEvent event = outboxCaptor.getValue();
-        assert "OrderPlaced".equals(event.getEventType()) : "outbox row should be typed";
+        verify(outboxRepository, times(2)).save(outboxCaptor.capture());
+        OutboxEvent event = outboxCaptor.getAllValues().stream()
+                .filter(e -> "OrderPlaced".equals(e.getEventType()))
+                .findFirst().orElseThrow();
+        assert "orders.events".equals(event.getTopic()) : "OrderPlaced belongs on orders.events";
         assert event.getPayload().contains("\"eventType\":\"OrderPlaced\"")
                 : "payload should carry the type a consumer dispatches on: " + event.getPayload();
         assert event.getPayload().contains("\"provider\":\"paypal\"")
                 : "payload should carry the chosen provider: " + event.getPayload();
+    }
+
+    /**
+     * The notice rides the same outbox and the same transaction as the order, but goes
+     * to its own topic — so payment and delivery never see it, and it cannot commit
+     * without the order it announces.
+     */
+    @Test
+    void shouldWriteAdminNoticeToItsOwnTopicCarryingOnlyTheUsername() {
+        Product product = new Product("Widget", BigDecimal.valueOf(10.00), 50, 1L);
+        product.setId(1L);
+
+        when(productRepository.findAllById(List.of(1L))).thenReturn(Flux.just(product));
+
+        CustomerOrder savedOrder = new CustomerOrder("net.vrabie", "PENDING", BigDecimal.valueOf(20.00), "CHF",
+                "Alice Smith", "123 Main St", "", "Springfield", "IL", "62701", "USA");
+        savedOrder.setId(102L);
+        savedOrder.setCreatedAt(Instant.now());
+
+        when(customerOrderRepository.save(any(CustomerOrder.class))).thenReturn(Mono.just(savedOrder));
+        when(orderItemRepository.saveAll(any(List.class)))
+                .thenReturn(Flux.just(new OrderItem(102L, 1L, 2, BigDecimal.valueOf(10.00))));
+        when(productRepository.save(any(Product.class))).thenReturn(Mono.just(product));
+        when(outboxRepository.save(any(OutboxEvent.class))).thenReturn(Mono.just(new OutboxEvent()));
+
+        PlaceOrderRequest request = new PlaceOrderRequest(List.of(
+                new PlaceOrderRequest.LineItem(1L, 2)
+        ), ADDRESS, "stripe");
+
+        StepVerifier.create(orderService.placeOrder("net.vrabie", request))
+                .expectNextCount(1)
+                .verifyComplete();
+
+        verify(outboxRepository, times(2)).save(outboxCaptor.capture());
+        OutboxEvent notice = outboxCaptor.getAllValues().stream()
+                .filter(e -> "OrderPlacedNotice".equals(e.getEventType()))
+                .findFirst().orElseThrow(() -> new AssertionError("no admin notice was written"));
+
+        assert "shop.notifications".equals(notice.getTopic()) : "notice belongs on its own topic";
+        assert notice.getPayload().contains("\"username\":\"net.vrabie\"") : notice.getPayload();
+        assert notice.getPayload().contains("\"orderId\":102") : "orderId is the dedupe key: " + notice.getPayload();
+        // What admin is told is that someone ordered, not what they bought.
+        assert !notice.getPayload().contains("items") : "notice should not carry order detail: " + notice.getPayload();
+        assert !notice.getPayload().contains("address") : "notice should not carry an address: " + notice.getPayload();
+        assert !notice.getPayload().contains("total") : "notice should not carry the total: " + notice.getPayload();
     }
 
     @Test
