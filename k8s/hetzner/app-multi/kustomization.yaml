@@ -46,7 +46,7 @@ images:
     newTag: e2ba34f2a80931c34865e3e668ebbf433ed68ade
   - name: granite-payment
     newName: docker.io/moldovean/granite-payment
-    newTag: e2ba34f2a80931c34865e3e668ebbf433ed68ade
+    newTag: 6517e3c0df07a60e24887e43d791ec93e9f2ee7b
   - name: granite-notification
     newName: docker.io/moldovean/granite-notification
     newTag: e2ec7ca971ac69aee5f029ce928910fabf0a655b
