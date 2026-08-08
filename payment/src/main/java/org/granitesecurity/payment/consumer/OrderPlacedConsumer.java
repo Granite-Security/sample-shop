@@ -48,18 +48,22 @@ public class OrderPlacedConsumer {
             Map<String, Object> data = MAPPER.readValue(message, Map.class);
 
             String eventType = stringValue(data.get(EVENT_TYPE_FIELD));
-            String resolvedEventType = eventType != null ? eventType : ORDER_PLACED_EVENT;
+            if (eventType == null) {
+                log.warn("Untagged message on {}, assuming {}: {}", ORDERS_EVENTS_TOPIC, ORDER_PLACED_EVENT, message);
+                eventType = ORDER_PLACED_EVENT;
+            }
 
-            if (isUnsupportedEventType(resolvedEventType)) {
-                log.warn("Ignoring unknown event type '{}' on {}: {}", resolvedEventType, ORDERS_EVENTS_TOPIC, message);
+
+            if (isUnsupportedEventType(eventType)) {
+                log.warn("Ignoring unknown event type '{}' on {}: {}", eventType, ORDERS_EVENTS_TOPIC, message);
                 return;
             }
 
-            switch (resolvedEventType) {
+            switch (eventType) {
                 case ORDERS_PURGED_EVENT -> handleOrdersPurged(data, message);
                 case REFUND_REQUESTED_EVENT -> handleRefundRequested(data, message);
                 case ORDER_PLACED_EVENT -> handleOrderPlaced(data, message);
-                default -> throw new IllegalStateException("Unhandled orders event type: " + resolvedEventType);
+                default -> throw new IllegalStateException("Unhandled orders event type: " + eventType);
             }
         } catch (Exception e) {
             log.error("Failed to handle {} message: {}", ORDERS_EVENTS_TOPIC, message, e);
