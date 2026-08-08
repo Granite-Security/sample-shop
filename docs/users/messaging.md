@@ -13,6 +13,15 @@ prompted it — **database or Kafka?** — in §1, and records the decisions in 
 
 ## 1. The short answer: database, and it isn't close
 
+> **Amended:** one message type now arrives over Kafka — the admin order notice
+> (`shop.notifications` → `OrderNoticeService`). It does not weaken what follows. The rule
+> below is about the **send path a browser drives**: a user's own words must never become a
+> 202 and a dead-letter. The notice is the opposite shape — a domain fact that already
+> exists in another service, which profile *renders* into a sentence on arrival. No user is
+> waiting on its delivery, nobody's text rides the broker, and it is idempotent through
+> `processed_order_notice` precisely because a message row is not an upsert. Adding a
+> second such consumer is a decision to reopen here; adding Kafka to `POST /messages` is not.
+
 **The message store is a table in `profiledb`. Messaging uses no Kafka at all** — not on the
 send path, not for notifications, nowhere. A message is a row one user writes and another
 user queries.

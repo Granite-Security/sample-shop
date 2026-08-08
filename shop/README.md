@@ -34,11 +34,19 @@ Produced through a **transactional outbox** — the order row and the event row
 commit together, then `OutboxRelay` polls (`app.outbox.poll-interval`, 5s) and
 publishes. Nothing is sent from the request path.
 
+The destination is the outbox row's own `topic` column (added in `009`, defaulting
+to `orders.events`), so one relay feeds both topics. Placing an order writes **two**
+rows in the same transaction: `OrderPlaced` for payment and delivery, and
+`OrderPlacedNotice` for profile, which turns it into an in-app message to admin.
+That second row is deliberately not `REQUIRES_NEW` or `NESTED` — a notice that can
+commit while the order rolls back would announce an order that does not exist.
+
 | Topic | Direction | Event | Fields that matter |
 |-------|-----------|-------|--------------------|
 | `orders.events` | out | `OrderPlaced` | `eventType`, `orderId` (also the Kafka key), `provider` — which payment provider must handle it, never null |
 | `orders.events` | out | `RefundRequested` | `orderId`, `eventType` |
 | `orders.events` | out | `OrdersPurged` | `orderIds` (plural), `eventType`; keyed by **username**, not order id |
+| `shop.notifications` | out | `OrderPlacedNotice` | `username` — that is the whole point of it; `orderId` and `occurredAt` are for profile's dedupe and staleness guard, not for display |
 | `payments.events` | in | — | `orderId`, `status` → `SUCCEEDED`→PAID, `FAILED`→PAYMENT_FAILED, `REFUNDED`→REIMBURSED |
 | `delivery.events` | in | — | `orderId`, `status` → `DISPATCHED`→SHIPPED, `DELIVERED`→DELIVERED |
 

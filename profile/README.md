@@ -30,9 +30,18 @@ bytes live in `storage`, not here. Messages are plain rows: no Kafka, no outbox.
 | Topic | Direction | Fields that matter |
 |-------|-----------|--------------------|
 | `identity.events` | in | `type` — only `UserRegistered` is acted on; `username` — the upsert key |
+| `shop.notifications` | in | `eventType` — only `OrderPlacedNotice`; `username` — who ordered; `orderId` — the dedupe key; `occurredAt` — dropped if older than `profile.order-notices.max-age` |
 
 Provisioning is an upsert keyed by username, so no dedupe table is needed: a
 replayed event rewrites the same row. Profile **produces nothing**.
+
+`OrderPlacedNotice` gets the opposite treatment, because writing a message is not
+idempotent — a redelivery is a second message in admin's inbox, not the same row
+rewritten. `processed_order_notice` is claimed (`INSERT … ON CONFLICT DO NOTHING`)
+**before** the message is written, so a crash between the two drops a courtesy
+notice rather than duplicating one. The consumer reads from `earliest`, so notices
+older than `max-age` are dropped: a group that lost its offsets would otherwise
+replay a day of orders into the inbox as though they had just happened.
 
 ## Outbound calls
 
@@ -75,6 +84,7 @@ finds what a half-finished cascade left behind — it reports, never deletes.
 |----------|---------|
 | `PROFILE_R2DBC_URL` / `_USERNAME` / `_PASSWORD` | Runtime DB (`PROFILE_JDBC_*` is Liquibase only) |
 | `KAFKA_BOOTSTRAP_SERVERS` | Broker |
+| `ORDER_NOTICE_RECIPIENT` / `_SENDER` / `_MAX_AGE` | Who hears about new orders (default `admin`), the reserved sender (`system`), and how old a notice may be (`PT24H`) |
 | `MICROSERVICES_{SHOP,PAYMENT,DELIVERY,STORAGE}_URI` | Call targets |
 | `IDENTITY_ADMIN_BASE_URI`, `AUTH_SERVER_TOKEN_URI` | auth-server API and token endpoint — direct, not via the gateway |
 | `INTERNAL_CLIENT_ID` / `_SECRET` | Shared internal-scope credential |

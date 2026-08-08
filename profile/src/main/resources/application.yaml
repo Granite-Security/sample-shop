@@ -84,3 +84,16 @@ microservices:
 storage:
   public-base-url: ${STORAGE_PUBLIC_BASE_URL:http://product-media.localhost:3902}
 
+
+profile:
+  order-notices:
+    # Who hears about new orders. A username, not a role: resolving "every admin"
+    # would mean asking auth-server on every order, and the inbox is per-user
+    # anyway, so a second recipient is a second message, not a second lookup.
+    recipient: ${ORDER_NOTICE_RECIPIENT:admin}
+    # Reserved sender, deliberately not a real account — see OrderNoticeService.
+    sender: ${ORDER_NOTICE_SENDER:system}
+    # Older than this and the notice is dropped rather than delivered: the consumer
+    # reads from earliest, so a lost offset would otherwise replay a day of orders
+    # into admin's inbox as if they had just happened.
+    max-age: ${ORDER_NOTICE_MAX_AGE:PT24H}

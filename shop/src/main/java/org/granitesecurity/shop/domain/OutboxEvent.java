@@ -15,6 +15,9 @@ import java.util.UUID;
 @Table("outbox")
 public class OutboxEvent implements Persistable<UUID> {
 
+    /** Where a row goes when it does not say. Matches the column's DEFAULT. */
+    public static final String DEFAULT_TOPIC = "orders.events";
+
     @Id
     @Getter
     @Setter
@@ -43,6 +46,10 @@ public class OutboxEvent implements Persistable<UUID> {
     @Setter
     private String status;
 
+    @Getter
+    @Setter
+    private String topic;
+
     @Column("created_at")
     @Getter
     @Setter
@@ -56,12 +63,18 @@ public class OutboxEvent implements Persistable<UUID> {
     public OutboxEvent() {}
 
     public OutboxEvent(String aggregateType, String aggregateId, String eventType, String payload, String status) {
+        this(aggregateType, aggregateId, eventType, payload, status, DEFAULT_TOPIC);
+    }
+
+    public OutboxEvent(String aggregateType, String aggregateId, String eventType, String payload, String status,
+                       String topic) {
         this.id = UUID.randomUUID();
         this.aggregateType = aggregateType;
         this.aggregateId = aggregateId;
         this.eventType = eventType;
         this.payload = payload;
         this.status = status;
+        this.topic = topic;
         this.createdAt = Instant.now();
     }
 
