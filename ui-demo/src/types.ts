@@ -246,9 +246,14 @@ export interface DuplicateFileCheckResponse {
 // not 20 profile lookups.
 export interface MessageResponse {
   id: number;
-  senderUsername: string;
+  // Null when the message came from the public contact form and nobody was
+  // signed in (docs/users/messaging.md §11) — as is counterpartyUsername, in
+  // the recipient's inbox. There is no profile to link to and no inbox to
+  // reply into; senderEmail is the only way back to them.
+  senderUsername: string | null;
+  senderEmail: string | null;
   recipientUsername: string;
-  counterpartyUsername: string;
+  counterpartyUsername: string | null;
   counterpartyDisplayName: string;
   counterpartyAvatarUrl: string | null;
   // Optional: null when the sender wrote none, in which case the list
@@ -269,6 +274,23 @@ export interface RecipientResponse {
   username: string;
   displayName: string;
   avatarUrl: string | null;
+}
+
+// The public contact form (docs/users/messaging.md §11). No recipient field:
+// the server always delivers to the configured manager. `name` and `email`
+// are ignored when the caller is signed in — the sender is the JWT subject.
+export interface ContactRequest {
+  name?: string;
+  email?: string;
+  subject?: string;
+  body: string;
+  // The honeypot. Always sent empty by the form; the input is hidden, so
+  // anything that fills it in is a bot and the submission is dropped.
+  website?: string;
+}
+
+export interface ContactResponse {
+  status: string;
 }
 
 export interface SendMessageRequest {
