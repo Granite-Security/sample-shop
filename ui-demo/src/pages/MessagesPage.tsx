@@ -79,6 +79,10 @@ export function MessagesPage() {
    * becoming a bare "Re: " (docs/users/messaging.md §5.1).
    */
   const reply = (message: MessageResponse) => {
+    // A contact-form note from someone who was not signed in has no account to
+    // reply into (docs/users/messaging.md §11). MessageDetail offers a mailto
+    // for those instead of this, so there is nothing to do here.
+    if (!message.counterpartyUsername) return;
     const subject = message.subject
       ? /^re:/i.test(message.subject)
         ? message.subject
@@ -209,6 +213,10 @@ function MessageDetail({
   onDelete: () => void;
   onReply: () => void;
 }) {
+  // Sent from the contact form by someone who was not signed in: no profile, no
+  // inbox, no @handle. Their email is the only way back to them (§11).
+  const guest = !message.counterpartyUsername;
+
   return (
     <article className="mt-8 border border-cocoa/15 bg-white/60 p-6">
       <div className="flex flex-wrap items-center gap-4">
@@ -219,13 +227,34 @@ function MessageDetail({
             <span className="font-semibold">{message.counterpartyDisplayName}</span>
           </p>
           <p className="text-xs text-cocoa/50">
-            @{message.counterpartyUsername} · {new Date(message.createdAt).toLocaleString()}
+            {guest
+              ? `${message.senderEmail ?? 'no address given'} · via the contact form`
+              : `@${message.counterpartyUsername}`}
+            {' · '}
+            {new Date(message.createdAt).toLocaleString()}
           </p>
         </div>
         <div className="flex w-full gap-2 sm:w-auto">
-          <button className={`${detailButtonStyle} bg-cocoa text-ivory hover:bg-espresso`} onClick={onReply}>
-            Reply
-          </button>
+          {guest ? (
+            // An email client, not a compose box — replying in-app would write a
+            // row into an inbox that does not exist. Nothing to reply to at all
+            // when they left no address, so the button goes away rather than
+            // opening a blank one.
+            message.senderEmail && (
+              <a
+                className={`${detailButtonStyle} bg-cocoa text-center text-ivory hover:bg-espresso`}
+                href={`mailto:${encodeURIComponent(message.senderEmail)}?subject=${encodeURIComponent(
+                  message.subject ? `Re: ${message.subject}` : 'Your message',
+                )}`}
+              >
+                Reply by email
+              </a>
+            )
+          ) : (
+            <button className={`${detailButtonStyle} bg-cocoa text-ivory hover:bg-espresso`} onClick={onReply}>
+              Reply
+            </button>
+          )}
           <button
             className={`${detailButtonStyle} border border-cocoa/20 text-cocoa hover:bg-cocoa/10`}
             onClick={onClose}

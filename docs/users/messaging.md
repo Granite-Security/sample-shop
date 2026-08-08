@@ -369,6 +369,11 @@ What to actually check, in order:
 Added after Phase 2. A visitor on the storefront — **signed in or not** — opens
 *Contact*, writes a note, and it lands in `manager`'s ordinary inbox.
 
+Live in both frontends: `ui-shop` (a new page) and `ui-demo` (that storefront already
+had a fully-styled Contact page which deliberately told the visitor their note had
+*not* been delivered — it is the same page, now wired to the endpoint, keeping its own
+copy and its canned subject list).
+
 This reuses everything above rather than becoming a second product. The submission is a
 `user_message` row like any other, so the manager reads it in the same Messages page, with
 the same unread bell, and no second inbox to remember to open (D10).
