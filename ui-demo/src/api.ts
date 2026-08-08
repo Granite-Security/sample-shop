@@ -32,6 +32,8 @@ import type {
   MessageResponse,
   RecipientResponse,
   SendMessageRequest,
+  ContactRequest,
+  ContactResponse,
 } from './types';
 import { downscaleToSquare } from './utils/avatar';
 
@@ -397,6 +399,15 @@ export const api = {
   // payments through an order id, and a top-up has none (finance.md §6.1).
   syncTopup: (paymentId: string) =>
     request<CreatePaymentIntentResponse>(`/api/payments/topup/${paymentId}/sync`, { method: 'POST' }),
+
+  // The public contact form (docs/users/messaging.md §11) — mirrors
+  // ui-shop/src/api/contact.ts. The one profile endpoint that needs no token,
+  // which is what lets the Contact page work signed out. The Authorization
+  // header is still sent when there is one: that is how the server knows to
+  // file the message under the signed-in username instead of the name and
+  // email the form collected.
+  submitContact: (body: ContactRequest) =>
+    request<ContactResponse>('/api/profiles/contact', { method: 'POST', body: JSON.stringify(body) }),
 
   // User-to-user messaging — mirrors ui-shop/src/api/messages.ts. Served by
   // profile under /api/profiles/me/messages, so these are authenticated by the
