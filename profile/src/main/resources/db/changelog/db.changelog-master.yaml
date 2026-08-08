@@ -15,3 +15,5 @@ databaseChangeLog:
       file: db/changelog/007-user-messaging.sql
   - include:
       file: db/changelog/008-order-notice.sql
+  - include:
+      file: db/changelog/009-contact-message.sql

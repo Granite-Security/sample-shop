@@ -23,8 +23,24 @@ public class UserMessage {
     @Id
     private Long id;
 
+    /**
+     * Null when the message came from the public contact form and nobody was signed
+     * in (docs/users/messaging.md §11). Every other row has a username here — a real
+     * one, or the reserved {@code system} sender used by order notices.
+     */
     @Column("sender_username")
     private String senderUsername;
+
+    /** Contact form only: the name an anonymous visitor typed. Null otherwise. */
+    @Column("sender_name")
+    private String senderName;
+
+    /**
+     * Contact form only: the address an anonymous visitor typed, and the only way
+     * to answer them — there is no inbox to reply into. Null otherwise.
+     */
+    @Column("sender_email")
+    private String senderEmail;
 
     @Column("recipient_username")
     private String recipientUsername;

@@ -3,6 +3,7 @@ package org.granitesecurity.profile.route;
 import org.granitesecurity.profile.handler.AddressHandler;
 import org.granitesecurity.profile.handler.AdminUserHandler;
 import org.granitesecurity.profile.handler.AvatarHandler;
+import org.granitesecurity.profile.handler.ContactHandler;
 import org.granitesecurity.profile.handler.MessageHandler;
 import org.granitesecurity.profile.handler.ProfileHandler;
 import org.granitesecurity.profile.handler.UserFileHandler;
@@ -22,8 +23,16 @@ public class ProfileRoute {
             UserFileHandler userFileHandler,
             AvatarHandler avatarHandler,
             AdminUserHandler adminUserHandler,
-            MessageHandler messageHandler) {
+            MessageHandler messageHandler,
+            ContactHandler contactHandler) {
         return RouterFunctions.route()
+                // The public contact form (docs/users/messaging.md §11) — the one
+                // route in this service an unauthenticated caller may reach, and the
+                // one ProfileSec permits by method as well as path. It does not
+                // collide with GET /api/profiles/{username} below (different method),
+                // but it is registered first so the exception is visible where the
+                // routes are read.
+                .POST("/api/profiles/contact", contactHandler::submit)
                 .GET("/api/profiles/me", profileHandler::getMe)
                 .PUT("/api/profiles/me", profileHandler::updateMe)
                 .PUT("/api/profiles/me/avatar", avatarHandler::register)

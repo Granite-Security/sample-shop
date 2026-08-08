@@ -2,6 +2,7 @@ import { accountApi } from './api/account';
 import { authApi } from './api/auth';
 import { balanceApi } from './api/balance';
 import { catalogApi } from './api/catalog';
+import { contactApi } from './api/contact';
 import { deliveryApi } from './api/delivery';
 import { messagesApi } from './api/messages';
 import { ordersApi } from './api/orders';
@@ -16,6 +17,7 @@ export const api = {
   balance: balanceApi,
   shop: shopApi,
   catalog: catalogApi,
+  contact: contactApi,
   orders: ordersApi,
   payments: paymentsApi,
   profile: profileApi,
