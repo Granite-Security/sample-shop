@@ -65,6 +65,15 @@ public class OrderService {
         if (request.items() == null || request.items().isEmpty()) {
             return Mono.error(new ShopException("Order must contain at least one item"));
         }
+        // Rejected here, where the caller can see it. An order that names no provider
+        // used to travel to payment as "provider": null and be resolved to the only
+        // enabled one — but with several enabled that resolution throws inside the
+        // Kafka consumer, so the order was accepted with a 200 and then silently never
+        // got a payment intent. shop still does not choose: it insists the caller did.
+        if (request.provider() == null || request.provider().isBlank()) {
+            return Mono.error(new ShopException(
+                    "Order must name a payment provider; see GET /api/payments/providers"));
+        }
 
         List<Long> productIds = request.items().stream()
                 .map(PlaceOrderRequest.LineItem::productId)
@@ -167,6 +176,12 @@ public class OrderService {
         addressMap.put("country", order.getCountry());
 
         Map<String, Object> payload = new LinkedHashMap<>();
+        // Tagged like every other event on orders.events. It used to be the untagged
+        // one — the event that existed first — which meant consumers reached it by
+        // falling through the branches for the tagged types, and so read anything they
+        // did not recognise as an order. Consumers still accept an absent eventType
+        // until no untagged message can be in flight; see shop/README.md § Events.
+        payload.put("eventType", "OrderPlaced");
         payload.put("orderId", order.getId());
         payload.put("username", order.getUsername());
         payload.put("items", itemList);
@@ -174,7 +189,7 @@ public class OrderService {
         // Currency travels with the amount: payment must charge what shop priced, not
         // whatever its own config currently says.
         payload.put("currency", order.getCurrency());
-        // Null while one provider is enabled — payment falls back to the only one.
+        // Always present: placeOrder rejects an order that names none.
         payload.put("provider", provider);
         payload.put("orderedAt", Instant.now().toString());
         payload.put("address", addressMap);
@@ -347,10 +362,10 @@ public class OrderService {
     }
 
     /**
-     * @param provider the shopper's chosen payment provider, or null while only one is
-     *                 enabled. Carried on the context rather than the order row: it is
-     *                 an instruction to payment, and payment owns which provider a
-     *                 payment ended up on.
+     * @param provider the shopper's chosen payment provider, never null — placeOrder
+     *                 rejects an order without one. Carried on the context rather than
+     *                 the order row: it is an instruction to payment, and payment owns
+     *                 which provider a payment ended up on.
      */
     private record OrderContext(CustomerOrder order, List<OrderItem> items,
                                 Map<Long, Product> productMap, String provider) {}

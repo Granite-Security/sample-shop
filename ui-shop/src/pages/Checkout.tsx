@@ -144,11 +144,11 @@ function CheckoutInner() {
       .catch(() => {});
   }, [isAuthenticated]);
 
-  // With one provider the hook pre-selects it and the selector stays hidden, so this
-  // is never unsatisfied. With several, the shopper has to say who takes their money —
-  // shop rejects an order that names no provider, and a raw 400 is a poor way to
-  // discover that a radio button was missed.
-  const needsProviderChoice = providers.length > 1 && !selectedProvider;
+  // shop rejects an order that names no provider, whatever the count — so this guards
+  // the single-provider case too, where the hook pre-selects and the selector stays
+  // hidden. Unsatisfied there only if GET /api/payments/providers has not answered yet
+  // or failed, and "wait a moment" beats a raw 400 for either.
+  const needsProviderChoice = !selectedProvider;
 
   const handlePlaceOrder = async () => {
     if (!selectedAddress) {
@@ -165,8 +165,7 @@ function CheckoutInner() {
       const result = await api.orders.placeOrder({
         items: items.map(i => ({ productId: i.product.id, quantity: i.quantity })),
         address: selectedAddress,
-        // Null while one provider is enabled; payment fills it in. Once several are,
-        // the selector has already forced a choice.
+        // Always set: needsProviderChoice above blocks the click until it is.
         provider: selectedProvider ?? undefined,
       });
       setOrder(result);

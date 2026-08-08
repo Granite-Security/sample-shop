@@ -8,18 +8,18 @@ deleting users: it decides, auth-server only executes.
 
 `ProfileRoute` (functional routing); rules in `ProfileSec`.
 
-| Endpoint | Auth |
-|----------|------|
-| `GET`/`PUT /api/profiles/me` | authenticated — always the token's own subject |
-| `PUT`/`DELETE /api/profiles/me/avatar`, `/avatar/source` | authenticated |
-| `GET`/`POST`/`PUT`/`DELETE /api/profiles/me/addresses[/{id}]` | authenticated |
-| `GET`/`POST`/`DELETE /api/profiles/me/files[/{id}]` | authenticated |
-| `GET`/`POST`/`DELETE /api/profiles/me/messages/**` | authenticated |
-| `GET /api/profiles`, `/api/profiles/{username}` | ADMIN |
-| `GET /api/profiles/admin/users`, `/admin/orphans` | ADMIN |
-| `POST /api/profiles/admin/users/{u}/block`, `/unblock` | ADMIN |
-| `DELETE /api/profiles/admin/users/{u}` | ADMIN — the delete saga below |
-| `/api/profiles/internal/**` | `SCOPE_internal` — service-to-service, no user |
+| Endpoint | What it does | Auth |
+|----------|--------------|------|
+| `GET`/`PUT /api/profiles/me` | Reads and updates the caller's own email, first/last name and display name. | authenticated — always the token's own subject |
+| `PUT`/`DELETE /api/profiles/me/avatar`, `/avatar/source` | Registers the object key of an uploaded avatar, switches the displayed picture between `UPLOAD`, `GOOGLE` and `NONE`, or clears it. | authenticated |
+| `GET`/`POST`/`PUT`/`DELETE /api/profiles/me/addresses[/{id}]` | CRUD over the caller's delivery addresses, the ones shop and delivery later resolve by id. | authenticated |
+| `GET`/`POST`/`DELETE /api/profiles/me/files[/{id}]` | Lists, registers and deletes the metadata rows describing the caller's objects in `storage`, with a `?contentHash` lookup that lets the browser skip re-uploading a duplicate. | authenticated |
+| `GET`/`POST`/`DELETE /api/profiles/me/messages/**` | Sends and reads user-to-user messages, plus recipient search, unread count, mark-as-read and per-side delete. | authenticated |
+| `GET /api/profiles`, `/api/profiles/{username}` | Lists every profile, or fetches one by username. | ADMIN |
+| `GET /api/profiles/admin/users`, `/admin/orphans` | Lists each identity joined to its profile and block state; reports the shop, payment, delivery and storage rows a half-finished delete left behind (never deletes them). | ADMIN |
+| `POST /api/profiles/admin/users/{u}/block`, `/unblock` | Revokes or restores a user's ability to sign in, guarding against blocking yourself or the last enabled admin. | ADMIN |
+| `DELETE /api/profiles/admin/users/{u}` | Runs the cross-service erasure, falling back to a permanent block when the user has paid orders. | ADMIN — the delete saga below |
+| `/api/profiles/internal/**` | Lets another service confirm a username exists (balance, before a transfer) or fetch one delivery address by id. | `SCOPE_internal` — service-to-service, no user |
 
 Everything under `/me` derives the username from the JWT, never from the body.
 Avatars store a `source` (`UPLOAD`, `GOOGLE`, `NONE`) plus an object key — the

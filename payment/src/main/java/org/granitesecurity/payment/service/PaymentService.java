@@ -78,6 +78,26 @@ public class PaymentService {
      * the single enabled provider, which is correct while Stripe is the only one and
      * throws loudly once it is not.
      */
+    /**
+     * The provider for a payment being opened. A caller that named none is relying on
+     * there being exactly one enabled — true locally, false in the cluster, where both
+     * Stripe and PayPal are on. That case reaches here from the OrderPlaced consumer,
+     * whose catch-all would otherwise turn it into a logged "failed to handle" and an
+     * order that quietly never gets an intent, so name it before rethrowing.
+     */
+    private PaymentProvider resolveProvider(String providerName, String context) {
+        if (providerName != null) {
+            return providers.get(providerName);
+        }
+        try {
+            return providers.defaultProvider();
+        } catch (PaymentProviderRegistry.AmbiguousProviderException e) {
+            log.error("No payment provider named for {} and several are enabled — "
+                    + "no intent will be opened: {}", context, e.getMessage());
+            throw e;
+        }
+    }
+
     private PaymentProvider providerFor(Payment payment) {
         String name = payment.getProvider();
         if (name == null || name.isBlank()) {
@@ -847,7 +867,7 @@ public class PaymentService {
     private Mono<Payment> doCreatePaymentIntent(Long orderId, BigDecimal total, String currencyOverride,
                                                 String username, String idempotencyPrefix, String providerName) {
         String cur = currencyOverride != null ? currencyOverride : currency;
-        PaymentProvider provider = providerName == null ? providers.defaultProvider() : providers.get(providerName);
+        PaymentProvider provider = resolveProvider(providerName, "order " + orderId);
 
         // Username is passed as "" rather than null when unknown: create always sent the
         // metadata key before the seam, and the adapter omits it only for null.

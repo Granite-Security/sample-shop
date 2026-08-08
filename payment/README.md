@@ -72,7 +72,7 @@ from the request path.
 
 | Topic | Direction | Event | Fields that matter |
 |-------|-----------|-------|--------------------|
-| `orders.events` | in | `OrderPlaced` | `orderId`, `provider` — which provider must charge; null falls back to the only enabled one |
+| `orders.events` | in | `OrderPlaced` | `eventType`, `orderId`, `provider` — which provider must charge. shop rejects an order that names none, so null only appears on events published before that; it falls back to the only enabled provider and fails loudly when several are |
 | `orders.events` | in | `RefundRequested`, `OrdersPurged` | `eventType` — one topic carries all three, so branch first |
 | `payments.events` | out | — | `orderId` (Kafka key), `status` — `SUCCEEDED`, `FAILED`, `REFUNDED`, `REFUND_FAILED` |
 
@@ -214,9 +214,12 @@ against every enabled provider's supported set, and **no enabled provider at
 all fails the boot** — a payment service that cannot take money should not
 pretend to be up.
 
-Enabling a second provider makes `POST /api/shop/orders` require an explicit
-`provider`; with one enabled it is inferred, and asking for an unknown one is a
-400, not a 500.
+`POST /api/shop/orders` requires an explicit `provider` whatever the count — it
+is not inferred from there being one enabled. That inference was a trap: with
+Stripe and PayPal both on in the cluster, resolving an unnamed provider throws
+inside the `OrderPlaced` consumer, so the order was accepted with a 200 and then
+quietly never got an intent. A 400 at shop's edge is the same refusal where the
+caller can see it. Asking for an unknown provider is a 400 too, not a 500.
 
 ```bash
 ./gradlew bootRun
