@@ -183,6 +183,11 @@ spec:
                 configMapKeyRef:
                   name: granite-config
                   key: PUBLIC_BASE_URL
+            - name: STOREFRONT_ORIGINS
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: STOREFRONT_ORIGINS
             - name: FRONTEND_ORIGIN
               valueFrom:
                 configMapKeyRef:

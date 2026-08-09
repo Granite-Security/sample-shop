@@ -36,6 +36,8 @@ public class OrderPlacedConsumer {
     private static final String USERNAME_FIELD = "username";
     private static final String CURRENCY_FIELD = "currency";
     private static final String PROVIDER_FIELD = "provider";
+    /** Which storefront the order was placed from (docs/bugs/redirects.md §4.1). */
+    private static final String ORIGIN_FIELD = "storefrontOrigin";
 
     public OrderPlacedConsumer(PaymentService paymentService) {
         this.paymentService = paymentService;
@@ -110,7 +112,12 @@ public class OrderPlacedConsumer {
         String currency = stringValue(data.get(CURRENCY_FIELD));
         String provider = stringValue(data.get(PROVIDER_FIELD));
 
-        paymentService.processOrderPlaced(orderId, total, username, currency, provider).block();
+        // Optional for the same reason as the two above: events published before shop
+        // carried it have none, and payment falls back to its configured origin. Never
+        // trusted as-is — PaymentService allow-lists it before it reaches a redirect.
+        String storefrontOrigin = stringValue(data.get(ORIGIN_FIELD));
+
+        paymentService.processOrderPlaced(orderId, total, username, currency, provider, storefrontOrigin).block();
     }
 
     private static boolean isUnsupportedEventType(String eventType) {

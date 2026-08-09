@@ -14,6 +14,7 @@ import org.granitesecurity.payment.provider.Money;
 import org.granitesecurity.payment.provider.PaymentProvider;
 import org.granitesecurity.payment.provider.PaymentProviderException;
 import org.granitesecurity.payment.provider.PaymentProviderRegistry;
+import org.granitesecurity.payment.web.StorefrontOrigins;
 import org.granitesecurity.payment.provider.ProviderIntent;
 import org.granitesecurity.payment.provider.RedirectPaymentProvider;
 import org.granitesecurity.payment.repository.OutboxRepository;
@@ -45,6 +46,7 @@ public class PaymentService {
     private final RefundRepository refundRepository;
     private final PaymentAttemptRepository attemptRepository;
     private final PaymentProviderRegistry providers;
+    private final StorefrontOrigins storefrontOrigins;
 
     @Value("${payment.shop-currency:${stripe.currency:chf}}")
     private String currency;
@@ -61,12 +63,14 @@ public class PaymentService {
                           OutboxRepository outboxRepository,
                           RefundRepository refundRepository,
                           PaymentAttemptRepository attemptRepository,
-                          PaymentProviderRegistry providers) {
+                          PaymentProviderRegistry providers,
+                          StorefrontOrigins storefrontOrigins) {
         this.paymentRepository = paymentRepository;
         this.outboxRepository = outboxRepository;
         this.refundRepository = refundRepository;
         this.attemptRepository = attemptRepository;
         this.providers = providers;
+        this.storefrontOrigins = storefrontOrigins;
     }
 
     /**
@@ -116,21 +120,30 @@ public class PaymentService {
      *                         the configured shop currency has since changed.
      * @param providerName     the shopper's chosen provider, or null for the only
      *                         enabled one
+     * @param origin           the storefront the order was placed from, or null for events
+     *                         published before shop carried one — the same "optional until
+     *                         producers catch up" treatment currency and provider get
+     *                         (docs/bugs/redirects.md §4.1)
      */
     public Mono<Void> processOrderPlaced(Long orderId, BigDecimal total, String username,
-                                         String currencyOverride, String providerName) {
+                                         String currencyOverride, String providerName, String origin) {
         return paymentRepository.findByOrderId(orderId)
                 .switchIfEmpty(Mono.defer(() -> {
                     log.info("Creating payment for order {} from OrderPlaced event", orderId);
                     return doCreatePaymentIntent(orderId, total, currencyOverride, username,
-                            "payment-order-async-", providerName);
+                            "payment-order-async-", providerName, origin);
                 }))
                 .doOnNext(existing -> log.info("Payment already exists for order {}, skipping", orderId))
                 .then();
     }
 
+    public Mono<Void> processOrderPlaced(Long orderId, BigDecimal total, String username,
+                                         String currencyOverride, String providerName) {
+        return processOrderPlaced(orderId, total, username, currencyOverride, providerName, null);
+    }
+
     public Mono<Void> processOrderPlaced(Long orderId, BigDecimal total, String username) {
-        return processOrderPlaced(orderId, total, username, null, null);
+        return processOrderPlaced(orderId, total, username, null, null, null);
     }
 
     public Mono<CreatePaymentIntentResponse> getPaymentByOrderId(Long orderId) {
@@ -235,31 +248,52 @@ public class PaymentService {
      * is {@code OrderPlacedConsumer} — a Kafka consumer with no HTTP request in flight.
      */
     private CreateIntentRequest intentRequest(PaymentProvider provider, Long orderId, Money amount,
-                                              String username, String idempotencyKey) {
+                                              String username, String idempotencyKey, String origin) {
+        // Both hops use the same origin: one domain serves the SPA and the API alike, as
+        // k8s/base/config.yaml has always noted (docs/bugs/redirects.md §4.3, D2b).
+        String storefront = storefrontOrigins.sanitise(origin);
         return new CreateIntentRequest(
                 orderId,
                 amount,
                 username,
                 idempotencyKey,
-                trimSlash(publicBaseUrl) + "/api/payments/return/" + provider.name() + "?orderId=" + orderId,
-                trimSlash(frontendOrigin) + "/orders/" + orderId + "?payment=cancelled",
+                trimSlash(storefront) + "/api/payments/return/" + provider.name() + "?orderId=" + orderId,
+                trimSlash(storefront) + "/orders/" + orderId + "?payment=cancelled",
                 // Null means "same as the order id" — unchanged behaviour for orders.
                 null);
     }
 
     /** Where the shopper is sent once a redirect payment is finalized, success or not. */
-    public String orderPageUrl(Long orderId) {
-        return trimSlash(frontendOrigin) + "/orders/" + orderId;
+    public String orderPageUrl(Long orderId, String origin) {
+        return trimSlash(storefrontOrigins.sanitise(origin)) + "/orders/" + orderId;
     }
 
     /** Where the shopper lands after a top-up, success or not. */
-    public String balancePageUrl() {
-        return trimSlash(frontendOrigin) + "/profile/balance";
+    public String balancePageUrl(String origin) {
+        return trimSlash(storefrontOrigins.sanitise(origin)) + "/profile/balance";
     }
 
     /** Fallback landing page when a return carries no usable order id. */
-    public String ordersPageUrl() {
-        return trimSlash(frontendOrigin) + "/orders";
+    public String ordersPageUrl(String origin) {
+        return trimSlash(storefrontOrigins.sanitise(origin)) + "/orders";
+    }
+
+    /**
+     * Where to send a shopper returning for an order, using the origin stored when the
+     * payment was opened. The return request comes from the provider, so its own headers
+     * say nothing about which storefront the shopper started on (§4.1).
+     */
+    /** The stored origin for a top-up, for the error path where finalize gave us no row. */
+    public Mono<String> topupOriginFor(java.util.UUID paymentId) {
+        return paymentRepository.findById(paymentId)
+                .map(payment -> storefrontOrigins.sanitise(payment.getStorefrontOrigin()))
+                .defaultIfEmpty(storefrontOrigins.fallback());
+    }
+
+    public Mono<String> orderPageUrlFor(Long orderId) {
+        return paymentRepository.findByOrderId(orderId)
+                .map(payment -> orderPageUrl(orderId, payment.getStorefrontOrigin()))
+                .defaultIfEmpty(orderPageUrl(orderId, null));
     }
 
     private static String trimSlash(String url) {
@@ -419,14 +453,19 @@ public class PaymentService {
     }
 
     public Mono<Payment> createPaymentIntent(Long orderId, BigDecimal total, String currencyOverride,
-                                             String username, String providerName) {
+                                             String username, String providerName, String origin) {
         return paymentRepository.findByOrderId(orderId)
                 .flatMap(existing -> {
                     log.info("Payment already exists for order {}, returning existing", orderId);
                     return Mono.just(existing);
                 })
                 .switchIfEmpty(Mono.defer(() -> doCreatePaymentIntent(
-                        orderId, total, currencyOverride, username, "payment-order-", providerName)));
+                        orderId, total, currencyOverride, username, "payment-order-", providerName, origin)));
+    }
+
+    public Mono<Payment> createPaymentIntent(Long orderId, BigDecimal total, String currencyOverride,
+                                             String username, String providerName) {
+        return createPaymentIntent(orderId, total, currencyOverride, username, providerName, null);
     }
 
     public Mono<Payment> createPaymentIntent(Long orderId, BigDecimal total, String currencyOverride, String username) {
@@ -453,7 +492,10 @@ public class PaymentService {
                             orderId,
                             new Money(existing.getAmount(), existing.getCurrency()),
                             null,
-                            "payment-retry-" + orderId + "-" + UUID.randomUUID());
+                            "payment-retry-" + orderId + "-" + UUID.randomUUID(),
+                            // The retry may arrive from either storefront, but the payment
+                            // already knows where it began — prefer that over the caller.
+                            existing.getStorefrontOrigin());
 
                     return provider.recreateIntent(request, existing.getProviderPaymentId())
                             // A retry is a new attempt, not an edit of the old one: the
@@ -548,11 +590,16 @@ public class PaymentService {
      * provider tab therefore needs a sync to reconcile — see finance.md §6.1.
      */
     public Mono<Payment> createTopupIntent(String username, BigDecimal amount,
-                                           String currencyOverride, String providerName) {
+                                           String currencyOverride, String providerName, String origin) {
         String cur = currencyOverride != null ? currencyOverride : currency;
         PaymentProvider provider = providerName == null ? providers.defaultProvider() : providers.get(providerName);
 
+        // Unlike an order, a top-up is opened by a direct HTTP call, so the origin is on
+        // the request that got us here — no event, no column needed to carry it (§4.2).
+        String storefront = storefrontOrigins.sanitise(origin);
+
         Payment payment = Payment.topup(username, amount, cur.toUpperCase(), provider.name());
+        payment.setStorefrontOrigin(storefront);
         String reference = payment.getId().toString();
 
         var request = new CreateIntentRequest(
@@ -560,8 +607,8 @@ public class PaymentService {
                 new Money(amount, cur),
                 username,
                 "payment-topup-" + reference,
-                trimSlash(publicBaseUrl) + "/api/payments/return/" + provider.name() + "?paymentId=" + reference,
-                trimSlash(frontendOrigin) + "/profile/balance?topup=cancelled",
+                trimSlash(storefront) + "/api/payments/return/" + provider.name() + "?paymentId=" + reference,
+                trimSlash(storefront) + "/profile/balance?topup=cancelled",
                 reference);
 
         return provider.createIntent(request)
@@ -854,7 +901,7 @@ public class PaymentService {
     }
 
     private Mono<Payment> doCreatePaymentIntent(Long orderId, BigDecimal total, String currencyOverride, String username, String idempotencyPrefix) {
-        return doCreatePaymentIntent(orderId, total, currencyOverride, username, idempotencyPrefix, null);
+        return doCreatePaymentIntent(orderId, total, currencyOverride, username, idempotencyPrefix, null, null);
     }
 
     /**
@@ -865,7 +912,8 @@ public class PaymentService {
      *                     it becomes a shopper choice in step 3 of the refactor plan.
      */
     private Mono<Payment> doCreatePaymentIntent(Long orderId, BigDecimal total, String currencyOverride,
-                                                String username, String idempotencyPrefix, String providerName) {
+                                                String username, String idempotencyPrefix, String providerName,
+                                                String origin) {
         String cur = currencyOverride != null ? currencyOverride : currency;
         PaymentProvider provider = resolveProvider(providerName, "order " + orderId);
 
@@ -876,11 +924,13 @@ public class PaymentService {
                 orderId,
                 new Money(total, cur),
                 username != null ? username : "",
-                idempotencyPrefix + orderId);
+                idempotencyPrefix + orderId,
+                origin);
 
         return provider.createIntent(request)
                 .flatMap(intent -> {
                     Payment payment = new Payment(orderId, total, cur.toUpperCase(), provider.name());
+                    payment.setStorefrontOrigin(storefrontOrigins.sanitise(origin));
                     payment.setProviderPaymentId(intent.providerPaymentId());
                     payment.setProviderPayload(toProviderPayload(intent));
                     payment.setStatus(PaymentStatus.CREATED.name());

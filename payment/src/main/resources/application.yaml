@@ -115,3 +115,10 @@ app:
   # from the API's in local dev (5173 vs 8080) and is identical to it in k8s.
   # Reuses the variable notification already builds password-reset links from.
   frontend-origin: ${FRONTEND_ORIGIN:http://localhost:5173}
+  # Storefronts this service may redirect a shopper to. The resolved per-request origin
+  # is checked against this before it reaches a 302, so a forged Origin header cannot
+  # turn the payment return into an open redirect (docs/bugs/redirects.md §4.4).
+  # Shares CORS_ALLOWED_ORIGINS rather than adding a second list that can drift out of
+  # sync with it — the domains that may call us are the domains we may return to.
+  # frontend-origin above is always trusted and is the fallback.
+  storefront-origins: ${STOREFRONT_ORIGINS:${CORS_ALLOWED_ORIGINS:}}

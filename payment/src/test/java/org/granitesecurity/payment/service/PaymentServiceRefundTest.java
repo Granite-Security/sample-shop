@@ -13,6 +13,7 @@ import org.granitesecurity.payment.domain.PaymentStatus;
 import org.granitesecurity.payment.domain.Refund;
 import org.granitesecurity.payment.domain.RefundStatus;
 import org.granitesecurity.payment.provider.PaymentProviderRegistry;
+import org.granitesecurity.payment.web.StorefrontOrigins;
 import org.granitesecurity.payment.provider.stripe.StripePaymentProvider;
 import org.granitesecurity.payment.repository.OutboxRepository;
 import org.granitesecurity.payment.repository.PaymentAttemptRepository;
@@ -98,7 +99,8 @@ class PaymentServiceRefundTest {
         // the service's refund logic, and the SDK is still intercepted below, so stubbing
         // the port here would only prove the stub works.
         paymentService = new PaymentService(paymentRepository, outboxRepository, refundRepository, attemptRepository,
-                new PaymentProviderRegistry(List.of(new StripePaymentProvider()), "USD"));
+                new PaymentProviderRegistry(List.of(new StripePaymentProvider()), "USD"),
+                new StorefrontOrigins("", "http://localhost:5173"));
         stripeApi = new RecordingResponseGetter();
         ApiResource.setGlobalResponseGetter(stripeApi);
     }

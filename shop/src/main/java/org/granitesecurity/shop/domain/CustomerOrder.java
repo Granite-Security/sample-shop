@@ -42,6 +42,18 @@ public class CustomerOrder {
     private String zipCode;
     private String country;
 
+    /**
+     * The storefront this order was placed from, e.g. {@code https://sichocolate.com}
+     * (docs/bugs/redirects.md §4.1). Published on OrderPlaced so payment can send the
+     * shopper back to the right domain, and kept here because the event is long gone by
+     * the time a retry or refund needs it.
+     *
+     * <p>Untrusted: it comes from a request header. payment allow-lists it before it
+     * reaches a redirect. Null when the caller sent nothing to derive it from.
+     */
+    @Column("storefront_origin")
+    private String storefrontOrigin;
+
     public CustomerOrder() {}
 
     public CustomerOrder(String username, String status, BigDecimal total, String currency,

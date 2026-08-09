@@ -1,6 +1,7 @@
 package org.granitesecurity.payment.service;
 
 import org.granitesecurity.payment.provider.PaymentProviderRegistry;
+import org.granitesecurity.payment.web.StorefrontOrigins;
 import org.granitesecurity.payment.provider.stripe.StripePaymentProvider;
 import org.granitesecurity.payment.repository.OutboxRepository;
 import org.granitesecurity.payment.repository.PaymentAttemptRepository;
@@ -40,7 +41,8 @@ class PaymentServicePurgeTest {
 
     private PaymentService service() {
         return new PaymentService(paymentRepository, outboxRepository, refundRepository, attemptRepository,
-                new PaymentProviderRegistry(java.util.List.of(new StripePaymentProvider()), "USD"));
+                new PaymentProviderRegistry(java.util.List.of(new StripePaymentProvider()), "USD"),
+                new StorefrontOrigins("", "http://localhost:5173"));
     }
 
     @Test

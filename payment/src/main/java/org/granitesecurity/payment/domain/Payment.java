@@ -59,6 +59,17 @@ public class Payment implements Persistable<UUID> {
     /** Who is topping up. Null for order payments — the order already knows. */
     private String username;
 
+    /**
+     * The storefront this payment was opened from, e.g. {@code https://sichocolate.com}
+     * (docs/bugs/redirects.md §4.1). Null for rows predating the column, and for anything
+     * opened without a resolvable origin — both fall back to the configured one.
+     *
+     * <p>Stored because the provider's return request cannot tell us: by then the shopper
+     * is arriving from PayPal, not from the shop.
+     */
+    @Column("storefront_origin")
+    private String storefrontOrigin;
+
     @Getter(AccessLevel.NONE)
     @Setter(AccessLevel.NONE)
     @Transient

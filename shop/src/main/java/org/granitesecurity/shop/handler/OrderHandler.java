@@ -11,6 +11,7 @@ import org.granitesecurity.shop.service.OrderService;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
+import org.granitesecurity.shop.web.RequestOrigin;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
@@ -36,7 +37,7 @@ public class OrderHandler {
         var usernameMono = getUsername(request);
         return bodyMono.zipWith(usernameMono)
                 .flatMap(tuple -> orderService.placeOrder(
-                        tuple.getT2(), tuple.getT1()))
+                        tuple.getT2(), tuple.getT1(), RequestOrigin.from(request)))
                 .flatMap(order -> ServerResponse.ok().bodyValue(order));
     }
 

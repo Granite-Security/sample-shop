@@ -75,8 +75,15 @@ export default function App() {
               <Route path="admin/users" element={<UsersManagementPage />} />
               <Route path="admin/users/:username" element={<UserProfileViewPage />} />
               <Route path="checkout" element={<CheckoutPage />} />
+              {/* payment redirects a shopper to /orders/{id} after a redirect payment,
+                  and it should not have to know how each storefront routes
+                  (docs/bugs/redirects.md §3, D7). ui-shop serves those paths at the top
+                  level; these aliases make them work here too, without moving the
+                  account pages out of /profile/* or breaking existing links. */}
               <Route element={<RequireAuth />}>
                 <Route element={<AccountLayout />}>
+                  <Route path="orders" element={<OrdersPage />} />
+                  <Route path="orders/:id" element={<OrderDetailPage />} />
                   <Route path="profile" element={<ProfilePage />} />
                   <Route path="profile/password" element={<PasswordPage />} />
                   <Route path="profile/files" element={<FilesPage />} />
