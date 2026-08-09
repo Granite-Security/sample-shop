@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api, CURATED_PRODUCT_NAMES, FALLBACK_PRODUCTS } from './api';
+import { api, FALLBACK_PRODUCTS, SICHOCOLATE_CATEGORY_NAME } from './api';
 import type { Category, Product } from './types';
 
 export interface CartLine {
@@ -51,22 +51,22 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const [cartOpen, setCartOpen] = useState(false);
   const [wishlist, setWishlist] = useState<Set<number>>(new Set());
 
-  // The shared shop catalog is a general store; SI Chocolate only sells its
-  // own curated pieces, not the shop's other Food & Sweets products (a
-  // general-store category can hold both — see docs/plans/add-chocolates.md).
-  // Resolve the category by name, filter to our curated names, and top the
-  // grid up with the editorial fallback pieces for any not yet seeded so the
-  // storefront always feels complete.
+  // The shared shop catalog is a general store; SI Chocolate sells only what
+  // lives in its own category (see docs/plans/add-chocolates.md). Membership is
+  // a property of the row, not a hardcoded list of names here — that is what
+  // lets a piece added in the back of house show up in the boutique.
+  //
+  // Resolve the category by exact name and take everything in it, then top the
+  // grid up with editorial fallback pieces so the storefront always feels
+  // complete. No category (backend down, or shop not yet migrated) means no
+  // live catalog, and the fallback pieces stand in whole.
   const refresh = useCallback(async () => {
     try {
       const [productPage, categoryPage] = await Promise.all([api.getProducts(), api.getCategories()]);
-      const chocolateCategory = categoryPage.items.find((c) =>
-        /choco|sweet|confection|food/i.test(`${c.name} ${c.description}`),
-      );
-      const inCategory = chocolateCategory
+      const chocolateCategory = categoryPage.items.find((c) => c.name === SICHOCOLATE_CATEGORY_NAME);
+      const chocolate = chocolateCategory
         ? productPage.items.filter((p) => p.categoryId === chocolateCategory.id)
-        : productPage.items;
-      const chocolate = inCategory.filter((p) => CURATED_PRODUCT_NAMES.has(p.name));
+        : [];
       const topUp = FALLBACK_PRODUCTS.filter((p) => !chocolate.some((c) => c.name === p.name)).slice(
         0,
         Math.max(0, 8 - chocolate.length),

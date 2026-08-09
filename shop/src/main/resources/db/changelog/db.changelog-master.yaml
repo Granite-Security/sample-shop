@@ -28,3 +28,6 @@ databaseChangeLog:
       relativeToChangelogFile: false
   - include:
       file: db/changelog/010-storefront-origin.sql
+  - include:
+      file: db/changelog/011-sichocolate-category.sql
+      relativeToChangelogFile: false

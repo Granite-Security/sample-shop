@@ -140,3 +140,47 @@ warning should no longer appear, and placing the order should succeed.
 
 Confirm `ui-shop` (when `app/` is the live overlay) still lists `Food & Sweets`
 correctly with all 13 products — not a regression, just a bigger category.
+
+---
+
+## Follow-up (2026-08-09): §2's name filter had to go
+
+§2's curated-name allowlist worked for the 8 seeded pieces and broke the moment
+anyone used ui-demo's own back of house. Creating a product there POSTed fine,
+showed "Added … to the collection", and then vanished: `refresh()` re-applied
+`CURATED_PRODUCT_NAMES`, and since the admin list is built from the same
+filtered store (`AdminPage.tsx`), the new piece was not merely absent from the
+boutique — it could not be edited or deleted either. Four such rows had
+accumulated in the live DB (ids 23–26).
+
+The premise of §2 — "no new schema column needed for 8 hardcoded items" — only
+holds while the set is closed. It isn't: the storefront has an admin UI whose
+entire purpose is to open it.
+
+### What replaced it
+
+`011-sichocolate-category.sql` gives the boutique its own `SI Chocolate`
+category and moves everything out of `Food & Sweets` except the 5 generic
+products from `002`. Membership is now a property of the row, so anything an
+admin creates in the SI Chocolate category shows up, and the constraint from
+"Root cause" above still holds — ui-shop's `Food & Sweets` keeps exactly the 5
+products it started with.
+
+`ui-demo/src/store.tsx` resolves the category by exact name
+(`SICHOCOLATE_CATEGORY_NAME` in `api.ts`, replacing `CURATED_PRODUCT_NAMES`) and
+takes everything in it. **The category name is load-bearing**: rename it in the
+DB and the storefront silently falls back to the editorial catalog. The
+`FALLBACK_PRODUCTS` top-up and §3's `ChocolateArt` reasoning are unchanged.
+
+`AdminPage.tsx` now offers only the SI Chocolate category when creating a
+piece — the shared shop's other categories are exactly the way to make a
+product invisible again.
+
+### Verify
+
+```
+curl -s "https://sichocolate.com/api/shop/categories?size=50" | jq '.items[] | select(.name=="SI Chocolate")'
+curl -s "https://sichocolate.com/api/shop/products?size=50" | jq --argjson c "$SI_ID" '[.items[] | select(.categoryId==$c)] | length'
+```
+Then in ui-demo's back of house: add a piece and confirm it appears in the
+grid without a rebuild. `Food & Sweets` should be back down to 5 products.
