@@ -5,10 +5,10 @@
 type Variant = 'bar' | 'truffle' | 'gift' | 'drink';
 
 const PALETTES = [
-  { deep: '#1E1612', mid: '#3A2418', high: '#5A3A26', glow: '#C7A56B' },
-  { deep: '#241812', mid: '#46281A', high: '#6B4530', glow: '#D8B98A' },
-  { deep: '#1B1410', mid: '#33231C', high: '#A56A52', glow: '#C7A56B' },
-  { deep: '#201711', mid: '#3E2A1C', high: '#8B9172', glow: '#D8C39A' },
+  { deep: '#150E13', mid: '#2E1B27', high: '#4A2E3F', glow: '#BF9A5F' },
+  { deep: '#1D1019', mid: '#3A2130', high: '#5C3A4C', glow: '#D3B482' },
+  { deep: '#170F15', mid: '#2A1A24', high: '#8E5F6B', glow: '#BF9A5F' },
+  { deep: '#1B1119', mid: '#33202B', high: '#8C7F8A', glow: '#D2C0A0' },
 ];
 
 export function variantFor(name: string, id: number): Variant {

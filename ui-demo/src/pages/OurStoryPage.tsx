@@ -28,7 +28,7 @@ export function OurStoryPage() {
     <>
       <section className="relative overflow-hidden bg-espresso pt-32 pb-20 lg:pt-40 lg:pb-28">
         <div className="absolute inset-0 animate-drift">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_25%,#46281A_0%,#1E1612_62%,#120D0A_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_25%,#3A2130_0%,#150E13_62%,#120D0A_100%)]" />
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_75%_85%,rgba(199,165,107,0.13)_0%,transparent_52%)]" />
         </div>
         <div className="relative mx-auto max-w-3xl px-5 text-center lg:px-8">

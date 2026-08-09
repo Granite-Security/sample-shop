@@ -30,7 +30,7 @@ export async function downscaleToSquare(file: File, size = 512): Promise<File> {
 
 // The boutique's own palette rather than ui-shop's — a monogram is as much a
 // part of the page as the type is.
-const MONOGRAM_COLORS = ['#4a2c1a', '#6b4423', '#8c5a3c', '#3d5a4c', '#7a3f33'];
+const MONOGRAM_COLORS = ['#3a2130', '#5c3a4c', '#8e5f6b', '#4a3f52', '#7a3f52'];
 
 /** Stable per user, so the same person always gets the same monogram colour. */
 export function monogramColor(seed: string): string {
