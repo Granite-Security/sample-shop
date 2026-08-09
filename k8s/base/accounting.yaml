@@ -90,6 +90,11 @@ spec:
                 configMapKeyRef:
                   name: granite-config
                   key: JWT_JWK_SET_URI
+            - name: ACCOUNTING_BOOKS_OPEN_ON
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: ACCOUNTING_BOOKS_OPEN_ON
             - name: KAFKA_BOOTSTRAP_SERVERS
               valueFrom:
                 configMapKeyRef:

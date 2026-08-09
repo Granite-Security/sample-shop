@@ -39,9 +39,9 @@ Kafka. `shop`, `payment` and `delivery` publish through a transactional outbox;
 `auth-server` publishes fire-and-forget, no outbox, by design.
 
 ```
-orders.events     shop        ──>  payment, delivery
-payments.events   payment     ──>  shop, delivery, balance
-delivery.events   delivery    ──>  shop
+orders.events     shop        ──>  payment, delivery, accounting
+payments.events   payment     ──>  shop, delivery, balance, accounting
+delivery.events   delivery    ──>  shop, accounting
 identity.events   auth-server ──>  profile (provisions), notification (emails)
 ```
 
@@ -203,8 +203,9 @@ Register / change password / request reset
 
 | Kafka topic | Producer | Consumers | Retention |
 |-------------|----------|-----------|-----------|
-| `orders.events` | Shop (outbox) | Payment, Delivery | 7 days (broker default) |
-| `payments.events` | Payment (outbox) | Shop | 7 days (broker default) |
+| `orders.events` | Shop (outbox) | Payment, Delivery, Accounting | 7 days (broker default) |
+| `payments.events` | Payment (outbox) | Shop, Balance, Accounting | 7 days (broker default) |
+| `delivery.events` | Delivery (outbox) | Shop, Accounting | 7 days (broker default) |
 | `identity.events` | auth-server (fire-and-forget) | Notification, Profile | **1 hour** — it carries live password-reset tokens |
 
 > `identity.events` is declared explicitly with `segment.ms=600000` alongside `retention.ms=3600000`. Kafka only deletes *closed* segments and the default roll is 7 days, so on a low-volume topic `retention.ms` on its own deletes nothing.
