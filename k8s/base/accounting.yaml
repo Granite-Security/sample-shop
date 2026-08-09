@@ -1,0 +1,107 @@
+---
+# The books (docs/finance/accounting.md). Read-only and admin-only: it projects
+# journal entries from domain events and never moves a franc — balance keeps the
+# single-writer mandate.
+#
+# Deliberately has no HTTPRoute in any overlay, like kafka-ui and balance. Reach it
+# with `kubectl -n granite port-forward deploy/accounting 8068:8068`.
+#
+# It calls no other service (D25), so there is no client registration here and no
+# MICROSERVICES_* env beyond its own — everything it needs rides the events.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accounting
+  labels:
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: accounting
+  template:
+    metadata:
+      labels:
+        app: accounting
+        tier: backend
+    spec:
+      # Block startup until the OIDC discovery doc is served through the gateway
+      # (i.e. auth-server is up). Prevents CrashLoopBackOff on eager JWKS fetch,
+      # same as profile/payment.
+      initContainers:
+        - name: wait-for-issuer
+          image: curlimages/curl:latest
+          command:
+            - sh
+            - -c
+            - >
+              until curl -sf http://gateway:8080/auth/.well-known/openid-configuration;
+              do echo "waiting for auth issuer..."; sleep 3; done
+      containers:
+        - name: accounting
+          image: granite-accounting:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8068
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "accounting"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://tempo.infra-global-observability.svc.cluster.local:4318"
+            # Tempo speaks OTLP traces only; the agent's metric exporter 404s
+            # against it every 60s. No metrics backend is wired up yet.
+            - name: OTEL_METRICS_EXPORTER
+              value: "none"
+            - name: OTEL_LOGS_EXPORTER
+              value: "none"
+            # JSON console logs so MDC trace_id/span_id land as real fields.
+            - name: LOGGING_STRUCTURED_FORMAT_CONSOLE
+              value: "ecs"
+            - name: ACCOUNTING_SERVER_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: ACCOUNTING_PORT
+            - name: ACCOUNTING_R2DBC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: ACCOUNTING_R2DBC_URL
+            - name: ACCOUNTING_JDBC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: ACCOUNTING_JDBC_URL
+            - name: ACCOUNTING_R2DBC_USERNAME
+              value: myuser
+            - name: ACCOUNTING_R2DBC_PASSWORD
+              value: secret
+            - name: ACCOUNTING_JDBC_USERNAME
+              value: myuser
+            - name: ACCOUNTING_JDBC_PASSWORD
+              value: secret
+            - name: TRUSTED_JWT_ISSUERS
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: TRUSTED_JWT_ISSUERS
+            - name: JWT_JWK_SET_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: JWT_JWK_SET_URI
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: accounting
+spec:
+  ports:
+    - port: 8068
+  selector:
+    app: accounting

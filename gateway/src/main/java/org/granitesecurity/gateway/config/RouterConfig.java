@@ -42,6 +42,9 @@ public class RouterConfig {
     @Value("${microservices.balance.uri:http://localhost:8067}")
     private String balanceServiceUri;
 
+    @Value("${microservices.accounting.uri:http://localhost:8068}")
+    private String accountingServiceUri;
+
     @Bean
     RouteLocator gatewayRouter(RouteLocatorBuilder builder) {
         return builder.routes()
@@ -70,6 +73,12 @@ public class RouterConfig {
                 .route("balance-service", r -> r
                         .path("/api/balance/**")
                         .uri(balanceServiceUri))
+                // Routing here protects nothing: the gateway is a pass-through proxy
+                // and AccountingSec is the only authorization there is. Everything
+                // under this path needs ROLE_ADMIN at the receiving service.
+                .route("accounting-service", r -> r
+                        .path("/api/accounting/**")
+                        .uri(accountingServiceUri))
                 .route("storage-service", r -> r
                         .path("/api/storage/**")
                         .filters(f -> f.retry(retryConfig -> retryConfig
