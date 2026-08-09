@@ -4,6 +4,7 @@
 https://sichocolate.com
 
 To run the project, from the terminal
+
 `npm run dev`
 
 Hello Sergiu!
