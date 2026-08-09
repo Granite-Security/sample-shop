@@ -205,7 +205,7 @@ public class PostingRules {
      * exactly what a general ledger must not contain.
      */
     private PostingOutcome stockAdjusted(Map<String, Object> payload) {
-        long quantity = Money.fromMinor(payload.get("quantity"));
+        long quantity = count(payload.get("quantity"));
         long unitCost = Money.fromDecimal(payload.get("unitCost"));
         long value = Math.abs(quantity) * unitCost;
         if (value == 0) {
@@ -415,7 +415,7 @@ public class PostingRules {
                 if (unitCost == null) {
                     continue;
                 }
-                long quantity = Money.fromMinor(((Map<String, Object>) map).get("quantity"));
+                long quantity = count(((Map<String, Object>) map).get("quantity"));
                 total += quantity * Money.fromDecimal(unitCost);
             }
         }
@@ -461,5 +461,13 @@ public class PostingRules {
 
     static String string(Object value) {
         return value == null ? null : value.toString();
+    }
+
+    /** A count of units, not an amount of money — deliberately not routed through Money. */
+    private static long count(Object value) {
+        if (value instanceof Number n) {
+            return n.longValue();
+        }
+        return value == null ? 0L : Long.parseLong(value.toString().trim());
     }
 }

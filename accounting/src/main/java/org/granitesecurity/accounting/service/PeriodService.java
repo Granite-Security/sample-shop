@@ -58,6 +58,12 @@ public class PeriodService {
         return occurredAt.atZone(ZURICH).toLocalDate().isBefore(booksOpenOn);
     }
 
+    public Mono<Period> require(String code) {
+        return periodRepository.findById(code)
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "No such period: " + code)));
+    }
+
     public Flux<Period> all() {
         return periodRepository.findAllOrdered();
     }

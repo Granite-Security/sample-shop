@@ -70,3 +70,41 @@ accounting:
     # is ordinary, so this runs often and cheaply.
     interval: ${ACCOUNTING_SWEEP_INTERVAL:30000}
     batch-size: ${ACCOUNTING_SWEEP_BATCH_SIZE:200}
+
+  # The cost assumptions of §2.8. Every one of them is a stated assumption and not a
+  # measurement, which is why they live together and are named — a 3% fee scattered
+  # through posting rules would read like a fact.
+  costs:
+    processor-fee-percent: ${ACCOUNTING_PROCESSOR_FEE_PERCENT:3.0}
+    processor-fee-fixed-minor: ${ACCOUNTING_PROCESSOR_FEE_FIXED:30}
+    shipping-minor: ${ACCOUNTING_SHIPPING_MINOR:100}
+
+  # Expected returns (§2.2). The rate is measured off delivered-vs-refunded facts once
+  # there are enough of them; below that the stated default is used and the journal says
+  # which it was. A 0% return rate is also an assumption, and a more misleading one.
+  returns:
+    trailing-days: ${ACCOUNTING_RETURNS_TRAILING_DAYS:180}
+    default-rate: ${ACCOUNTING_RETURNS_DEFAULT_RATE:0.02}
+    minimum-observations: ${ACCOUNTING_RETURNS_MIN_OBSERVATIONS:20}
+
+  estimates:
+    # Daily, not monthly. A monthly trigger that fires while the pod is restarting is a
+    # month with no provision and nobody noticing; these postings are idempotent per
+    # period, so a daily run either does the work or finds it already done.
+    cron: ${ACCOUNTING_ESTIMATES_CRON:0 30 2 * * *}
+
+  # IFRS 9 provision matrix (§2.6). THESE RATES ARE ASSUMPTIONS. There is no repayment
+  # history to derive them from, so every figure built on them is labelled an estimate and
+  # carries as-of. A provision matrix with invented rates presented as a measured figure is
+  # worse than no provision at all.
+  #
+  # If this starts reporting a large allowance, the fix is a credit limit in balance's
+  # CreditPolicy, not a change to these numbers: a high expected default means the platform
+  # is giving stock away, which is a product bug and not a reporting one (§2.5).
+  ecl:
+    as-of: ${ACCOUNTING_ECL_AS_OF:2026-08-09}
+    bands:
+      - { max-age-days: 30, loss-rate: 0.05 }
+      - { max-age-days: 60, loss-rate: 0.20 }
+      - { max-age-days: 90, loss-rate: 0.50 }
+      - { max-age-days: null, loss-rate: 1.00 }
