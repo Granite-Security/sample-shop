@@ -36,6 +36,15 @@ spring:
       enable-auto-commit: false
       properties:
         isolation.level: read_committed
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # acks=all + idempotence: the outbox already guarantees the fact was recorded,
+      # and these are what stop the relay from believing it published something the
+      # broker then lost. The books cannot notice a missing fact.
+      acks: all
+      properties:
+        enable.idempotence: true
 
   security:
     oauth2:
@@ -65,3 +74,10 @@ jwt:
 microservices:
   profile:
     uri: ${MICROSERVICES_PROFILE_URI:http://localhost:8064}
+
+# The outbox relay (docs/finance/accounting.md §4.2). Poll interval matches payment's;
+# the batch bounds one poll so a backlog cannot hold the scheduler thread.
+app:
+  outbox:
+    poll-interval: ${OUTBOX_POLL_INTERVAL:5000}
+    batch-size: ${OUTBOX_BATCH_SIZE:200}
