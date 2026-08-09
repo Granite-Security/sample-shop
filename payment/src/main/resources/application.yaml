@@ -106,11 +106,8 @@ payment:
 app:
   outbox:
     poll-interval: 5000
-  # Where PayPal sends the shopper back to — must reach *this service* through the
-  # gateway, so it is the API origin, not the SPA's. Built here rather than from a
-  # request header because payments are opened by a Kafka consumer with no HTTP
-  # request in flight.
-  public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}
+
+
   # Where the shopper finally lands after capture. The SPA's origin, which differs
   # from the API's in local dev (5173 vs 8080) and is identical to it in k8s.
   # Reuses the variable notification already builds password-reset links from.

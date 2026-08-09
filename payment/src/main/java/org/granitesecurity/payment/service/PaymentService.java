@@ -51,14 +51,6 @@ public class PaymentService {
     @Value("${payment.shop-currency:${stripe.currency:chf}}")
     private String currency;
 
-    /** API origin — where a REDIRECT provider sends the shopper back into this service. */
-    @Value("${app.public-base-url:http://localhost:8080}")
-    private String publicBaseUrl;
-
-    /** SPA origin — where the shopper ends up once the payment is finalized. */
-    @Value("${app.frontend-origin:http://localhost:5173}")
-    private String frontendOrigin;
-
     public PaymentService(PaymentRepository paymentRepository,
                           OutboxRepository outboxRepository,
                           RefundRepository refundRepository,
@@ -73,22 +65,7 @@ public class PaymentService {
         this.storefrontOrigins = storefrontOrigins;
     }
 
-    /**
-     * The adapter for an existing payment, resolved from the row rather than from
-     * config: a payment opened against one provider must keep being reconciled and
-     * refunded against that provider even after the configured default changes.
-     *
-     * <p>Rows written before the {@code provider} column was populated fall back to
-     * the single enabled provider, which is correct while Stripe is the only one and
-     * throws loudly once it is not.
-     */
-    /**
-     * The provider for a payment being opened. A caller that named none is relying on
-     * there being exactly one enabled — true locally, false in the cluster, where both
-     * Stripe and PayPal are on. That case reaches here from the OrderPlaced consumer,
-     * whose catch-all would otherwise turn it into a logged "failed to handle" and an
-     * order that quietly never gets an intent, so name it before rethrowing.
-     */
+
     private PaymentProvider resolveProvider(String providerName, String context) {
         if (providerName != null) {
             return providers.get(providerName);
