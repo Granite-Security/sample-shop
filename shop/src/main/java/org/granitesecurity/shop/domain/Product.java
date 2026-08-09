@@ -22,6 +22,8 @@ public class Product {
     private String media;
     @Column("category_id")
     private Long categoryId;
+    /** Soft-deleted: hidden from listings, still resolvable by id for order history. */
+    private Boolean discontinued;
     @Column("created_at")
     private Instant createdAt;
     @Column("updated_at")

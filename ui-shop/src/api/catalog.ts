@@ -23,6 +23,12 @@ export const catalogApi = {
   getProducts: (page = 0, size = 50) =>
     request<PagedResult<Product>>(`/api/shop/products?page=${page}&size=${size}`),
 
+  // Admin listing: includes discontinued products so they can be restored.
+  listForAdmin: (page = 0, size = 100) =>
+    request<PagedResult<Product>>(
+      `/api/shop/products?page=${page}&size=${size}&includeDiscontinued=true`,
+    ),
+
   getProduct: (id: number) =>
     request<Product>(`/api/shop/products/${id}`),
 

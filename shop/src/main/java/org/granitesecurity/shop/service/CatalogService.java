@@ -77,16 +77,29 @@ public class CatalogService {
     }
 
     public Mono<PagedResult<ProductResponse>> getAllProducts(int page, int size) {
+        return getAllProducts(page, size, false);
+    }
+
+    // includeDiscontinued is for the admin views: a retired product is invisible
+    // in the storefront, so without this there would be no way to find one and
+    // put it back on sale.
+    public Mono<PagedResult<ProductResponse>> getAllProducts(int page, int size, boolean includeDiscontinued) {
         long offset = (long) page * size;
-        Mono<Long> count = productRepository.count();
-        Flux<ProductResponse> items = productRepository.findAllPaged(size, offset)
+        Mono<Long> count = includeDiscontinued
+                ? productRepository.count()
+                : productRepository.countActive();
+        Flux<ProductResponse> items = (includeDiscontinued
+                ? productRepository.findAllPagedIncludingDiscontinued(size, offset)
+                : productRepository.findAllPaged(size, offset))
                 .map(this::toProductResponse);
         return count.zipWith(items.collectList())
                 .map(tuple -> new PagedResult<>(tuple.getT2(), tuple.getT1(), page, size));
     }
 
     public Flux<ProductResponse> getProductsByCategory(Long categoryId) {
-        return productRepository.findByCategoryId(categoryId).map(this::toProductResponse);
+        return productRepository.findByCategoryId(categoryId)
+                .filter(product -> !Boolean.TRUE.equals(product.getDiscontinued()))
+                .map(this::toProductResponse);
     }
 
     public Mono<ProductResponse> getProduct(Long id) {
@@ -101,6 +114,7 @@ public class CatalogService {
         product.setDescription(request.description());
         product.setImageUrl(request.imageUrl());
         product.setMedia(serializeMedia(normalizeDefault(request.media())));
+        product.setDiscontinued(Boolean.TRUE.equals(request.discontinued()));
         // created_at/updated_at are NOT NULL; R2DBC includes them in the INSERT,
         // bypassing the column defaults, so they must be set explicitly.
         Instant now = Instant.now();
@@ -121,14 +135,28 @@ public class CatalogService {
                     existing.setCategoryId(request.categoryId());
                     existing.setImageUrl(request.imageUrl());
                     existing.setMedia(serializeMedia(normalizeDefault(request.media())));
+                    // null means "not stated" here, not false — see CreateProductRequest.
+                    if (request.discontinued() != null) {
+                        existing.setDiscontinued(request.discontinued());
+                    }
                     existing.setUpdatedAt(Instant.now());
                     return productRepository.save(existing);
                 })
                 .map(this::toProductResponse);
     }
 
+    // Soft delete. order_item references product with a NO ACTION foreign key,
+    // so hard-deleting anything already ordered failed at the database and came
+    // back as a 500; and it should fail, because order_item stores unit_price
+    // but not the product name, so the row is the only record of what was
+    // bought. Retiring a product hides it from the catalog and leaves order
+    // history — and GET /api/shop/products/{id} — intact.
     public Mono<Void> deleteProduct(Long id) {
-        return productRepository.deleteById(id);
+        return productRepository.findById(id)
+                .switchIfEmpty(Mono.error(
+                        new ShopException("Product not found: " + id, HttpStatus.NOT_FOUND, "Not Found")))
+                .flatMap(existing -> productRepository.markDiscontinued(existing.getId()))
+                .then();
     }
 
     private CategoryResponse toCategoryResponse(Category category) {
@@ -144,7 +172,8 @@ public class CatalogService {
                 product.getStock(),
                 product.getCategoryId(),
                 product.getImageUrl(),
-                deserializeMedia(product.getMedia())
+                deserializeMedia(product.getMedia()),
+                Boolean.TRUE.equals(product.getDiscontinued())
         );
     }
 

@@ -22,6 +22,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -147,7 +148,9 @@ class CatalogServiceTest {
         product.setId(1L);
         product.setDescription("Desc");
 
-        when(productRepository.count()).thenReturn(Mono.just(1L));
+        // countActive, not count: the total has to match the filtered page, or
+        // callers get a total they can never page to.
+        when(productRepository.countActive()).thenReturn(Mono.just(1L));
         when(productRepository.findAllPaged(20, 0L)).thenReturn(Flux.just(product));
 
         StepVerifier.create(catalogService.getAllProducts(0, 20))
@@ -207,7 +210,7 @@ class CatalogServiceTest {
     @Test
     void shouldCreateProduct() {
         var request = new CreateProductRequest(
-                "NewItem", "New desc", BigDecimal.valueOf(15), 100, 1L, "img.jpg", null);
+                "NewItem", "New desc", BigDecimal.valueOf(15), 100, 1L, "img.jpg", null, null);
         var saved = new Product("NewItem", BigDecimal.valueOf(15), 100, 1L);
         saved.setId(7L);
         saved.setDescription("New desc");
@@ -234,7 +237,7 @@ class CatalogServiceTest {
         var media = List.of(new MediaItem("products/abc/hero.jpg",
                 "http://product-media.localhost:3902/products/abc/hero.jpg", "image/jpeg", false));
         var request = new CreateProductRequest(
-                "NewItem", "New desc", BigDecimal.valueOf(15), 100, 1L, "img.jpg", media);
+                "NewItem", "New desc", BigDecimal.valueOf(15), 100, 1L, "img.jpg", media, null);
 
         when(productRepository.save(any(Product.class))).thenAnswer(invocation -> {
             Product saved = invocation.getArgument(0);
@@ -256,7 +259,7 @@ class CatalogServiceTest {
         var existing = new Product("Old", BigDecimal.ONE, 1, 1L);
         existing.setId(4L);
         var request = new CreateProductRequest(
-                "Updated", "U desc", BigDecimal.valueOf(25), 50, 2L, "u.jpg", null);
+                "Updated", "U desc", BigDecimal.valueOf(25), 50, 2L, "u.jpg", null, null);
 
         when(productRepository.findById(4L)).thenReturn(Mono.just(existing));
         when(productRepository.save(any(Product.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
@@ -280,19 +283,87 @@ class CatalogServiceTest {
         when(productRepository.findById(99L)).thenReturn(Mono.empty());
 
         StepVerifier.create(catalogService.updateProduct(99L,
-                        new CreateProductRequest("X", null, BigDecimal.ZERO, 0, 1L, null, null)))
+                        new CreateProductRequest("X", null, BigDecimal.ZERO, 0, 1L, null, null, null)))
                 .expectErrorMatches(e -> e instanceof ShopException
                         && e.getMessage().equals("Product not found: 99"))
                 .verify();
     }
 
     @Test
-    void shouldDeleteProduct() {
-        when(productRepository.deleteById(1L)).thenReturn(Mono.empty());
+    void shouldIncludeDiscontinuedProductsForAdminListing() {
+        var retired = new Product("Retired", BigDecimal.TEN, 5, 1L);
+        retired.setId(2L);
+        retired.setDiscontinued(true);
+
+        when(productRepository.count()).thenReturn(Mono.just(1L));
+        when(productRepository.findAllPagedIncludingDiscontinued(20, 0L)).thenReturn(Flux.just(retired));
+
+        StepVerifier.create(catalogService.getAllProducts(0, 20, true))
+                .assertNext(result -> {
+                    assert result.total() == 1;
+                    assert result.items().get(0).discontinued();
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void shouldDiscontinueProductInsteadOfDeletingIt() {
+        var existing = new Product("Retiring", BigDecimal.ONE, 1, 1L);
+        existing.setId(1L);
+        when(productRepository.findById(1L)).thenReturn(Mono.just(existing));
+        when(productRepository.markDiscontinued(1L)).thenReturn(Mono.just(1));
 
         StepVerifier.create(catalogService.deleteProduct(1L))
                 .verifyComplete();
 
-        verify(productRepository).deleteById(1L);
+        // The row has to survive: order_item references it with a NO ACTION
+        // foreign key and keeps no product name of its own.
+        verify(productRepository).markDiscontinued(1L);
+        verify(productRepository, never()).deleteById(anyLong());
+    }
+
+    @Test
+    void shouldErrorWhenDiscontinuingNonexistentProduct() {
+        when(productRepository.findById(99L)).thenReturn(Mono.empty());
+
+        StepVerifier.create(catalogService.deleteProduct(99L))
+                .expectErrorMatches(e -> e instanceof ShopException
+                        && e.getMessage().equals("Product not found: 99"))
+                .verify();
+    }
+
+    @Test
+    void shouldLeaveDiscontinuedAloneWhenUpdateDoesNotStateIt() {
+        var existing = new Product("Retired", BigDecimal.ONE, 1, 1L);
+        existing.setId(5L);
+        existing.setDiscontinued(true);
+        when(productRepository.findById(5L)).thenReturn(Mono.just(existing));
+        when(productRepository.save(any(Product.class)))
+                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        // A price edit must not quietly put a retired product back on sale.
+        StepVerifier.create(catalogService.updateProduct(5L, new CreateProductRequest(
+                        "Retired", null, BigDecimal.TEN, 1, 1L, null, null, null)))
+                .assertNext(r -> {
+                    assert r.discontinued();
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void shouldRestoreProductWhenUpdateStatesDiscontinuedFalse() {
+        var existing = new Product("Retired", BigDecimal.ONE, 1, 1L);
+        existing.setId(6L);
+        existing.setDiscontinued(true);
+        when(productRepository.findById(6L)).thenReturn(Mono.just(existing));
+        when(productRepository.save(any(Product.class)))
+                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        StepVerifier.create(catalogService.updateProduct(6L, new CreateProductRequest(
+                        "Retired", null, BigDecimal.TEN, 1, 1L, null, null, false)))
+                .assertNext(r -> {
+                    assert !r.discontinued();
+                })
+                .verifyComplete();
     }
 }

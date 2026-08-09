@@ -17,6 +17,9 @@ export interface Product {
   // Optional (not required) so FALLBACK_PRODUCTS (editorial, client-only
   // entries with negative ids) don't need a media field at all.
   media?: MediaItem[];
+  // Retired from the catalog. The storefront listing never returns these, so
+  // only the back of house (which asks for them explicitly) sees it set.
+  discontinued?: boolean;
 }
 
 export interface Category {
@@ -33,6 +36,10 @@ export interface CreateProductRequest {
   categoryId: number;
   imageUrl: string;
   media: MediaItem[];
+  // Omitted on an edit means "leave as it is", so saving a price change to a
+  // discontinued product does not quietly put it back on sale. Send false to
+  // restore it, true to retire it.
+  discontinued?: boolean;
 }
 
 export interface PresignResponse {

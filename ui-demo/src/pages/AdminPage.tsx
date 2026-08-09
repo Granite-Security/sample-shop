@@ -26,6 +26,23 @@ export function AdminPage() {
   const [form, setForm] = useState<CreateProductRequest>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [adminProducts, setAdminProducts] = useState<Product[] | null>(null);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    api
+      .getProductsForAdmin()
+      .then((page) => {
+        if (!cancelled) setAdminProducts(page.items);
+      })
+      .catch(() => {
+        if (!cancelled) setAdminProducts(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin]);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
@@ -55,8 +72,13 @@ export function AdminPage() {
     );
   }
 
-  // Only live backend products can be managed (fallback pieces have negative ids).
-  const managed = products.filter((p) => p.id > 0);
+  // The storefront listing hides discontinued pieces, so the back of house
+  // fetches its own — otherwise retiring a piece would also hide the only
+  // control that could bring it back. Falls back to the store's copy until
+  // that request lands. Fallback pieces have negative ids and aren't managed.
+  const managed = (adminProducts ?? products)
+    .filter((p) => p.id > 0)
+    .filter((p) => !chocolateCategoryId || p.categoryId === chocolateCategoryId);
 
   // A piece filed outside the SI Chocolate category is invisible in this
   // storefront — including in the list below — so don't offer the shared shop's
@@ -86,6 +108,16 @@ export function AdminPage() {
     setForm(EMPTY_FORM);
   };
 
+  const refreshAll = async () => {
+    await refresh();
+    try {
+      const page = await api.getProductsForAdmin();
+      setAdminProducts(page.items);
+    } catch {
+      setAdminProducts(null);
+    }
+  };
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -103,7 +135,32 @@ export function AdminPage() {
         setMessage({ kind: 'ok', text: `Added “${body.name}” to the collection.` });
       }
       reset();
-      await refresh();
+      await refreshAll();
+    } catch (err) {
+      setMessage({ kind: 'error', text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onRestore = async (p: Product) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      // Only `discontinued` is stated; every other field is sent as it stands so
+      // the update does not double as an edit.
+      await api.updateProduct(p.id, {
+        name: p.name,
+        description: p.description,
+        price: p.price,
+        stock: p.stock,
+        categoryId: p.categoryId,
+        imageUrl: p.imageUrl ?? '',
+        media: p.media ?? [],
+        discontinued: false,
+      });
+      setMessage({ kind: 'ok', text: `“${p.name}” is back on sale.` });
+      await refreshAll();
     } catch (err) {
       setMessage({ kind: 'error', text: err instanceof Error ? err.message : String(err) });
     } finally {
@@ -112,14 +169,20 @@ export function AdminPage() {
   };
 
   const onDelete = async (p: Product) => {
-    if (!window.confirm(`Remove “${p.name}” from the collection?`)) return;
+    if (
+      !window.confirm(
+        `Discontinue “${p.name}”? It leaves the boutique but stays on past orders, ` +
+          `and you can put it back on sale from this list.`,
+      )
+    )
+      return;
     setBusy(true);
     setMessage(null);
     try {
       await api.deleteProduct(p.id);
       if (editingId === p.id) reset();
-      setMessage({ kind: 'ok', text: `Removed “${p.name}”.` });
-      await refresh();
+      setMessage({ kind: 'ok', text: `Discontinued “${p.name}”.` });
+      await refreshAll();
     } catch (err) {
       setMessage({ kind: 'error', text: err instanceof Error ? err.message : String(err) });
     } finally {
@@ -373,7 +436,8 @@ export function AdminPage() {
           {/* product list */}
           <section aria-label="Products">
             <h2 className="font-display text-[24px] text-cocoa">
-              Current Collection <span className="text-cocoa/40">({managed.length})</span>
+              Current Collection{' '}
+              <span className="text-cocoa/40">({managed.filter((p) => !p.discontinued).length})</span>
             </h2>
             <ul className="mt-6 divide-y divide-cocoa/10 border-y border-cocoa/10">
               {managed.map((p) => {
@@ -391,6 +455,11 @@ export function AdminPage() {
                     </Link>
                     <p className="truncate text-sm text-cocoa/50">
                       {formatPrice(p.price)} · {p.stock} in stock
+                      {p.discontinued && (
+                        <span className="ml-2 border border-cocoa/25 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-cocoa/60">
+                          Discontinued
+                        </span>
+                      )}
                     </p>
                   </div>
                   <button
@@ -399,13 +468,23 @@ export function AdminPage() {
                   >
                     Edit
                   </button>
-                  <button
-                    onClick={() => onDelete(p)}
-                    disabled={busy}
-                    className="text-xs uppercase tracking-[0.14em] text-terracotta/80 underline underline-offset-4 hover:text-terracotta disabled:opacity-40"
-                  >
-                    Delete
-                  </button>
+                  {p.discontinued ? (
+                    <button
+                      onClick={() => onRestore(p)}
+                      disabled={busy}
+                      className="text-xs uppercase tracking-[0.14em] text-cocoa underline decoration-gold underline-offset-4 hover:text-terracotta disabled:opacity-40"
+                    >
+                      Restore
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => onDelete(p)}
+                      disabled={busy}
+                      className="text-xs uppercase tracking-[0.14em] text-terracotta/80 underline underline-offset-4 hover:text-terracotta disabled:opacity-40"
+                    >
+                      Discontinue
+                    </button>
+                  )}
                 </li>
                 );
               })}

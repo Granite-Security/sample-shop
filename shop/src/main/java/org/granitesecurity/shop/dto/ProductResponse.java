@@ -13,6 +13,7 @@ public record ProductResponse(
         @Schema(description = "Available stock", example = "50") Integer stock,
         @Schema(description = "Category ID this product belongs to", example = "1") Long categoryId,
         @Schema(description = "Product image URL", example = "https://picsum.photos/seed/headphones/400/400") String imageUrl,
-        @Schema(description = "Gallery/video media attached to the product") List<MediaItem> media
+        @Schema(description = "Gallery/video media attached to the product") List<MediaItem> media,
+        @Schema(description = "Retired from the catalog; hidden from listings but kept for order history", example = "false") boolean discontinued
 ) {
 }

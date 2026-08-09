@@ -58,7 +58,7 @@ class ShopRouteTest extends AbstractTestcontainers {
     @Test
     void productsListShouldBePublic() {
         var products = new PagedResult<>(List.of(
-                new ProductResponse(1L, "Widget", "desc", BigDecimal.TEN, 5, 1L, null, null)
+                new ProductResponse(1L, "Widget", "desc", BigDecimal.TEN, 5, 1L, null, null, false)
         ), 1L, 0, 20);
         when(catalogService.getAllProducts(0, 20)).thenReturn(Mono.just(products));
 
@@ -73,7 +73,7 @@ class ShopRouteTest extends AbstractTestcontainers {
     @Test
     void productByIdShouldBePublic() {
         when(catalogService.getProduct(1L)).thenReturn(Mono.just(
-                new ProductResponse(1L, "Gadget", null, BigDecimal.valueOf(25), 10, 1L, null, null)
+                new ProductResponse(1L, "Gadget", null, BigDecimal.valueOf(25), 10, 1L, null, null, false)
         ));
 
         webTestClient.get().uri("/api/shop/products/1")
@@ -234,7 +234,7 @@ class ShopRouteTest extends AbstractTestcontainers {
     void createProductShouldSucceedForAdmin() {
         when(catalogService.createProduct(any(CreateProductRequest.class)))
                 .thenReturn(Mono.just(new ProductResponse(
-                        1L, "NewItem", "desc", BigDecimal.valueOf(15), 100, 1L, null, null)));
+                        1L, "NewItem", "desc", BigDecimal.valueOf(15), 100, 1L, null, null, false)));
 
         webTestClient
                 .mutateWith(mockJwt().jwt(jwt -> jwt.subject("admin").claim("roles", List.of("ADMIN"))).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
@@ -261,7 +261,7 @@ class ShopRouteTest extends AbstractTestcontainers {
     void updateProductShouldSucceedForAdmin() {
         when(catalogService.updateProduct(eq(1L), any(CreateProductRequest.class)))
                 .thenReturn(Mono.just(new ProductResponse(
-                        1L, "Updated", null, BigDecimal.valueOf(20), 10, 1L, null, null)));
+                        1L, "Updated", null, BigDecimal.valueOf(20), 10, 1L, null, null, false)));
 
         webTestClient
                 .mutateWith(mockJwt().jwt(jwt -> jwt.subject("admin").claim("roles", List.of("ADMIN"))).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))

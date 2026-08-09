@@ -14,6 +14,9 @@ export interface Product {
   categoryId: number;
   imageUrl: string;
   media: MediaItem[];
+  // Retired from the catalog: hidden from the storefront listing, kept so
+  // existing orders still resolve. Only admin listings ask for these.
+  discontinued?: boolean;
 }
 
 export interface Category {
@@ -107,6 +110,10 @@ export interface CreateProductRequest {
   categoryId: number;
   imageUrl: string;
   media: MediaItem[];
+  // Omitted on an edit means "leave as it is", so saving a price change to a
+  // discontinued product does not quietly put it back on sale. Send false to
+  // restore it, true to retire it.
+  discontinued?: boolean;
 }
 
 export interface PresignResponse {
