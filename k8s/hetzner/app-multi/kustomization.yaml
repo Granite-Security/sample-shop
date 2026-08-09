@@ -55,7 +55,7 @@ images:
   # to main touches accounting/.
   - name: granite-accounting
     newName: docker.io/moldovean/granite-accounting
-    newTag: 45998e945d7afde5494d9e42ca2a2aa25a1f136b
+    newTag: b4f1f2121d4417844d7afd738b75ec6ed8af6768
   - name: granite-balance
     newName: docker.io/moldovean/granite-balance
     newTag: b8181764430d1b07837b2be01c919c201e6a49fa
