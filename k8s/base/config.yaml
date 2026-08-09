@@ -89,6 +89,13 @@ data:
   # Non-secret — the actual key is resend-api-key in granite-secrets.
   RESEND_FROM: "Granite Security <no-reply@notify.granite-security.org>"
   FRONTEND_ORIGIN: "https://granite-security.org"
+  # Storefronts payment may redirect a shopper back to (docs/bugs/redirects.md §4.4).
+  # PUBLIC_BASE_URL and FRONTEND_ORIGIN above are now only the *fallback* — the real
+  # value is resolved per request/per order, because one payment service serves several
+  # domains and a single configured origin cannot be right for all of them. This list is
+  # what stops a forged Origin header turning the payment return into an open redirect,
+  # so keep it to domains we actually serve. Multi-domain overlays override it.
+  STOREFRONT_ORIGINS: "https://granite-security.org"
 
   # ── Delivery ─────────────────────────────────────────
   DELIVERY_PORT: "8063"

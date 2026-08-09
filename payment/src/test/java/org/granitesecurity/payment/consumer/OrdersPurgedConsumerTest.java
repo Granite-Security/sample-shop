@@ -38,7 +38,7 @@ class OrdersPurgedConsumerTest {
     void purgesTheOrderIdsCarriedByTheEvent() {
         when(paymentService.purgeOrders(anyCollection())).thenReturn(Mono.empty());
 
-        consumer().onOrderPlaced("""
+        consumer().onOrdersEvent("""
                 {"eventType":"OrdersPurged","username":"alice","orderIds":[1,2,3]}
                 """);
 
@@ -55,7 +55,7 @@ class OrdersPurgedConsumerTest {
     void isNotMistakenForAMalformedOrderPlaced() {
         when(paymentService.purgeOrders(anyCollection())).thenReturn(Mono.empty());
 
-        consumer().onOrderPlaced("""
+        consumer().onOrdersEvent("""
                 {"eventType":"OrdersPurged","username":"alice","orderIds":[7]}
                 """);
 
@@ -65,7 +65,7 @@ class OrdersPurgedConsumerTest {
 
     @Test
     void ignoresAnEventWithNoOrderIds() {
-        consumer().onOrderPlaced("""
+        consumer().onOrdersEvent("""
                 {"eventType":"OrdersPurged","username":"alice","orderIds":[]}
                 """);
 
@@ -74,39 +74,57 @@ class OrdersPurgedConsumerTest {
 
     @Test
     void stillHandlesOrderPlacedNormally() {
-        when(paymentService.processOrderPlaced(any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(paymentService.processOrderPlaced(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
 
-        consumer().onOrderPlaced("""
+        consumer().onOrdersEvent("""
                 {"orderId":42,"username":"alice","total":10.00}
                 """);
 
-        // Currency and provider are absent from this payload, as they are in every event
-        // shop published before it carried them: both arrive null and fall back.
-        // eq() on BigDecimal would compare scale: the parsed total is 10.0, not 10.00.
+        // Currency, provider and storefrontOrigin are absent from this payload, as they
+        // are in every event shop published before it carried them: all arrive null and
+        // fall back. eq() on BigDecimal would compare scale: the parsed total is 10.0.
         verify(paymentService).processOrderPlaced(
                 eq(42L), argThat(t -> t.compareTo(new java.math.BigDecimal("10.00")) == 0),
-                eq("alice"), isNull(), isNull());
+                eq("alice"), isNull(), isNull(), isNull());
         verify(paymentService, never()).purgeOrders(anyCollection());
     }
 
     @Test
     void passesCurrencyAndProviderThroughWhenTheEventCarriesThem() {
-        when(paymentService.processOrderPlaced(any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+        when(paymentService.processOrderPlaced(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
 
-        consumer().onOrderPlaced("""
+        consumer().onOrdersEvent("""
                 {"orderId":42,"username":"alice","total":10.00,"currency":"CHF","provider":"stripe"}
                 """);
 
         verify(paymentService).processOrderPlaced(
                 eq(42L), argThat(t -> t.compareTo(new java.math.BigDecimal("10.00")) == 0),
-                eq("alice"), eq("CHF"), eq("stripe"));
+                eq("alice"), eq("CHF"), eq("stripe"), isNull());
+    }
+
+    /**
+     * The whole point of docs/bugs/redirects.md: without this field payment has no way
+     * to know which storefront the shopper is on, and sends them to the configured one.
+     */
+    @Test
+    void passesTheStorefrontOriginThroughWhenTheEventCarriesIt() {
+        when(paymentService.processOrderPlaced(any(), any(), any(), any(), any(), any())).thenReturn(Mono.empty());
+
+        consumer().onOrdersEvent("""
+                {"orderId":42,"username":"alice","total":10.00,"currency":"CHF","provider":"paypal",
+                 "storefrontOrigin":"https://sichocolate.com"}
+                """);
+
+        verify(paymentService).processOrderPlaced(
+                eq(42L), argThat(t -> t.compareTo(new java.math.BigDecimal("10.00")) == 0),
+                eq("alice"), eq("CHF"), eq("paypal"), eq("https://sichocolate.com"));
     }
 
     @Test
     void stillHandlesRefundRequestedNormally() {
         when(paymentService.processRefundRequested(any())).thenReturn(Mono.empty());
 
-        consumer().onOrderPlaced("""
+        consumer().onOrdersEvent("""
                 {"eventType":"RefundRequested","orderId":42,"username":"alice"}
                 """);
 

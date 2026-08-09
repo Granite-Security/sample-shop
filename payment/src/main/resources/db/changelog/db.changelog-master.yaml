@@ -17,3 +17,5 @@ databaseChangeLog:
   - include:
       file: db/changelog/006-topup-support.sql
       relativeToChangelogFile: false
+  - include:
+      file: db/changelog/007-storefront-origin.sql

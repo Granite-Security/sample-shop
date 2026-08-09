@@ -66,6 +66,17 @@ public class OrderService {
 
     @Transactional
     public Mono<OrderResponse> placeOrder(String username, PlaceOrderRequest request) {
+        return placeOrder(username, request, null);
+    }
+
+    /**
+     * @param storefrontOrigin where the shopper is browsing, or null when it could not be
+     *                         derived. Recorded and published so payment can redirect back
+     *                         to the right domain (docs/bugs/redirects.md §4.1).
+     */
+    @Transactional
+    public Mono<OrderResponse> placeOrder(String username, PlaceOrderRequest request,
+                                          String storefrontOrigin) {
         if (request.items() == null || request.items().isEmpty()) {
             return Mono.error(new ShopException("Order must contain at least one item"));
         }
@@ -82,6 +93,7 @@ public class OrderService {
         return productRepository.findAllById(productIds)
                 .collectMap(Product::getId, Function.identity())
                 .flatMap(productMap -> validateAndBuild(username, request, productMap))
+                .doOnNext(ctx -> ctx.order().setStorefrontOrigin(storefrontOrigin))
                 .flatMap(ctx -> persistOrder(ctx));
     }
 
@@ -223,6 +235,11 @@ public class OrderService {
         payload.put("currency", order.getCurrency());
         // Always present: placeOrder rejects an order that names none.
         payload.put("provider", provider);
+        // Where the shopper was browsing. payment has no request of its own to read it
+        // from, and without it a redirect payment returns to the wrong domain
+        // (docs/bugs/redirects.md §4.1). Null for orders placed by a caller that sent
+        // nothing to derive it from; payment falls back to its configured origin.
+        payload.put("storefrontOrigin", order.getStorefrontOrigin());
         payload.put("orderedAt", Instant.now().toString());
         payload.put("address", addressMap);
         return payload;

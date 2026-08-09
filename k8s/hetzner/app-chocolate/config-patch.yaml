@@ -22,3 +22,11 @@ data:
   OIDC_CLIENT_POST_LOGOUT_REDIRECT_URI: "https://sichocolate.com/"
   OIDC_AUTHORITY: "https://sichocolate.com/auth"
   OIDC_CLIENT_ID: "spa-client-chocolate"
+
+  # This overlay serves only sichocolate.com, so every shopper-facing URL must point
+  # there. Inherited from k8s/base as granite-security.org until now, which is the same
+  # bug app-multi had (docs/bugs/redirects.md) — a redirect payment returned to the
+  # other domain even though this overlay never serves it.
+  PUBLIC_BASE_URL: "https://sichocolate.com"
+  FRONTEND_ORIGIN: "https://sichocolate.com"
+  STOREFRONT_ORIGINS: "https://sichocolate.com"

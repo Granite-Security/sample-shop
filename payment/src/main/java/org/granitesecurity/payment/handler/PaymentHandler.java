@@ -2,6 +2,7 @@ package org.granitesecurity.payment.handler;
 
 import org.granitesecurity.payment.dto.CreatePaymentIntentRequest;
 import org.granitesecurity.payment.provider.PaymentProviderRegistry;
+import org.granitesecurity.payment.web.StorefrontOrigins;
 import org.granitesecurity.payment.service.PaymentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,10 +21,13 @@ public class PaymentHandler {
 
     private final PaymentService paymentService;
     private final PaymentProviderRegistry providers;
+    private final StorefrontOrigins storefrontOrigins;
 
-    public PaymentHandler(PaymentService paymentService, PaymentProviderRegistry providers) {
+    public PaymentHandler(PaymentService paymentService, PaymentProviderRegistry providers,
+                          StorefrontOrigins storefrontOrigins) {
         this.paymentService = paymentService;
         this.providers = providers;
+        this.storefrontOrigins = storefrontOrigins;
     }
 
     /**
@@ -71,14 +75,21 @@ public class PaymentHandler {
                 paymentId = java.util.UUID.fromString(topupId.get());
             } catch (IllegalArgumentException e) {
                 log.warn("Return from '{}' with an unusable paymentId", provider);
-                return redirectTo(paymentService.balancePageUrl());
+                // Nothing to look the origin up by, so the configured one it is.
+                return redirectTo(paymentService.balancePageUrl(null));
             }
+            // The shopper is arriving from the provider, so this request's Origin is
+            // PayPal's, not the storefront's. The payment row is the only thing that
+            // remembers where they started (docs/bugs/redirects.md §4.1).
             return paymentService.finalizeRedirectTopup(provider, paymentId)
-                    .then(redirectTo(paymentService.balancePageUrl()))
+                    .flatMap(payment -> redirectTo(paymentService.balancePageUrl(payment.getStorefrontOrigin())))
                     .onErrorResume(e -> {
                         log.error("Return from '{}' for top-up {} failed: {}",
                                 provider, paymentId, e.getMessage(), e);
-                        return redirectTo(paymentService.balancePageUrl());
+                        // The finalize failed, but the shopper must still land somewhere
+                        // sensible — read the origin back on its own.
+                        return paymentService.topupOriginFor(paymentId)
+                                .flatMap(origin -> redirectTo(paymentService.balancePageUrl(origin)));
                     });
         }
 
@@ -87,14 +98,17 @@ public class PaymentHandler {
             orderId = Long.parseLong(request.queryParam("orderId").orElseThrow());
         } catch (RuntimeException e) {
             log.warn("Return from '{}' with no usable orderId", provider);
-            return redirectTo(paymentService.ordersPageUrl());
+            return redirectTo(paymentService.ordersPageUrl(null));
         }
 
+        // Same as the top-up above: the origin comes from the stored payment, never from
+        // the provider's redirect.
         return paymentService.finalizeRedirectPayment(provider, orderId)
-                .then(redirectTo(paymentService.orderPageUrl(orderId)))
+                .then(paymentService.orderPageUrlFor(orderId))
+                .flatMap(this::redirectTo)
                 .onErrorResume(e -> {
                     log.error("Return from '{}' for order {} failed: {}", provider, orderId, e.getMessage(), e);
-                    return redirectTo(paymentService.orderPageUrl(orderId));
+                    return paymentService.orderPageUrlFor(orderId).flatMap(this::redirectTo);
                 });
     }
 
@@ -110,7 +124,10 @@ public class PaymentHandler {
                 .flatMap(username -> request.bodyToMono(TopupRequest.class)
                         .switchIfEmpty(Mono.error(new IllegalArgumentException("An amount is required")))
                         .flatMap(body -> paymentService.createTopupIntent(
-                                username, body.amount(), body.currency(), body.provider())))
+                                username, body.amount(), body.currency(), body.provider(),
+                                // The browser's own origin, the same value the Stripe path
+                                // has always used (docs/bugs/redirects.md §4.3).
+                                storefrontOrigins.resolve(request))))
                 .flatMap(payment -> ServerResponse.status(201).bodyValue(
                         PaymentService.toResponse(payment, null)))
                 .onErrorResume(PaymentProviderRegistry.UnknownProviderException.class,
@@ -141,7 +158,8 @@ public class PaymentHandler {
     public Mono<ServerResponse> createPaymentIntent(ServerRequest request) {
         return request.bodyToMono(CreatePaymentIntentRequest.class)
                 .flatMap(req -> paymentService.createPaymentIntent(
-                        req.orderId(), req.total(), req.currency(), req.username(), req.provider()))
+                        req.orderId(), req.total(), req.currency(), req.username(), req.provider(),
+                        storefrontOrigins.resolve(request)))
                 .flatMap(payment -> ServerResponse.ok().bodyValue(
                         PaymentService.toResponse(payment, null)))
                 // A provider the shopper named that we do not have, or none named while
