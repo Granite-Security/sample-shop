@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { MediaItem, Product } from '../types';
-import { getDefaultMedia } from '../utils/media';
+import { getDefaultMedia, isVideoMedia } from '../utils/media';
 import { ChocolateArt, variantFor } from './ChocolateArt';
 
 /**
@@ -15,29 +15,28 @@ import { ChocolateArt, variantFor } from './ChocolateArt';
  * see docs/plans/add-chocolates.md §3.
  */
 export function ProductGallery({ product }: { product: Product }) {
-  // Images only. MediaItem carries a contentType and uploads may be video, but
-  // nothing in either front end plays video today, and an <img> pointed at one
-  // renders as a broken tile — better to leave it out than to show that.
-  const images = useMemo(() => {
-    const all = (product.media ?? []).filter(
-      (m) => !m.contentType || m.contentType.startsWith('image/'),
-    );
+  // Images and video both, since this is the one place that knows how to render
+  // either. getDefaultMedia stays image-only on purpose, so the piece always
+  // opens on a still rather than an unplayed video frame — and so every other
+  // component, which renders a plain <img>, can never be handed a video.
+  const items = useMemo(() => {
+    const all = product.media ?? [];
     const preferred = getDefaultMedia(product.media);
     if (!preferred) return all;
     // Lead with the piece's chosen photo, keeping the admin's order after it.
     return [preferred, ...all.filter((m) => m.key !== preferred.key)];
   }, [product.media]);
 
-  const [activeKey, setActiveKey] = useState<string | null>(images[0]?.key ?? null);
+  const [activeKey, setActiveKey] = useState<string | null>(items[0]?.key ?? null);
 
   // Deep-linking between products reuses this component, so the selection has
   // to follow the product rather than persist across it.
   useEffect(() => {
-    setActiveKey(images[0]?.key ?? null);
-  }, [product.id, images]);
+    setActiveKey(items[0]?.key ?? null);
+  }, [product.id, items]);
 
   const active: MediaItem | undefined =
-    images.find((m) => m.key === activeKey) ?? images[0];
+    items.find((m) => m.key === activeKey) ?? items[0];
 
   if (!active) {
     return (
@@ -54,16 +53,29 @@ export function ProductGallery({ product }: { product: Product }) {
   return (
     <div>
       <div className="overflow-hidden rounded-lg bg-white/60">
-        <img
-          src={active.url}
-          alt={product.name}
-          className="aspect-square w-full object-cover"
-        />
+        {isVideoMedia(active) ? (
+          // key forces a fresh element per source: without it React reuses the
+          // node and the previous video keeps playing under the new src.
+          <video
+            key={active.key}
+            src={active.url}
+            controls
+            playsInline
+            preload="metadata"
+            className="aspect-square w-full bg-cocoa/5 object-cover"
+          />
+        ) : (
+          <img
+            src={active.url}
+            alt={product.name}
+            className="aspect-square w-full object-cover"
+          />
+        )}
       </div>
 
-      {images.length > 1 && (
-        <ul className="mt-4 flex flex-wrap gap-3" aria-label={`More pictures of ${product.name}`}>
-          {images.map((item, index) => {
+      {items.length > 1 && (
+        <ul className="mt-4 flex flex-wrap gap-3" aria-label={`More of ${product.name}`}>
+          {items.map((item, index) => {
             const isActive = item.key === active.key;
             return (
               <li key={item.key}>
@@ -71,20 +83,48 @@ export function ProductGallery({ product }: { product: Product }) {
                   type="button"
                   onClick={() => setActiveKey(item.key)}
                   aria-current={isActive}
-                  aria-label={`Show picture ${index + 1} of ${images.length}`}
-                  className={`h-20 w-20 overflow-hidden rounded-md border transition-colors duration-300 ${
+                  aria-label={
+                    isVideoMedia(item)
+                      ? `Play video ${index + 1} of ${items.length}`
+                      : `Show picture ${index + 1} of ${items.length}`
+                  }
+                  className={`relative block h-20 w-20 overflow-hidden rounded-md border transition-colors duration-300 ${
                     isActive
                       ? 'border-gold'
                       : 'border-cocoa/15 hover:border-cocoa/40'
                   }`}
                 >
-                  <img
-                    src={item.url}
-                    alt=""
-                    className={`h-full w-full object-cover transition-opacity duration-300 ${
-                      isActive ? 'opacity-100' : 'opacity-70 hover:opacity-100'
-                    }`}
-                  />
+                  {isVideoMedia(item) ? (
+                    <>
+                      {/* metadata only: enough for the first frame, without
+                          pulling the whole file for a thumbnail. */}
+                      <video
+                        src={item.url}
+                        preload="metadata"
+                        muted
+                        playsInline
+                        className={`h-full w-full bg-cocoa/10 object-cover transition-opacity duration-300 ${
+                          isActive ? 'opacity-100' : 'opacity-70'
+                        }`}
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-0 flex items-center justify-center"
+                      >
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-cocoa/70 text-[10px] text-ivory">
+                          ▶
+                        </span>
+                      </span>
+                    </>
+                  ) : (
+                    <img
+                      src={item.url}
+                      alt=""
+                      className={`h-full w-full object-cover transition-opacity duration-300 ${
+                        isActive ? 'opacity-100' : 'opacity-70 hover:opacity-100'
+                      }`}
+                    />
+                  )}
                 </button>
               </li>
             );

@@ -32,7 +32,12 @@ public class StorageService {
     private static final Set<String> SELF_SERVICE_SCOPES = Set.of(USER_FILES_SCOPE, AVATARS_SCOPE);
 
     private static final Map<String, Set<String>> ALLOWED_CONTENT_TYPES_BY_SCOPE = Map.of(
-            "products", Set.of("image/jpeg", "image/png", "image/webp"),
+            // Video is limited to the two formats every current browser plays
+            // natively. QuickTime .mov is deliberately absent: it uploads
+            // happily and then fails to play for most visitors, which is worse
+            // than refusing it at the point the admin picks the file.
+            "products", Set.of("image/jpeg", "image/png", "image/webp",
+                    "video/mp4", "video/webm"),
             USER_FILES_SCOPE, Set.of("image/jpeg", "image/png", "image/webp",
                     "application/pdf", "text/plain"),
             // Its own scope rather than a corner of user-files: an avatar in the

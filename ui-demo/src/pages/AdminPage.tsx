@@ -5,7 +5,7 @@ import { useAuth } from '../auth';
 import { formatPrice, useShop } from '../store';
 import type { CreateProductRequest, MediaItem, OrderResponse, Product } from '../types';
 import { ChocolateArt, variantFor } from '../components/ChocolateArt';
-import { getDefaultMedia } from '../utils/media';
+import { getDefaultMedia, isVideoMedia } from '../utils/media';
 
 const EMPTY_FORM: CreateProductRequest = {
   name: '',
@@ -359,7 +359,8 @@ export function AdminPage() {
                   <p className="mb-1 block text-xs uppercase tracking-[0.16em] text-cocoa/60">Media</p>
                   <p className="text-xs text-cocoa/50">
                     The default image is used as this piece's photo across the boutique — click
-                    "Save Changes" below to persist your selection.
+                    "Save Changes" below to persist your selection. Video appears in the gallery on
+                    the product page, but is never the thumbnail.
                   </p>
 
                   <div className="mt-3 flex flex-wrap gap-3">
@@ -377,16 +378,33 @@ export function AdminPage() {
                                 Default
                               </span>
                             )}
-                            <img src={item.url} alt="" className="h-full w-full object-contain" />
+                            {isVideoMedia(item) ? (
+                              <video
+                                src={item.url}
+                                preload="metadata"
+                                muted
+                                playsInline
+                                controls
+                                className="h-full w-full object-contain"
+                              />
+                            ) : (
+                              <img src={item.url} alt="" className="h-full w-full object-contain" />
+                            )}
                           </div>
-                          <button
-                            type="button"
-                            disabled={isDefault}
-                            onClick={() => onSetDefaultMedia(item)}
-                            className="mt-1 w-full text-[10px] uppercase tracking-wide text-cocoa/70 underline decoration-gold underline-offset-2 hover:text-terracotta disabled:opacity-40"
-                          >
-                            {isDefault ? 'Default' : 'Set default'}
-                          </button>
+                          {isVideoMedia(item) ? (
+                            <p className="mt-1 w-full text-center text-[10px] uppercase tracking-wide text-cocoa/40">
+                              Video
+                            </p>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={isDefault}
+                              onClick={() => onSetDefaultMedia(item)}
+                              className="mt-1 w-full text-[10px] uppercase tracking-wide text-cocoa/70 underline decoration-gold underline-offset-2 hover:text-terracotta disabled:opacity-40"
+                            >
+                              {isDefault ? 'Default' : 'Set default'}
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => onRemoveMedia(item)}
@@ -402,7 +420,7 @@ export function AdminPage() {
                   <div className="mt-3">
                     <input
                       type="file"
-                      accept="image/jpeg,image/png,image/webp"
+                      accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
                       disabled={uploading}
                       onChange={onFileSelected}
                       className="text-xs text-cocoa/70"
