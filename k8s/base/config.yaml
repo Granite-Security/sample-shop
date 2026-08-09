@@ -93,6 +93,10 @@ data:
   MICROSERVICES_ACCOUNTING_URI: "http://accounting:8068"
   ACCOUNTING_R2DBC_URL: "r2dbc:postgresql://postgres-accounting:5432/accountingdb"
   ACCOUNTING_JDBC_URL: "jdbc:postgresql://postgres-accounting:5432/accountingdb"
+  # The date the books open (D22). Facts older than this are recorded and never posted.
+  # Set once, when the opening balance is posted — moving it later abandons entries that
+  # were already booked.
+  ACCOUNTING_BOOKS_OPEN_ON: "2026-09-01"
   # Non-secret — the actual key is resend-api-key in granite-secrets.
   RESEND_FROM: "Granite Security <no-reply@notify.granite-security.org>"
   FRONTEND_ORIGIN: "https://granite-security.org"

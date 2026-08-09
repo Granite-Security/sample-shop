@@ -38,6 +38,12 @@ spring:
       enable-auto-commit: false
       properties:
         isolation.level: read_committed
+    producer:
+      # Only ever used by the dead-letter recoverer; accounting publishes no events of
+      # its own. It is the last service that should be telling anyone anything.
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
 
 # No spring.security.oauth2.client here, and that is deliberate: accounting never calls
 # another service (docs/finance/accounting.md D25). If it needs a number, the event
@@ -52,3 +58,15 @@ springdoc:
 jwt:
   jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:9090/auth/oauth2/jwks}
   trusted-issuers: ${TRUSTED_JWT_ISSUERS:http://localhost:8080/auth}
+
+accounting:
+  # The books start on a date (D22). Kafka retention has already deleted history, so
+  # there is nothing to replay: facts older than this are recorded and never posted, and
+  # every report before it is cash view only. Moving this date later abandons entries
+  # that were already booked — set it once, when the opening balance is posted.
+  books-open-on: ${ACCOUNTING_BOOKS_OPEN_ON:2026-09-01}
+  sweep:
+    # Retries facts whose prerequisites had not arrived. Out-of-order across four topics
+    # is ordinary, so this runs often and cheaply.
+    interval: ${ACCOUNTING_SWEEP_INTERVAL:30000}
+    batch-size: ${ACCOUNTING_SWEEP_BATCH_SIZE:200}
