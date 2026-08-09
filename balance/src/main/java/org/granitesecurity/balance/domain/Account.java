@@ -42,6 +42,31 @@ public class Account {
 
     private String currency = "CHF";
 
+    /**
+     * How much of this balance is conjured money (docs/finance/accounting.md §5).
+     *
+     * <p>Grows on a GIFT and on the receiving side of a transfer or refund that carried
+     * gifted francs; every debit draws it down <em>first</em>. Gift-first is the
+     * conservative ordering — it maximises contra-revenue and minimises recognised
+     * revenue — and it is the only one that needs no per-franc history.
+     *
+     * <p>Always zero on a house account: house:gift is where conjured money comes from,
+     * not somewhere it is held.
+     */
+    @Column("gift_pool_minor")
+    private long giftPoolMinor;
+
+    /**
+     * When this balance last went negative, or null if it is not.
+     *
+     * <p>A negative user balance is a trade receivable, and IFRS 9's provision matrix
+     * buckets receivables by age (accounting.md §2.6) — an age nothing else records.
+     * Cleared the moment the balance returns to zero or above, so it always means "has
+     * been owing since", never "was owing once".
+     */
+    @Column("negative_since")
+    private Instant negativeSince;
+
     @Column("created_at")
     private Instant createdAt;
 

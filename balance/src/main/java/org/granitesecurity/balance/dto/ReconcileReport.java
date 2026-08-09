@@ -15,6 +15,18 @@ import java.util.List;
  * @param backedIssuedMinor     |house:topup| — credit backed by real payments
  * @param redeemedMinor         |house:shop| — credit spent on orders
  * @param creditOutstandingMinor sum of negative user balances: money lent out
+ * @param giftedOutstandingMinor conjured money still sitting in user balances — the
+ *                              figure that stands in for the liability the accounting
+ *                              policy does not book (accounting.md §2.4)
+ * @param spentFromGiftMinor    of everything spent on orders, the conjured part
+ * @param spentFromBackedMinor  the part funded by real top-ups; the remainder, never
+ *                              stored, so it cannot disagree with the other two
+ * @param spentFromCreditMinor  the part we lent rather than held
+ * @param giftPoolDriftMinor    pools held, less what the ledger says entered them.
+ *                              Must be 0: every conjured franc is either still in
+ *                              someone's balance or has been spent (§12.1)
+ * @param fundingSplitViolations entries whose split exceeds the movement it splits.
+ *                              Must be 0
  * @param drift                 accounts whose cache disagrees with their entries
  */
 public record ReconcileReport(
@@ -26,5 +38,11 @@ public record ReconcileReport(
         long backedIssuedMinor,
         long redeemedMinor,
         long creditOutstandingMinor,
+        long giftedOutstandingMinor,
+        long spentFromGiftMinor,
+        long spentFromBackedMinor,
+        long spentFromCreditMinor,
+        long giftPoolDriftMinor,
+        long fundingSplitViolations,
         List<AccountDrift> drift
 ) {}

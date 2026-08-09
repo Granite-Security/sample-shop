@@ -458,5 +458,14 @@ export interface ReconcileReport {
   backedIssuedMinor: number;
   redeemedMinor: number;
   creditOutstandingMinor: number;
+  /** Conjured money still sitting in user balances (docs/finance/accounting.md §5). */
+  giftedOutstandingMinor: number;
+  /** Of everything spent on orders: gift + backed + credit = spend. */
+  spentFromGiftMinor: number;
+  spentFromBackedMinor: number;
+  spentFromCreditMinor: number;
+  /** Both must be 0, or the funding split — and therefore contra-revenue — is lying. */
+  giftPoolDriftMinor: number;
+  fundingSplitViolations: number;
   drift: AccountDrift[];
 }
