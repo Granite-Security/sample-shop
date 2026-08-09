@@ -373,7 +373,7 @@ export function CheckoutPage() {
                             country: addr.country,
                           });
                         }}
-                        className="mt-1 accent-[#C7A56B]"
+                        className="mt-1 accent-[#BF9A5F]"
                       />
                       <span className="text-sm text-cocoa">
                         <span className="font-medium">{addr.recipientName}</span>

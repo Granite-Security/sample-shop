@@ -9,7 +9,7 @@ const TESTIMONIALS = [
     rating: 5,
     text: 'The Madagascar bar tastes like nothing I have bought in a store — bright, almost like raspberries, then this long dark finish. I ordered three more before finishing the first.',
     initials: 'EM',
-    hue: '#A56A52',
+    hue: '#8E5F6B',
   },
   {
     name: 'James Whitfield',
@@ -17,7 +17,7 @@ const TESTIMONIALS = [
     rating: 5,
     text: 'Sent the Signature Gift Box to a client and they called me the same evening about it. The packaging alone feels like an event; the truffles are extraordinary.',
     initials: 'JW',
-    hue: '#8B9172',
+    hue: '#8C7F8A',
   },
   {
     name: 'Sofia Almeida',
@@ -25,7 +25,7 @@ const TESTIMONIALS = [
     rating: 5,
     text: 'You can genuinely taste the difference small batches make. The sea salt caramels have ruined every supermarket chocolate for me, permanently and happily.',
     initials: 'SA',
-    hue: '#C7A56B',
+    hue: '#BF9A5F',
   },
 ];
 

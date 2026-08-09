@@ -37,7 +37,7 @@ export function ShopPage() {
       {/* Compact banner rather than a full hero — the products are the point. */}
       <section className="relative overflow-hidden bg-espresso pt-32 pb-16 lg:pt-40 lg:pb-20">
         <div className="absolute inset-0">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_25%_20%,#46281A_0%,#1E1612_65%,#120D0A_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_25%_20%,#3A2130_0%,#150E13_65%,#120D0A_100%)]" />
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_80%_90%,rgba(199,165,107,0.12)_0%,transparent_55%)]" />
         </div>
         <div className="relative mx-auto max-w-7xl px-5 text-center lg:px-8">

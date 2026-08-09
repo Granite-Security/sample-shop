@@ -20,7 +20,7 @@ export function Hero() {
     <section id="top" className="relative flex min-h-screen items-center overflow-hidden bg-espresso">
       {/* cinematic background — layered gradients standing in for photography */}
       <div className="absolute inset-0 animate-drift">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,#46281A_0%,#1E1612_60%,#120D0A_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,#3A2130_0%,#150E13_60%,#120D0A_100%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_75%_80%,rgba(199,165,107,0.14)_0%,transparent_50%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_60%_40%,rgba(165,106,82,0.12)_0%,transparent_45%)]" />
       </div>
@@ -33,8 +33,8 @@ export function Hero() {
       >
         <defs>
           <linearGradient id="hero-ribbon" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#5A3A26" />
-            <stop offset="100%" stopColor="#1E1612" />
+            <stop offset="0%" stopColor="#4A2E3F" />
+            <stop offset="100%" stopColor="#150E13" />
           </linearGradient>
         </defs>
         <path
@@ -43,7 +43,7 @@ export function Hero() {
         />
         <path
           d="M0 260 C 300 180, 520 320, 820 240 C 1120 160, 1280 300, 1440 230 L 1440 400 L 0 400 Z"
-          fill="#1E1612"
+          fill="#150E13"
           opacity="0.85"
         />
       </svg>

@@ -67,12 +67,12 @@ export function Origins() {
         <div className="mt-16 grid items-center gap-12 lg:grid-cols-[3fr_2fr]">
           <Reveal>
             <svg viewBox="0 0 800 450" className="w-full" role="img" aria-label="Map of cacao sourcing regions">
-              <rect width="800" height="450" rx="12" fill="#1E1612" />
+              <rect width="800" height="450" rx="12" fill="#150E13" />
               {LANDMASSES.map((d, i) => (
-                <path key={i} d={d} fill="#3A2418" stroke="#5A3A26" strokeWidth="1" />
+                <path key={i} d={d} fill="#2E1B27" stroke="#4A2E3F" strokeWidth="1" />
               ))}
               {/* equator hint */}
-              <line x1="0" y1="290" x2="800" y2="290" stroke="#C7A56B" strokeWidth="0.6" strokeDasharray="4 8" opacity="0.35" />
+              <line x1="0" y1="290" x2="800" y2="290" stroke="#BF9A5F" strokeWidth="0.6" strokeDasharray="4 8" opacity="0.35" />
               {REGIONS.map((r, i) => (
                 <g
                   key={r.name}
@@ -80,15 +80,15 @@ export function Origins() {
                   onMouseEnter={() => setActive(i)}
                   className="cursor-pointer"
                 >
-                  <circle cx={r.x} cy={r.y} r="16" fill="#C7A56B" opacity={active === i ? 0.25 : 0.1}>
+                  <circle cx={r.x} cy={r.y} r="16" fill="#BF9A5F" opacity={active === i ? 0.25 : 0.1}>
                     <animate attributeName="r" values="12;20;12" dur="3s" repeatCount="indefinite" />
                   </circle>
                   <circle
                     cx={r.x}
                     cy={r.y}
                     r="5"
-                    fill={active === i ? '#C7A56B' : '#A56A52'}
-                    stroke="#F7F3EE"
+                    fill={active === i ? '#BF9A5F' : '#8E5F6B'}
+                    stroke="#F1EFE8"
                     strokeWidth="1.5"
                   />
                   <text
@@ -97,7 +97,7 @@ export function Origins() {
                     textAnchor="middle"
                     fontFamily="Inter, sans-serif"
                     fontSize="13"
-                    fill={active === i ? '#F7F3EE' : '#F7F3EE99'}
+                    fill={active === i ? '#F1EFE8' : '#F1EFE899'}
                   >
                     {r.country}
                   </text>

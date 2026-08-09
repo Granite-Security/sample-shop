@@ -178,7 +178,7 @@ export function AddressesPage() {
                 type="checkbox"
                 checked={form.isDefault ?? false}
                 onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
-                className="accent-[#C7A56B]"
+                className="accent-[#BF9A5F]"
               />
               Use as default delivery address
             </label>

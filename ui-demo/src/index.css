@@ -1,12 +1,15 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ivory: #f7f3ee;
-  --color-cocoa: #3a2418;
-  --color-espresso: #1e1612;
-  --color-terracotta: #a56a52;
-  --color-sage: #8b9172;
-  --color-gold: #c7a56b;
+  /* Palette retuned to Sergiu's "SI Luxury Chocolate" design (see pics/).
+     Sampled from the mock: aubergine nav/buttons, near-black warm sections,
+     antique gold accents, bone-white content background. */
+  --color-ivory: #f1efe8;
+  --color-cocoa: #2e1b27;
+  --color-espresso: #150e13;
+  --color-terracotta: #8e5f6b;
+  --color-sage: #8c7f8a;
+  --color-gold: #bf9a5f;
 
   --font-display: "Playfair Display", Georgia, serif;
   --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
