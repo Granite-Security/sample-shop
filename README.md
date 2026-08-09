@@ -41,6 +41,7 @@ orders.events     shop        ──>  payment, delivery
 payments.events   payment     ──>  shop, delivery, balance
 delivery.events   delivery    ──>  shop
 identity.events   auth-server ──>  profile (provisions), notification (emails)
+balance.events    balance     ──>  (accounting, once it exists)
 ```
 
 | Service | Port | Stack | Role |
@@ -203,8 +204,11 @@ Register / change password / request reset
 | `orders.events` | Shop (outbox) | Payment, Delivery | 7 days (broker default) |
 | `payments.events` | Payment (outbox) | Shop | 7 days (broker default) |
 | `identity.events` | auth-server (fire-and-forget) | Notification, Profile | **1 hour** — it carries live password-reset tokens |
+| `balance.events` | Balance (outbox) | *accounting, not yet built* | **30 days** — the only source of gift issuance and of the spend funding split |
 
 > `identity.events` is declared explicitly with `segment.ms=600000` alongside `retention.ms=3600000`. Kafka only deletes *closed* segments and the default roll is 7 days, so on a low-volume topic `retention.ms` on its own deletes nothing.
+
+> `balance.events` sets its retention for the opposite reason. There, retention is a ceiling — whatever is retained is what a reset consumer group re-announces. Here it is a floor: these events are the only record of gift issuance and of which spend was gift money, so a fact that expires before the books consume it is money that never reaches them. Messages are keyed by username, so one user's facts share a partition and stay in order.
 
 ## API routes
 

@@ -33,13 +33,16 @@ public class BalanceService {
     private final AccountRepository accountRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
     private final CreditPolicy creditPolicy;
+    private final BalanceEventPublisher eventPublisher;
 
     public BalanceService(AccountRepository accountRepository,
                           LedgerEntryRepository ledgerEntryRepository,
-                          CreditPolicy creditPolicy) {
+                          CreditPolicy creditPolicy,
+                          BalanceEventPublisher eventPublisher) {
         this.accountRepository = accountRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
         this.creditPolicy = creditPolicy;
+        this.eventPublisher = eventPublisher;
     }
 
     public Mono<Account> findOrCreate(String username) {
@@ -96,6 +99,11 @@ public class BalanceService {
         }
 
         UUID transferId = UUID.randomUUID();
+        // One timestamp for the whole movement: both ledger legs and the outbox row
+        // that announces them. The books post by the event's own business date (§6),
+        // and a ledger that disagrees with its own announcement about when money moved
+        // is not something a later reconciliation can resolve.
+        Instant occurredAt = Instant.now();
 
         return findOrCreate(fromUsername).zipWith(findOrCreate(toUsername))
                 .flatMap(pair -> {
@@ -115,9 +123,15 @@ public class BalanceService {
                     return updates.flatMap(drawn -> giftArriving(kind, to, amountMinor, reference, drawn)
                             .flatMap(giftIn -> propagateGift(to, giftIn)
                                     .then(writeEntry(transferId, from.getId(), -amountMinor, kind,
-                                            reference, memo, drawn.giftDrawn(), drawn.creditDrawn()))
+                                            reference, memo, drawn.giftDrawn(), drawn.creditDrawn(),
+                                            occurredAt))
                                     .then(writeEntry(transferId, to.getId(), amountMinor, kind,
-                                            reference, memo, giftIn, 0L))
+                                            reference, memo, giftIn, 0L, occurredAt))
+                                    // Same transaction as the entries above, which is the
+                                    // entire point of an outbox: a movement and its
+                                    // announcement cannot diverge.
+                                    .then(eventPublisher.publish(kind, from, to, amountMinor, drawn,
+                                            giftIn, transferId, reference, memo, occurredAt))
                                     .doOnSuccess(v -> log.info("{} {} rappen: {} -> {} ({}) gift={} credit={}",
                                             kind, amountMinor, fromUsername, toUsername, transferId,
                                             drawn.giftDrawn(), drawn.creditDrawn()))
@@ -187,7 +201,8 @@ public class BalanceService {
 
     private Mono<Void> writeEntry(UUID transferId, Long accountId, long amountMinor,
                                   String kind, String reference, String memo,
-                                  long giftFundedMinor, long creditFundedMinor) {
+                                  long giftFundedMinor, long creditFundedMinor,
+                                  Instant occurredAt) {
         LedgerEntry entry = new LedgerEntry();
         entry.setTransferId(transferId);
         entry.setAccountId(accountId);
@@ -197,7 +212,7 @@ public class BalanceService {
         entry.setMemo(memo);
         entry.setGiftFundedMinor(giftFundedMinor);
         entry.setCreditFundedMinor(creditFundedMinor);
-        entry.setCreatedAt(Instant.now());
+        entry.setCreatedAt(occurredAt);
         return ledgerEntryRepository.save(entry).then();
     }
 
