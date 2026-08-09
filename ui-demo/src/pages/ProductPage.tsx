@@ -6,6 +6,7 @@ import type { Product } from '../types';
 import { ChocolateArt, variantFor } from './../components/ChocolateArt';
 import { ArrowIcon, HeartIcon, LeafIcon, StarIcon, TruckIcon } from '../components/icons';
 import { Reveal } from '../components/Reveal';
+import { ProductGallery } from '../components/ProductGallery';
 import { getDefaultMedia } from '../utils/media';
 
 /** Same deterministic pseudo-rating used by the bestseller cards. */
@@ -70,7 +71,6 @@ export function ProductPage() {
   const rating = ratingFor(product.id);
   const wished = wishlist.has(product.id);
   const inStock = product.stock > 0;
-  const defaultImage = getDefaultMedia(product.media);
 
   return (
     <div className="bg-ivory pt-28 lg:pt-32">
@@ -89,17 +89,7 @@ export function ProductPage() {
 
         <div className="mt-8 grid gap-10 lg:grid-cols-2 lg:gap-20">
           <Reveal>
-            <div className="overflow-hidden rounded-lg">
-              {defaultImage ? (
-                <img src={defaultImage.url} alt={product.name} className="aspect-square w-full object-cover" />
-              ) : (
-                <ChocolateArt
-                  seed={product.id}
-                  variant={variantFor(product.name, product.id)}
-                  className="aspect-square w-full"
-                />
-              )}
-            </div>
+            <ProductGallery product={product} />
           </Reveal>
 
           <Reveal delay={150}>
