@@ -1,6 +1,7 @@
 package org.granitesecurity.profile.repository;
 
 import org.granitesecurity.profile.domain.UserProfile;
+import org.springframework.data.r2dbc.repository.Modifying;
 import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import reactor.core.publisher.Flux;
@@ -9,6 +10,70 @@ import reactor.core.publisher.Mono;
 public interface UserProfileRepository extends ReactiveCrudRepository<UserProfile, Long> {
 
     Mono<UserProfile> findByUsername(String username);
+
+    /**
+     * Claims the row for a username, or does nothing if someone else got there first.
+     *
+     * <p>Replaces a findByUsername/switchIfEmpty(save) check-then-insert, which two
+     * writers could both pass — the Kafka consumer provisioning from
+     * {@code UserRegistered} and the user's own first {@code GET /api/profiles/me} —
+     * leaving the loser with a DuplicateKeyException surfaced as a 500 on the profile
+     * page. There are always two writers here: the event is fire-and-forget with no
+     * outbox, so the HTTP path has to be able to create the profile itself.
+     */
+    @Modifying
+    @Query("""
+            INSERT INTO user_profile (username, avatar_source, created_at, updated_at)
+            VALUES (:username, 'NONE', now(), now())
+            ON CONFLICT (username) DO NOTHING
+            """)
+    Mono<Integer> insertIfAbsent(String username);
+
+    /**
+     * Fills in what a {@code UserRegistered} event knows, without disturbing anything
+     * already present.
+     *
+     * <p>COALESCE in SQL rather than load-modify-save: {@code save()} writes every
+     * column, so the previous version lost the email whenever the concurrent
+     * Google-picture write had read the row first. Merging in SQL means the two
+     * writers touch disjoint columns and neither can clobber the other. It also keeps
+     * the original "only fill blanks, never overwrite" contract, so a redelivered
+     * event cannot undo details the user has since edited.
+     */
+    @Modifying
+    @Query("""
+            INSERT INTO user_profile (username, email, first_name, last_name,
+                                      avatar_source, created_at, updated_at)
+            VALUES (:username, :email, :firstName, :lastName, 'NONE', now(), now())
+            ON CONFLICT (username) DO UPDATE SET
+                email      = COALESCE(user_profile.email,      EXCLUDED.email),
+                first_name = COALESCE(user_profile.first_name, EXCLUDED.first_name),
+                last_name  = COALESCE(user_profile.last_name,  EXCLUDED.last_name),
+                updated_at = now()
+            """)
+    Mono<Integer> upsertFromRegistration(String username, String email,
+                                         String firstName, String lastName);
+
+    /**
+     * Caches the Google picture, touching only the two columns it owns.
+     *
+     * <p>avatar_source flips to GOOGLE only on the first picture ever seen for this
+     * user — a later NONE is a choice made on the profile page, and refreshing the
+     * URL must not quietly undo it. The WHERE guard makes a repeat sign-in with an
+     * unchanged picture write nothing at all.
+     */
+    @Modifying
+    @Query("""
+            UPDATE user_profile
+               SET google_picture_url = :googlePictureUrl,
+                   avatar_source = CASE
+                       WHEN google_picture_url IS NULL AND avatar_source = 'NONE'
+                       THEN 'GOOGLE' ELSE avatar_source END,
+                   updated_at = now()
+             WHERE username = :username
+               AND google_picture_url IS DISTINCT FROM :googlePictureUrl
+            """)
+    Mono<Integer> syncGooglePicture(String username, String googlePictureUrl);
 
     /**
      * Deliberately a Flux: `email` has no UNIQUE constraint and one human can hold

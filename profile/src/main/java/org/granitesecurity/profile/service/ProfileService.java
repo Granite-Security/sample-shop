@@ -50,8 +50,7 @@ public class ProfileService {
      *                         the profile row rather than needing the user's token.
      */
     public Mono<ProfileResponse> getProfile(String username, String googlePictureUrl) {
-        return userProfileRepository.findByUsername(username)
-                .switchIfEmpty(createProfile(username))
+        return findOrCreate(username)
                 .flatMap(profile -> syncGooglePicture(profile, googlePictureUrl))
                 .map(ProfileService::toResponse);
     }
@@ -61,23 +60,22 @@ public class ProfileService {
      * which is what makes a changed Google photo appear after the next sign-in
      * without any polling or event.
      *
-     * <p>The source is flipped to GOOGLE only when this is the <em>first</em> picture
-     * we have ever seen for them. Once {@code googlePictureUrl} is set, a later NONE
-     * is a choice the user made on the profile page, and refreshing the URL must not
-     * quietly undo it.
+     * <p>Writes through a targeted UPDATE of the two columns it owns rather than
+     * saving the whole entity. The entity in hand may have been read before a
+     * concurrent writer (the UserRegistered consumer) filled in email/first/last, and
+     * a full-row save would write those back as null — which is exactly how a
+     * registered user ended up with no email on their profile.
      */
     private Mono<UserProfile> syncGooglePicture(UserProfile profile, String googlePictureUrl) {
         if (googlePictureUrl == null || googlePictureUrl.isBlank()
                 || googlePictureUrl.equals(profile.getGooglePictureUrl())) {
             return Mono.just(profile);
         }
-        boolean firstSighting = isBlank(profile.getGooglePictureUrl());
-        profile.setGooglePictureUrl(googlePictureUrl);
-        if (firstSighting && AvatarSource.NONE.name().equals(profile.getAvatarSource())) {
-            profile.setAvatarSource(AvatarSource.GOOGLE.name());
-        }
-        profile.setUpdatedAt(Instant.now());
-        return userProfileRepository.save(profile);
+        return userProfileRepository.syncGooglePicture(profile.getUsername(), googlePictureUrl)
+                // Re-read so the response carries both this write and anything the
+                // other writer committed in the meantime.
+                .then(userProfileRepository.findByUsername(profile.getUsername()))
+                .defaultIfEmpty(profile);
     }
 
     public Mono<ProfileResponse> updateProfile(String username, UpdateProfileRequest req) {
@@ -116,47 +114,27 @@ public class ProfileService {
     /**
      * Creates or completes a profile from a UserRegistered event.
      *
-     * <p>Only fills fields that are currently null, never overwrites. That matters for
-     * the race where the user opens "My Profile" before the event is consumed: the
-     * lazy {@link #createProfile} has already written a username-only stub, and this
-     * fills in the blanks rather than fighting it. It equally means a user who has
-     * since edited their details keeps them if the event is ever redelivered.
+     * <p>Only fills fields that are currently null, never overwrites — done as a
+     * single INSERT .. ON CONFLICT DO UPDATE with COALESCE rather than
+     * load-modify-save. Both matter, for different reasons. "Never overwrite" means a
+     * redelivered event cannot undo details the user has since edited. Doing it in one
+     * statement means the concurrent Google-picture write, which reads and writes the
+     * same row from the HTTP path, touches disjoint columns instead of racing this one
+     * — the earlier version lost the email whenever that write won.
      */
     public Mono<UserProfile> provisionFromRegistration(String username, String email,
                                                        String firstName, String lastName) {
-        return userProfileRepository.findByUsername(username)
-                .switchIfEmpty(Mono.defer(() -> createProfile(username)))
-                .flatMap(profile -> {
-                    boolean changed = false;
-                    if (isBlank(profile.getEmail()) && !isBlank(email)) {
-                        profile.setEmail(email);
-                        changed = true;
-                    }
-                    if (isBlank(profile.getFirstName()) && !isBlank(firstName)) {
-                        profile.setFirstName(firstName);
-                        changed = true;
-                    }
-                    if (isBlank(profile.getLastName()) && !isBlank(lastName)) {
-                        profile.setLastName(lastName);
-                        changed = true;
-                    }
-                    if (!changed) {
-                        return Mono.just(profile);
-                    }
-                    profile.setUpdatedAt(Instant.now());
-                    return userProfileRepository.save(profile);
-                });
+        return userProfileRepository.upsertFromRegistration(username, email, firstName, lastName)
+                .then(userProfileRepository.findByUsername(username));
     }
 
-    private static boolean isBlank(String value) {
-        return value == null || value.isBlank();
-    }
-
+    /**
+     * Idempotent: two writers racing to create the same profile both succeed, and the
+     * loser reads the winner's row instead of failing on user_profile_username_key.
+     */
     private Mono<UserProfile> createProfile(String username) {
-        UserProfile profile = new UserProfile(username, null, null, null);
-        profile.setCreatedAt(Instant.now());
-        profile.setUpdatedAt(Instant.now());
-        return userProfileRepository.save(profile);
+        return userProfileRepository.insertIfAbsent(username)
+                .then(userProfileRepository.findByUsername(username));
     }
 
     /** Shared with AvatarService: an avatar can be set before "My Profile" is ever opened. */
