@@ -60,8 +60,11 @@ already moved. Two components that each believe they are the ledger is the failu
 sentence exists to prevent. `accounting` has no endpoint that changes a balance and sits in no
 payment path.
 
-Nor is it a general ledger for a company. One entity, one currency, no journals a human can
-type by hand, no tax, no inventory.
+**It is a general ledger** — that scope was taken deliberately (§7, §8). One entity, one
+currency, no tax. Everything that moves value is booked: sales, cost of goods, processor fees,
+shipping, equipment, purchases, staff expenses. What it is not is a *bookkeeping product*: there
+is no chart-of-accounts editor, no multi-entity, no FX, and the only human-authored journals are
+the four typed forms in §15.
 
 ---
 
@@ -246,6 +249,64 @@ turning it into a general ledger for *accounting* is a different system and it i
 financial statements", and every estimated line carries its assumption inline. If these numbers
 ever face a statutory filing they need a real accountant; nothing here is an audit opinion.
 
+### 2.8 Costs, and the assumptions behind them
+
+Four cost lines are now in scope. Each is a **stated assumption**, not a measurement, and each is
+config so revising it is not a migration (D21).
+
+| Line | Assumption | Notes |
+|---|---|---|
+| **Cost of goods** | `product.unit_cost`, defaulting to **50% of price** | A 50% gross margin before everything else. Weighted average cost (§14.1) |
+| **Processor fee** | **3% + CHF 0.30** per Stripe/PayPal payment | Not on balance-funded orders — no processor is involved (§2.9) |
+| **Shipping** | **CHF 1.00 per order**, cost only | We do not charge customers for it yet (§2.10) |
+| **Depreciation** | CHF 5,000 equipment, **10 years straight line**, nil residual | CHF 500/year, CHF 41.67/month (§14.3) |
+
+A CHF 60 order paid by card, in full:
+
+```
+ revenue                    60.00
+ cost of goods             −30.00     50% of price
+ processor fee              −2.10     3% × 60 + 0.30
+ shipping                   −1.00
+                          ────────
+ gross profit               26.90     44.8%
+```
+
+The same order paid from balance earns **CHF 29.00** — no processor is involved, so the fee is
+zero. That is a real business observation and it falls straight out of the posting rules: paying
+with balance is cheaper for us than a card.
+
+### 2.9 Settlement: processor cash is cash
+
+**Decided: Stripe and PayPal pay at capture.** A franc in the Stripe balance is as good as a
+franc in the bank, so there is **no PSP clearing account** and no payout event to consume.
+`PaymentSucceeded` debits `1000` directly.
+
+This is a simplification, and it is worth knowing what it costs: real processors settle on a
+delay, so a real ledger would hold a receivable between capture and payout and could tell you
+how much is in transit. Ours cannot, and does not claim to. If the delay ever matters, the fix
+is one clearing account and a `PayoutReceived` event — nothing else in the design changes.
+
+**The fee is not deferred.** It is incurred at capture and expensed then, in the period of the
+*payment*, not the period of the delivery. Revenue and its processor fee can therefore land in
+different months. That is correct — the fee buys the payment, not the sale — and it is one more
+reason the cash and accrual views differ (§2).
+
+Two consequences to expect: a **top-up incurs a fee with no sale to match it against**, so it is
+simply an expense; and processors do not return the fee on a refund, so a refunded order keeps
+its fee as a cost. Both are true of the real thing.
+
+### 2.10 Shipping is a fulfilment cost, not a performance obligation
+
+We do not charge for shipping, so there is no shipping revenue and no second performance
+obligation to allocate a transaction price to. CHF 1.00 per order is a **cost of fulfilling**,
+expensed when the goods are delivered — the same moment as COGS, so the whole cost of a sale
+sits in the period of its revenue.
+
+If we ever charge for shipping, that changes: a delivery service the customer pays for is
+generally a separate performance obligation under IFRS 15, recognised as it is provided, and the
+order total has to be allocated between goods and shipping. Not today.
+
 ---
 
 ## 3. Decisions
@@ -275,6 +336,18 @@ ever face a statutory filing they need a real accountant; nothing here is an aud
 | D21 | **Estimates are labelled as estimates**, with the date their rates were set. An assumed number rendered like a measured one is this whole design's failure mode. |
 | D22 | **The books start on a date.** An opening-balance journal, not a reconstructed past (§6). |
 | D23 | **Never drop a stale event** — the deliberate inverse of `notification`'s `DROPPED_STALE` (§6). |
+| D24 | **Events carry facts, never journal instructions.** A producer publishes "stock −5, reason `DAMAGE`, unit cost 3.20", never "Dr 6200 / Cr 1200". Posting rules live only in `accounting` (§16.1). |
+| D25 | **`accounting` never calls another service.** If it needs a number, the event carries it. Trading a Kafka dependency for a synchronous one is a worse coupling, not a better one (§16.1). |
+| D26 | **Money-relevant fields are frozen onto the event at emit time.** Cost of sale is the cost *when the goods were committed*, not what the catalogue says later (§16.1). |
+| D28 | **`product.unit_cost`, defaulting to 50% of price**, weighted average costing (§14.1). |
+| D29 | **Processor fee 3% + CHF 0.30 on Stripe/PayPal payments only**, expensed at capture, never refunded (§2.9). |
+| D30 | **Shipping is CHF 1.00 per order, a fulfilment cost**, expensed with COGS at delivery, not charged to customers (§2.10). |
+| D31 | **Processor cash is cash.** No clearing account, no payout events (§2.9). |
+| D32 | **Equipment CHF 5,000, straight line over 10 years, nil residual** — CHF 41.67/month, a recurring journal, not an event (§14.3). |
+| D33 | **The books open with a stated balance sheet** (§14.2): CHF 1,000 bank, CHF 5,000 equipment, inventory at cost, and owner's capital as the plug. |
+| D34 | **Manual journals exist and are the one exception to D20's read-only rule** — `ROLE_ADMIN` or `ROLE_MANAGER`, audited, append-only, corrections by reversal (§15). |
+| D35 | **Staff expenses create a payable to a named person** (`2600`, with a `party` on the line), settled from the bank — `accounting` never credits anyone's platform balance (§15.3). |
+| D27 | **Accounting only consumes outbox-backed topics.** `identity.events` is deliberately lossy (`finance.md`, auth-server: fire-and-forget, no outbox). **A general ledger cannot consume a lossy topic** (§16.1). |
 
 ---
 
@@ -325,16 +398,29 @@ Deliberately tiny. Every line traces to something in §2.
 
 | Code | Account | Why it exists |
 |---|---|---|
-| `1000` | Cash / provider clearing | Real money in from Stripe & PayPal |
+| `1000` | Bank & processor cash | Includes Stripe and PayPal balances — they pay at capture (D31) |
 | `1100` | Trade receivables | Negative user balances (§2.5) |
 | `1150` | Allowance for expected credit losses | Contra-asset, IFRS 9 (§2.6) |
+| `1200` | Inventory | `stock × unit_cost` (D28) |
+| `1500` | Equipment | CHF 5,000 at cost (D32) |
+| `1550` | Accumulated depreciation | Contra-asset (D32) |
 | `2000` | Contract liability — stored value | Top-ups. **Never revenue** (§2.3) |
 | `2010` | Contract liability — deferred revenue | Paid but not delivered (§2.1) |
 | `2100` | Refund liability | Expected and requested returns (§2.2) |
+| `2500` | Accounts payable | Purchases not yet paid |
+| `2600` | Due to staff | Expenses a manager paid personally; carries a `party` (D35) |
+| `3000` | Owner's capital | The opening plug (D33) |
+| `3900` | Retained earnings | Closed into at period end |
 | `4000` | Revenue | Gross, recognised on delivery |
 | `4100` | Contra-revenue — gift credit redeemed | The §2.4 line |
 | `4200` | Contra-revenue — expected returns | The §2.2 provision |
+| `5000` | Cost of goods sold | Recognised with revenue (D28) |
+| `6100` | Processor fees | 3% + 0.30, at capture (D29) |
+| `6200` | Inventory adjustments | Shrinkage, damage, count corrections |
+| `6300` | Shipping expense | CHF 1.00 per order (D30) |
+| `6400` | Depreciation | CHF 41.67/month (D32) |
 | `6500` | Impairment loss on receivables | ECL expense, IAS 1.82(ba) — **never nets against 4000** |
+| `6900` | Other operating expenses | The catch-all for §15 purchases and staff expenses |
 
 Policy (b) (§2.4) **removes** two accounts that the alternative would have needed: a gift-credit
 liability and a marketing expense. Outstanding gift credit is a **memo figure, not a booked
@@ -362,8 +448,13 @@ changeable without touching shop, payment, balance or the UI.**
 | `RefundRequested` | Dr `4000`/`4200` · Cr `2100` Refund liability |
 | `PaymentRefunded` | Dr `2100` Refund liability · Cr `1000`/`2000`, reversing the gift and credit legs in their recorded proportion |
 | `PaymentRefundFailed` | Reverse the settlement, keep the liability — the order walks back to `RETURNED` and the money is still owed |
+| `PaymentSucceeded` *(any, Stripe/PayPal)* | Dr `6100` Processor fees · Cr `1000` — 3% + 0.30, at capture (D29). Zero for balance-funded |
+| **delivery completed** *(cost side)* | Dr `5000` COGS · Cr `1200` Inventory · **and** Dr `6300` Shipping · Cr `1000` — matched to the revenue above |
+| `StockAdjusted` | Dr/Cr `1200` vs `6200`, by reason code (§14.1) |
+| `StockReturned` *(sellable)* | Dr `1200` · Cr `5000`, reversing the cost of sale |
 | *period end* | Dr `4200` · Cr `2100` — expected-return provision (§2.2) |
 | *period end* | Dr `6500` · Cr `1150` — ECL movement (§2.6) |
+| *monthly, recurring* | Dr `6400` · Cr `1550` — CHF 41.67 depreciation (D32) |
 
 The three balance-funded rows are why `balance.events` must carry the **funding split** and not
 just an amount: three different debits, decided by a rule only `balance` can evaluate atomically
@@ -608,6 +699,33 @@ accounting:
    bands, the exposure in each and the resulting allowance, so the page can show the working — a
    bare "expected credit loss: CHF 68" is not reviewable.
 
+### Step 8 — inventory and cost (`shop`, `accounting`)
+17. `shop` migration `011-add-product-cost.sql`:
+
+```sql
+ALTER TABLE product ADD COLUMN unit_cost NUMERIC(10,2);
+UPDATE product SET unit_cost = ROUND(price * 0.5, 2) WHERE unit_cost IS NULL;
+ALTER TABLE product ALTER COLUMN unit_cost SET NOT NULL;
+ALTER TABLE product ADD CONSTRAINT product_unit_cost_nonneg CHECK (unit_cost >= 0);
+```
+
+18. The 50% default for **new** products lives in `CatalogService.create` when `unitCost` is
+    absent — a column `DEFAULT` cannot reference `price`, and a trigger would hide a business
+    rule from the code that appears to own it (§14.1).
+19. `OrderPlaced.items[]` gains `unitCost` (frozen at order time, D26); `CatalogService`'s stock
+    overwrite emits `StockAdjusted` with `from`, `to` and a reason code (§14.1).
+20. Posting rules for COGS, shipping and processor fees (§4.4).
+
+### Step 9 — opening balances and recurring journals (`accounting`)
+21. The opening journal of §14.2, posted once, on the date the books open (D22, D33).
+22. The monthly depreciation schedule (§14.3), with the final-period balancing figure.
+
+### Step 10 — the journal endpoint (`accounting`)
+23. The four forms of §15.1, all producing journals through the same `PostingRules` machinery.
+24. Access: `ROLE_ADMIN` or `ROLE_MANAGER` — **and the `auth-server` seed fix in §15.2**, without
+    which `ROLE_MANAGER` is a role nobody holds.
+25. Validation, idempotency and the audit trail (§15.2). Corrections by reversal only.
+
 ---
 
 # Part II — the reports
@@ -794,28 +912,28 @@ warning at the top of `BalanceRoute` applies equally here.
 
 ## 11. Implementation steps — the reports
 
-### Step 8 — the cash view (`shop`)
-17. `repository/RevenueRepository` — the two aggregations of §9.1, `granularity` mapped through
+### Step 11 — the cash view (`shop`)
+26. `repository/RevenueRepository` — the two aggregations of §9.1, `granularity` mapped through
     an enum (never string-concatenated into SQL).
-18. `service/RevenueService` — join the two series by bucket, fill gaps (D18), convert to minor
+27. `service/RevenueService` — join the two series by bucket, fill gaps (D18), convert to minor
     units at the boundary (D16), compute `totals`.
-19. `handler` + route + `ShopSec` rule + `@RouterOperation` (§10).
+28. `handler` + route + `ShopSec` rule + `@RouterOperation` (§10).
 
 **This step is worth shipping before Part I finishes.** It answers question 1 on its own, it
 reconciles against the ledger, and it needs nothing from `accounting`.
 
-### Step 9 — money supply (`balance`)
-20. The §9.3 query + `service/MoneySupplyService` + `GET /api/balance/admin/money-supply`.
+### Step 12 — money supply (`balance`)
+29. The §9.3 query + `service/MoneySupplyService` + `GET /api/balance/admin/money-supply`.
     Funding-split fields report zero until step 2 lands; ship it anyway, since gifted/topped-up/
     spent already answer question 2.
 
-### Step 10 — accrual endpoints (`accounting`)
-21. `GET /api/accounting/revenue`, `/trial-balance`, `/journals` over the journal tables.
+### Step 13 — accrual endpoints (`accounting`)
+30. `GET /api/accounting/revenue`, `/trial-balance`, `/journals` over the journal tables.
 
-### Step 11 — the page (`ui-shop`)
-22. `types.ts`: `RevenueReport`, `MoneySupplyReport`, `AccrualReport`. `api/reports.ts` with the
+### Step 14 — the page (`ui-shop`)
+31. `types.ts`: `RevenueReport`, `MoneySupplyReport`, `AccrualReport`. `api/reports.ts` with the
     three calls — one module, since one page owns all three.
-23. `pages/Revenues.tsx`: granularity toggle (Year / Month / Week), range picker, then
+32. `pages/Revenues.tsx`: granularity toggle (Year / Month / Week), range picker, then
     - **Cash — what moved**: bucket / gross / refunded / net, plus a bar per bucket;
     - **Earned — accrual**: gross revenue, contra-revenue (gift and returns), net; frozen
       periods marked; "not yet booked" before `booksOpenedOn` (D22);
@@ -823,10 +941,10 @@ reconciles against the ledger, and it needs nothing from `accounting`.
     - **Was it spent?**: gift / backed / credit split, with `giftedOutstanding` as the headline;
     - **Expected credit loss**: the band table with its `asOf`, styled as an estimate (D21) and
       never merged into any revenue figure (D11).
-24. Route `profile/revenues` inside `RequireAuth` → `AccountLayout`, and an admin-only
+33. Route `profile/revenues` inside `RequireAuth` → `AccountLayout`, and an admin-only
     `AccountNav` entry beside Treasury — same `isAdmin` pattern, same comment: the server
     enforces it, the nav only decides what is worth rendering.
-25. **No chart library.** `ui-shop` has none and this needs none: bars are a `div` with a
+34. **No chart library.** `ui-shop` has none and this needs none: bars are a `div` with a
     percentage width, matching `Treasury.tsx`'s existing table-and-`--primary` styling. Adding
     `recharts` for six bars is 200 kB for a rounding of the visual.
 
@@ -919,5 +1037,235 @@ Real cluster, admin login, `kubectl -n granite` — not unit tests.
 22. Feed an event dated inside a closed period → it posts to the open period, flagged.
 23. Every journal: debits = credits. Every period: the trial balance sums to zero.
 
+**Costs**
+24. A CHF 60 card order, delivered → revenue 60, COGS 30, processor fee 2.10, shipping 1.00,
+    gross profit **26.90** (§2.8).
+25. The same order paid from balance → fee **0.00**, gross profit **29.00**. If a fee appears,
+    the provider condition on the fee rule is wrong (D29).
+26. Refund it → the processor fee **stays** as a cost (§2.9).
+27. Top up CHF 100 by card → a fee is expensed with no revenue anywhere to match it (§2.9).
+28. Create a product with no cost → `unit_cost` lands at exactly half the price (D28).
+29. Admin overwrites stock 100 → 95 with reason `DAMAGE` → `StockAdjusted` carries `from`, `to`
+    and the reason, and books Dr `6200` · Cr `1200` (§14.1).
+
+**Opening balance and recurring journals**
+30. Post the opening journal → it balances, and `2000` excludes gifted credit (§14.2).
+31. Run depreciation 120 times → accumulated is exactly CHF 5,000.00, the final posting is the
+    balancing 41.27, and the 121st run posts nothing (§14.3).
+
+**Manual journals**
+32. Submit a CHF 120 manager expense → `2600` carries `party = manager`; reimburse it → `2600`
+    clears and `1000` falls (§15.3).
+33. An unbalanced journal → `400`. A journal into a closed period → rejected or routed per §6.
+34. Try to edit a posted journal → **no endpoint exists**; correct it by reversal (§15.2).
+35. A `MANAGER`-only user (no `ROLE_ADMIN`) reaches the journal endpoint — this is what the
+    `auth-server` seed fix in §15.2 is for, and it fails without it.
+
 **Access**
-24. A plain `ROLE_USER` token on all three endpoints → `403`, and the nav entry is absent.
+36. A plain `ROLE_USER` token on every endpoint → `403`, and the nav entry is absent.
+
+---
+
+## 14. Inventory, costing and the opening balance sheet
+
+### 14.1 Product cost and inventory
+
+`product` carries `price` and `stock` and **no cost**, so COGS is unmeasurable until a cost
+column exists. Migration `011-add-product-cost.sql`:
+
+```sql
+ALTER TABLE product ADD COLUMN unit_cost NUMERIC(10,2);
+UPDATE product SET unit_cost = ROUND(price * 0.5, 2) WHERE unit_cost IS NULL;
+ALTER TABLE product ALTER COLUMN unit_cost SET NOT NULL;
+ALTER TABLE product ADD CONSTRAINT product_unit_cost_nonneg CHECK (unit_cost >= 0);
+```
+
+**The 50% default cannot be a column `DEFAULT`** — a default expression cannot reference another
+column of the same row. So the backfill above handles existing rows, and new products get the
+rule in `CatalogService.create` when `unitCost` is absent. Not a trigger: a trigger would hide a
+pricing rule from the service that appears to own it, and this rule will be argued about.
+
+**Costing method: weighted average** (D28). One column, updated on each receipt, no lot tracking
+and no FIFO layers. Standard cost and FIFO are both defensible and both need a table of layers;
+for a catalogue this size, average cost is the honest simplification.
+
+**Stock moves in two places today, and neither publishes anything:**
+
+| Where | What happens | Event today |
+|---|---|---|
+| `OrderService:147` | decrement on order placement | none — implied by `OrderPlaced.items` |
+| `CatalogService:120` | `setStock(request.stock())` — an admin **overwrite** | **none at all** |
+
+The second is the sharper problem. It is an *absolute set*, so even with an event you could not
+derive the movement without the prior value, and there is no reason code — so `accounting` could
+not choose a contra account even if it knew the delta. In a general ledger an unexplained
+inventory movement is exactly what must not exist.
+
+| Event | Producer | Journal |
+|---|---|---|
+| `StockAdjusted` | shop | Carries `from`, `to` **and a reason**: `RECEIPT` → Dr `1200` · Cr `2500`; `DAMAGE`/`SHRINKAGE`/`COUNT_CORRECTION` → Dr `6200` · Cr `1200` |
+| *(order placed)* | shop | **No journal.** A reservation is not a transaction — but `OrderPlaced.items[]` gains `unitCost`, frozen at order time (D26) |
+| *(delivery completed)* | delivery | Dr `5000` COGS · Cr `1200`, plus Dr `6300` Shipping · Cr `1000` — **rides the event already consumed** (§4.2) |
+| `StockReturned` | delivery | Dr `1200` · Cr `5000` if the goods came back sellable, so the event needs a condition |
+
+Note what is *not* needed: the recognition trigger already exists. `delivery.events` is on the
+wire and is already the accrual point (§2.1), so COGS and shipping land in the same period as
+their revenue with no new topic — provided the cost basis was frozen at order time.
+
+### 14.2 The opening balance sheet
+
+The books open on a stated position (D22, D33), posted once as a single journal:
+
+```
+ Dr 1000 Bank                        1,000.00    stated
+ Dr 1500 Equipment                   5,000.00    stated, 10-year life (§14.3)
+ Dr 1200 Inventory                          X    Σ(stock × unit_cost)          ← shop
+ Dr 1100 Trade receivables                  Y    Σ |negative user balances|    ← balance
+     Cr 2000 Contract liability — stored value        Z
+     Cr 2010 Contract liability — deferred revenue    W
+     Cr 3000 Owner's capital                          P    ← the plug
+```
+
+Three of those need care:
+
+- **`Z`, stored value, is the *backed* portion only**: `Σ(positive balances) − Σ(gift_pool)`.
+  Policy (b) books no liability for gifted credit (§2.4), so including it would recognise an
+  obligation the accounting policy says does not exist. The `gift_pool_minor` column from §5 is
+  exactly what makes this computable — one more reason it is not optional.
+- **`W`, deferred revenue**, is the total of orders that are `PAID` but not yet `DELIVERED`.
+  It is the money we hold for goods we still owe (§2.1).
+- **`P` is a plug and must be labelled one.** It is not a measured contribution of capital; it is
+  whatever makes the opening entry balance. Rendering it as "Owner's capital" without that
+  caveat is the kind of thing that makes a whole statement untrustworthy.
+
+Everything before this date is cash view only (D22). Do not reconstruct a past that was never
+booked.
+
+### 14.3 Depreciation
+
+CHF 5,000 of equipment, straight line over 10 years, nil residual (D32): **CHF 500/year, CHF
+41.67/month**, posted monthly as Dr `6400` · Cr `1550`. A recurring journal on a schedule, not an
+event — nothing in the domain can emit it (§16.2).
+
+Two things a naive schedule gets wrong:
+
+- **It must stop.** 120 postings, then nothing. Guard on `accumulated ≥ cost`, not on a date, so
+  a missed month cannot depreciate the asset past zero.
+- **It must balance at the end.** `41.67 × 120 = 5,000.40` — forty rappen more than the asset
+  cost. The final period posts the **balancing figure (CHF 41.27)**, not the monthly rate. Any
+  schedule that posts a fixed rounded amount every period over-depreciates.
+
+## 15. The journal endpoint
+
+The one place D20's read-only rule is relaxed (D34), and it must stay the only one.
+
+### 15.1 Four forms, one machinery
+
+| Endpoint | For | Journal |
+|---|---|---|
+| `POST /api/accounting/purchases` | buying stock or equipment | Dr `1200`/`1500`/expense · Cr `1000` or `2500` |
+| `POST /api/accounting/expenses` | an operating cost | Dr `6900` (or a stated account) · Cr `1000`, or `2600` when `incurredBy` is set |
+| `POST /api/accounting/reimbursements` | paying a manager back | Dr `2600` *(party)* · Cr `1000` |
+| `POST /api/accounting/journals` | anything else | a raw balanced journal — the escape hatch |
+
+The three typed forms exist so the common cases are not hand-built journals: a form cannot
+produce an unbalanced entry or a debit to the wrong side. They all render down to journals
+through the same `PostingRules` machinery as the event consumers (D24), so there is still exactly
+one place that knows what an expense looks like.
+
+### 15.2 Access, validation, audit
+
+**`ROLE_ADMIN` or `ROLE_MANAGER` — and there is a trap in that.** `hasAnyRole("ADMIN","MANAGER")`
+expands to `ROLE_ADMIN` / `ROLE_MANAGER`, but `auth-server`'s seed
+(`002-seed-users.sql`) grants the `manager` user `ROLE_USER`, `USER`, `ROLE_ADMIN`, `ADMIN` and a
+**bare `MANAGER`** — there is no `ROLE_MANAGER` anywhere in the system. So today `manager` reaches
+every ADMIN/MANAGER endpoint *via `ROLE_ADMIN`*, and a future manager-only user would be silently
+locked out of all of them.
+
+Fix it in the seed rather than working around it at each gate: add `ROLE_MANAGER` to the `manager`
+user in a new `auth-server` changeset, so the role means what it says. Gating on the bare
+`MANAGER` authority instead would work here and diverge from `ShopSec`, `DeliverySec` and
+`StorageSec`, which all use `hasAnyRole`.
+
+Every mutating call validates: **debits equal credits**, the target period is **open**, account
+codes exist, amounts are minor-unit integers, and an **idempotency key** is present — the same
+convention as `balance` (`finance.md` D5). The acting user comes from the JWT and is recorded on
+the journal; it is never in the request body.
+
+**No edits, no deletes, ever.** A wrong journal is corrected by a reversing journal that
+references it, exactly as `balance` corrects the ledger with compensating entries
+(`finance.md` D12). The endpoint that changes a posted journal does not exist, for anyone.
+
+### 15.3 Staff expenses and reimbursement
+
+A manager buys CHF 120 of packaging personally:
+
+```
+ submit      Dr 6900 Other operating expenses   120.00
+                 Cr 2600 Due to staff               120.00    party = manager
+
+ reimburse   Dr 2600 Due to staff               120.00        party = manager
+                 Cr 1000 Bank                        120.00
+```
+
+`party` is a **column on the journal line**, not an account per person. "What do we owe Ana?" is
+then a `GROUP BY` rather than a chart-of-accounts migration every time someone joins.
+
+**The boundary worth stating plainly: the bank is a book account.** `accounting` never moves
+money in `balance` (D1). Reimbursing a manager by crediting their *platform balance* would be a
+**third door** into the ledger, and `finance.md` is explicit that there are exactly two — backed
+(a provider payment) and unbacked (an admin gift). If you want that, it is a `balance` feature
+with its own house account and its own reconcile line, decided there. It is not a side effect a
+journal endpoint may have.
+
+## 16. Event design and its limits
+
+### 16.1 The decoupling rules
+
+The goal is that `accounting` learns everything from the topic and nothing from an API call.
+Four rules make that hold:
+
+- **Events carry facts, not journal instructions (D24).** `shop` publishes *"stock −5, reason
+  `DAMAGE`, unit cost 3.20"*; `accounting` decides that means `6200`/`1200`. This is the same rule
+  `notification` already runs on — producers publish domain facts, never rendered output — and it
+  is what keeps accounting policy in one file (§1.1).
+- **No callbacks (D25).** `accounting` must never ask `shop` what a product cost. The moment it
+  does, a report depends on a live service and the books stop being reproducible. Everything it
+  needs must be *on the event*.
+- **Fields are frozen at emit time (D26).** The cost of a sale is the cost when the goods were
+  committed, not today's catalogue value — so the basis rides on `OrderPlaced`, not looked up at
+  delivery.
+- **Outbox-backed topics only (D27).** `identity.events` is fire-and-forget with accepted loss.
+  Fine for a courtesy email, fatal for a ledger. Every accounting-relevant fact must ride a topic
+  whose producer writes an outbox row in the same transaction as the state change.
+
+One consequence worth stating plainly: **once a payload has been booked, it is a contract.** You
+cannot add a required field later and backfill it onto events already posted. Version the
+payloads from the first release.
+
+### 16.2 What can never arrive as an event
+
+This is the honest limit on "as decoupled as possible". Some entries have no domain service that
+could emit them, because they are not domain facts:
+
+- infrastructure costs — the Hetzner VPS bill has no producer
+- depreciation (§14.3), prepayments, accruals
+- bank interest and bank charges
+- opening balances (§14.2)
+- period-end estimates — ECL and the return provision, already scheduled (§6)
+- corrections and reclassifications
+
+So the books have three inputs that are not Kafka consumers: the **recurring journal schedule**
+(§14.3), the **manual journal endpoint** (§15), and the **period-end estimate jobs** (§6).
+
+**The achievable version of the goal:** every *domain* fact arrives as an event and `accounting`
+never calls a service; everything else arrives as a dated, audited journal created by a human or
+a schedule. Fully event-sourced books are not reachable, and a design that claims otherwise ends
+up with a hidden HTTP call in it.
+
+## 17. Still out of scope
+
+Tax, payroll, FX, multi-entity, purchase orders and AP ageing, bank feeds, fixed assets beyond
+the one stated item, breakage (§2.3), return-asset measurement (§2.7), and the settlement delay
+between capture and payout (§2.9). Each is written down here rather than quietly absent, and each
+is a section someone can add without redesigning what exists.
