@@ -48,9 +48,11 @@ public class PostingRules {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final FactRepository factRepository;
+    private final CostPolicy costPolicy;
 
-    public PostingRules(FactRepository factRepository) {
+    public PostingRules(FactRepository factRepository, CostPolicy costPolicy) {
         this.factRepository = factRepository;
+        this.costPolicy = costPolicy;
     }
 
     public Mono<PostingOutcome> derive(Fact fact) {
@@ -81,6 +83,7 @@ public class PostingRules {
             // nothing has moved. The fact is stored because delivery needs its total.
             case "OrderPlaced" -> Mono.just(new Ignore("contract inception is not a transaction"));
             case "RefundRequested" -> refundRequested(fact, payload);
+            case "StockAdjusted" -> Mono.just(stockAdjusted(payload));
             default -> Mono.just(new Ignore("no rule for " + fact.getEventType()));
         };
     }
@@ -152,28 +155,83 @@ public class PostingRules {
         };
     }
 
+    /**
+     * The fee is netted against the cash line rather than posted as its own entry, because
+     * that is what actually happens: a processor deposits the amount less its fee, and
+     * {@code 1000} is the processor balance as much as the bank (D31). The gross liability
+     * is still credited in full — the fee is our cost, not a discount to the customer.
+     *
+     * <p>It is expensed at <b>capture</b>, in the period of the payment, not the period of
+     * the delivery (§2.9). Revenue and its processor fee can therefore land in different
+     * months, which is correct: the fee buys the payment, not the sale.
+     */
     private PostingOutcome succeeded(Map<String, Object> payload, String provider, long amount) {
         if (amount <= 0) {
             return new Ignore("zero-amount payment");
         }
+        long fee = costPolicy.processorFee(provider, amount);
+
         // A top-up is stored value, not revenue: we owe goods or a refund and have earned
-        // nothing (§2.3). |house:topup| must never appear on a revenue line.
+        // nothing (§2.3). |house:topup| must never appear on a revenue line. It still
+        // incurs a fee, with no sale anywhere to match it against — simply an expense.
         if ("TOPUP".equalsIgnoreCase(string(payload.get("purpose")))) {
-            return new Post(List.of(
-                    PostingLine.debit(Accounts.CASH, amount),
-                    PostingLine.credit(Accounts.STORED_VALUE, amount)),
-                    "Top-up received");
+            return new Post(withFee(Accounts.STORED_VALUE, amount, fee), "Top-up received");
         }
         if (PROVIDER_BALANCE.equalsIgnoreCase(provider)) {
             // No cash arrives when an order is paid from a platform balance — a liability
             // converts, and only balance knows in what proportion. Its Spent event carries
-            // the split and posts all three legs (§4.4).
+            // the split and posts all three legs (§4.4). No processor, so no fee either.
             return new Ignore("balance-funded: the Spent event carries the funding split");
         }
-        return new Post(List.of(
-                PostingLine.debit(Accounts.CASH, amount),
-                PostingLine.credit(Accounts.DEFERRED_REVENUE, amount)),
+        return new Post(withFee(Accounts.DEFERRED_REVENUE, amount, fee),
                 "Order paid — goods not yet delivered");
+    }
+
+    private List<PostingLine> withFee(String creditAccount, long amount, long fee) {
+        List<PostingLine> lines = new ArrayList<>();
+        lines.add(PostingLine.debit(Accounts.CASH, amount - fee));
+        if (fee > 0) {
+            lines.add(PostingLine.debit(Accounts.PROCESSOR_FEES, fee));
+        }
+        lines.add(PostingLine.credit(creditAccount, amount));
+        return lines;
+    }
+
+    /**
+     * An admin's absolute stock overwrite (§14.1). The reason chooses the contra account,
+     * which is the entire reason the event carries one: stock arriving is an asset we owe a
+     * supplier for, stock vanishing is an expense. Without a reason accounting could not
+     * pick between them even knowing the size, and an unexplained inventory movement is
+     * exactly what a general ledger must not contain.
+     */
+    private PostingOutcome stockAdjusted(Map<String, Object> payload) {
+        long quantity = Money.fromMinor(payload.get("quantity"));
+        long unitCost = Money.fromDecimal(payload.get("unitCost"));
+        long value = Math.abs(quantity) * unitCost;
+        if (value == 0) {
+            return new Ignore("stock movement with no value");
+        }
+        String reason = string(payload.get("reason"));
+
+        if (quantity > 0) {
+            if ("RECEIPT".equalsIgnoreCase(reason)) {
+                // Goods arrived and someone will invoice us for them.
+                return new Post(List.of(
+                        PostingLine.debit(Accounts.INVENTORY, value),
+                        PostingLine.credit(Accounts.ACCOUNTS_PAYABLE, value)),
+                        "Stock received");
+            }
+            // A count correction upwards is not a purchase: nothing was bought and nobody
+            // is owed. It reverses a previous write-off, so it goes back against 6200.
+            return new Post(List.of(
+                    PostingLine.debit(Accounts.INVENTORY, value),
+                    PostingLine.credit(Accounts.INVENTORY_ADJUSTMENTS, value)),
+                    "Stock corrected upwards (" + reason + ")");
+        }
+        return new Post(List.of(
+                PostingLine.debit(Accounts.INVENTORY_ADJUSTMENTS, value),
+                PostingLine.credit(Accounts.INVENTORY, value)),
+                "Stock written down (" + reason + ")");
     }
 
     private PostingOutcome refundSettled(String provider, long amount) {
@@ -236,7 +294,24 @@ public class PostingRules {
                         lines.add(PostingLine.debit(Accounts.CONTRA_GIFT, gift));
                     }
                     lines.add(PostingLine.credit(Accounts.REVENUE, gross));
-                    return new Post(lines, "Delivered — revenue recognised");
+
+                    // The cost side rides the same entry, so the whole cost of a sale sits
+                    // in the period of its revenue — which is the point of recognising both
+                    // at delivery rather than one at order and one at despatch.
+                    long cogs = costOfGoods(orderPayload);
+                    if (cogs > 0) {
+                        lines.add(PostingLine.debit(Accounts.COGS, cogs));
+                        lines.add(PostingLine.credit(Accounts.INVENTORY, cogs));
+                    }
+                    long shipping = costPolicy.shippingMinor();
+                    if (shipping > 0) {
+                        // A fulfilment cost, not a performance obligation: we do not charge
+                        // for shipping, so there is no shipping revenue to allocate and
+                        // nothing to recognise separately (§2.10).
+                        lines.add(PostingLine.debit(Accounts.SHIPPING, shipping));
+                        lines.add(PostingLine.credit(Accounts.CASH, shipping));
+                    }
+                    return new Post(lines, "Delivered — revenue recognised, cost of sale matched");
                 }))
                 // The order itself has not arrived yet. Across four topics that is ordinary,
                 // not exceptional: wait for it rather than book a sale of unknown value.
@@ -318,6 +393,34 @@ public class PostingRules {
     }
 
     // ---------------------------------------------------------------------- lookups
+
+    /**
+     * The cost basis frozen onto OrderPlaced at order time (D26).
+     *
+     * <p>Zero for orders placed before {@code unitCost} rode this event, and that is the
+     * honest outcome: those sales have no recorded cost, so they book revenue with no COGS
+     * rather than COGS invented from today's catalogue. It shows up as an impossible gross
+     * margin in the month it happens, which is information.
+     */
+    @SuppressWarnings("unchecked")
+    private long costOfGoods(Map<String, Object> orderPayload) {
+        Object items = orderPayload.get("items");
+        if (!(items instanceof List<?> list)) {
+            return 0L;
+        }
+        long total = 0L;
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> map) {
+                Object unitCost = ((Map<String, Object>) map).get("unitCost");
+                if (unitCost == null) {
+                    continue;
+                }
+                long quantity = Money.fromMinor(((Map<String, Object>) map).get("quantity"));
+                total += quantity * Money.fromDecimal(unitCost);
+            }
+        }
+        return total;
+    }
 
     /** How much of this order was paid with conjured money, from the stored Spent fact. */
     private Mono<Long> giftFundedOn(String orderId) {

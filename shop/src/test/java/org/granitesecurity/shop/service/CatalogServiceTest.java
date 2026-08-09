@@ -1,6 +1,7 @@
 package org.granitesecurity.shop.service;
 
 import org.granitesecurity.shop.domain.Category;
+import org.granitesecurity.shop.domain.OutboxEvent;
 import org.granitesecurity.shop.domain.Product;
 import org.granitesecurity.shop.dto.CategoryResponse;
 import org.granitesecurity.shop.dto.CreateCategoryRequest;
@@ -8,6 +9,7 @@ import org.granitesecurity.shop.dto.CreateProductRequest;
 import org.granitesecurity.shop.dto.MediaItem;
 import org.granitesecurity.shop.dto.ProductResponse;
 import org.granitesecurity.shop.repository.CategoryRepository;
+import org.granitesecurity.shop.repository.OutboxRepository;
 import org.granitesecurity.shop.repository.ProductRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,6 +35,12 @@ class CatalogServiceTest {
 
     @Mock
     private ProductRepository productRepository;
+
+    // Stock changes now announce themselves as StockAdjusted so accounting can book the
+    // movement (docs/finance/accounting.md §14.1), which puts the outbox on this service's
+    // update path.
+    @Mock
+    private OutboxRepository outboxRepository;
 
     @InjectMocks
     private CatalogService catalogService;
@@ -263,6 +271,9 @@ class CatalogServiceTest {
 
         when(productRepository.findById(4L)).thenReturn(Mono.just(existing));
         when(productRepository.save(any(Product.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        // 1 -> 50 is a stock change, so the update emits a StockAdjusted outbox row.
+        when(outboxRepository.save(any(OutboxEvent.class)))
+                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 
         StepVerifier.create(catalogService.updateProduct(4L, request))
                 .assertNext(r -> {

@@ -154,7 +154,7 @@ public class OrderService {
 
         return afterSave.flatMap(order -> {
             CustomerOrder co = order;
-            OutboxEvent outbox = createOutboxEvent(co, itemsWithOrderId, ctx.provider());
+            OutboxEvent outbox = createOutboxEvent(co, itemsWithOrderId, ctx.provider(), ctx.productMap());
             // Second row, second topic, same transaction as the order. Not
             // REQUIRES_NEW or NESTED: a notice that can commit while the order rolls
             // back would tell admin about an order that does not exist. "Desirable,
@@ -167,9 +167,12 @@ public class OrderService {
         });
     }
 
-    private OutboxEvent createOutboxEvent(CustomerOrder order, List<OrderItem> items, String provider) {
+    private OutboxEvent createOutboxEvent(CustomerOrder order, List<OrderItem> items, String provider,
+                                          Map<Long, Product> productMap) {
         try {
-            String payload = OBJECT_MAPPER.writeValueAsString(buildPayload(order, items, provider));
+            Map<Long, BigDecimal> unitCosts = new LinkedHashMap<>();
+            productMap.forEach((id, product) -> unitCosts.put(id, product.getUnitCost()));
+            String payload = OBJECT_MAPPER.writeValueAsString(buildPayload(order, items, provider, unitCosts));
             return new OutboxEvent("order", String.valueOf(order.getId()), "OrderPlaced", payload, "PENDING");
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to serialize outbox payload", e);
@@ -201,12 +204,18 @@ public class OrderService {
         }
     }
 
-    private Map<String, Object> buildPayload(CustomerOrder order, List<OrderItem> items, String provider) {
+    private Map<String, Object> buildPayload(CustomerOrder order, List<OrderItem> items, String provider,
+                                             Map<Long, BigDecimal> unitCosts) {
         List<Map<String, Object>> itemList = items.stream().map(item -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("productId", item.getProductId());
             m.put("quantity", item.getQuantity());
             m.put("unitPrice", item.getUnitPrice());
+            // Frozen here, at order time (docs/finance/accounting.md D26). The cost of a
+            // sale is what the goods cost when they were committed, not what the catalogue
+            // says when they are delivered — and accounting may not ask shop later, because
+            // a report that depends on a live service stops being reproducible.
+            m.put("unitCost", unitCosts.get(item.getProductId()));
             return m;
         }).toList();
 
