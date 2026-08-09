@@ -3,3 +3,5 @@ databaseChangeLog:
       file: db/changelog/001-create-balance-schema.sql
   - include:
       file: db/changelog/002-balance-intent.sql
+  - include:
+      file: db/changelog/003-spend-funding.sql

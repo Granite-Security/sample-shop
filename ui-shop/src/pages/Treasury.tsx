@@ -97,7 +97,40 @@ export default function Treasury() {
               value={chf(report.creditOutstandingMinor / 100)}
               bad={report.creditOutstandingMinor > 0}
             />
+            <Stat label="Gifted, unspent" value={chf(report.giftedOutstandingMinor / 100)} />
           </div>
+
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '12px 0 4px' }}>
+            Of everything spent on orders, which money paid for it. Gift-first: a spend
+            draws conjured francs before it touches real ones.
+          </p>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+              gap: 12,
+            }}
+          >
+            <Stat label="Spent — conjured" value={chf(report.spentFromGiftMinor / 100)} />
+            <Stat label="Spent — backed" value={chf(report.spentFromBackedMinor / 100)} />
+            <Stat
+              label="Spent — on credit"
+              value={chf(report.spentFromCreditMinor / 100)}
+              bad={report.spentFromCreditMinor > 0}
+            />
+          </div>
+
+          {(report.giftPoolDriftMinor !== 0 || report.fundingSplitViolations > 0) && (
+            <p className="error" style={{ marginTop: 12 }}>
+              The funding split does not reconcile
+              {report.giftPoolDriftMinor !== 0
+                && ` (pools differ from the ledger by ${chf(report.giftPoolDriftMinor / 100)})`}
+              {report.fundingSplitViolations > 0
+                && ` (${report.fundingSplitViolations} entr(ies) split for more than they moved)`}
+              . Conjured money is neither held nor spent, so the contra-revenue line built on
+              this split is wrong too.
+            </p>
+          )}
 
           {report.drift.length > 0 && (
             <p className="error" style={{ marginTop: 12 }}>

@@ -3,6 +3,7 @@ package org.granitesecurity.balance.service;
 import org.granitesecurity.balance.domain.Account;
 import org.granitesecurity.balance.domain.LedgerEntry;
 import org.granitesecurity.balance.repository.AccountRepository;
+import org.granitesecurity.balance.repository.AccountRepository.Drawdown;
 import org.granitesecurity.balance.repository.LedgerEntryRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -105,39 +106,88 @@ public class BalanceService {
                     // paying each other at the same moment would otherwise each hold
                     // the row the other wants, and Postgres would kill one of them
                     // as a deadlock. Ordering makes that impossible rather than rare.
-                    Mono<Void> debit = debit(from, amountMinor);
+                    Mono<Drawdown> debit = debit(from, amountMinor);
                     Mono<Void> credit = accountRepository.credit(to.getId(), amountMinor).then();
-                    Mono<Void> updates = from.getId() < to.getId()
-                            ? debit.then(credit)
+                    Mono<Drawdown> updates = from.getId() < to.getId()
+                            ? debit.flatMap(drawn -> credit.thenReturn(drawn))
                             : credit.then(debit);
 
-                    return updates
-                            .then(writeEntry(transferId, from.getId(), -amountMinor, kind, reference, memo))
-                            .then(writeEntry(transferId, to.getId(), amountMinor, kind, reference, memo))
-                            .doOnSuccess(v -> log.info("{} {} rappen: {} -> {} ({})",
-                                    kind, amountMinor, fromUsername, toUsername, transferId))
-                            .thenReturn(transferId);
+                    return updates.flatMap(drawn -> giftArriving(kind, to, amountMinor, reference, drawn)
+                            .flatMap(giftIn -> propagateGift(to, giftIn)
+                                    .then(writeEntry(transferId, from.getId(), -amountMinor, kind,
+                                            reference, memo, drawn.giftDrawn(), drawn.creditDrawn()))
+                                    .then(writeEntry(transferId, to.getId(), amountMinor, kind,
+                                            reference, memo, giftIn, 0L))
+                                    .doOnSuccess(v -> log.info("{} {} rappen: {} -> {} ({}) gift={} credit={}",
+                                            kind, amountMinor, fromUsername, toUsername, transferId,
+                                            drawn.giftDrawn(), drawn.creditDrawn()))
+                                    .thenReturn(transferId)));
                 });
     }
 
     /**
      * House accounts are the counterparty to issuance and may go negative without
      * limit — that negative IS the money supply. User accounts are subject to the
-     * credit policy.
+     * credit policy, and their debits carry the gift/backed/credit split.
+     *
+     * <p>A house debit has no split to make: house:gift is where conjured money comes
+     * from, so asking which of its francs were gifted is not a question. It reports a
+     * zero drawdown, and balance/003's CHECK constraint keeps that true in the schema
+     * as well as here.
      */
-    private Mono<Void> debit(Account from, long amountMinor) {
-        Mono<Long> updated = from.isHouse()
-                ? accountRepository.debitUnchecked(from.getId(), amountMinor)
-                : accountRepository.debitIf(from.getId(), amountMinor,
-                        creditPolicy.minimumBalanceBefore(amountMinor));
+    private Mono<Drawdown> debit(Account from, long amountMinor) {
+        if (from.isHouse()) {
+            return accountRepository.debitUnchecked(from.getId(), amountMinor)
+                    .flatMap(rows -> rows == 0
+                            ? Mono.error(new InsufficientFundsException(from.getUsername()))
+                            : Mono.just(Drawdown.NONE));
+        }
+        // An empty result is the decline: the conditional UPDATE matched no row, so
+        // nothing moved and nothing was written.
+        return accountRepository.debitIf(from.getId(), amountMinor,
+                        creditPolicy.minimumBalanceBefore(amountMinor))
+                .switchIfEmpty(Mono.error(new InsufficientFundsException(from.getUsername())));
+    }
 
-        return updated.flatMap(rows -> rows == 0
-                ? Mono.error(new InsufficientFundsException(from.getUsername()))
-                : Mono.empty());
+    /**
+     * How much conjured money arrives on the credit side (docs/finance/accounting.md §5.2).
+     *
+     * <p>The TRANSFER row is the load-bearing one. If a transfer moved money without
+     * carrying its funding, one user-to-user hop would launder every gifted franc into
+     * apparently-backed money, and both the money-supply report and the contra-revenue
+     * line would quietly read zero.
+     *
+     * <p>A REFUND puts gifted money back into the pool it was drawn from rather than
+     * crediting it as backed money — otherwise refunding a gift-funded order would
+     * convert conjured money into real money, which is the one thing the two-door rule
+     * exists to prevent.
+     */
+    private Mono<Long> giftArriving(String kind, Account to, long amountMinor,
+                                    String reference, Drawdown drawn) {
+        if (to.isHouse()) {
+            return Mono.just(0L);
+        }
+        return switch (kind) {
+            case LedgerEntry.KIND_GIFT -> Mono.just(amountMinor);
+            case LedgerEntry.KIND_TRANSFER -> Mono.just(drawn.giftDrawn());
+            case LedgerEntry.KIND_REFUND -> reference == null
+                    ? Mono.just(0L)
+                    : ledgerEntryRepository.giftOutstandingOn(to.getId(), reference)
+                            .map(outstanding -> Math.max(0, Math.min(amountMinor, outstanding)));
+            // A top-up is backed money by definition, and a spend credits a house account.
+            default -> Mono.just(0L);
+        };
+    }
+
+    private Mono<Void> propagateGift(Account to, long giftMinor) {
+        return giftMinor <= 0
+                ? Mono.empty()
+                : accountRepository.addGiftPool(to.getId(), giftMinor).then();
     }
 
     private Mono<Void> writeEntry(UUID transferId, Long accountId, long amountMinor,
-                                  String kind, String reference, String memo) {
+                                  String kind, String reference, String memo,
+                                  long giftFundedMinor, long creditFundedMinor) {
         LedgerEntry entry = new LedgerEntry();
         entry.setTransferId(transferId);
         entry.setAccountId(accountId);
@@ -145,6 +195,8 @@ public class BalanceService {
         entry.setKind(kind);
         entry.setReference(reference);
         entry.setMemo(memo);
+        entry.setGiftFundedMinor(giftFundedMinor);
+        entry.setCreditFundedMinor(creditFundedMinor);
         entry.setCreatedAt(Instant.now());
         return ledgerEntryRepository.save(entry).then();
     }

@@ -32,11 +32,13 @@ public class ReconcileService {
     }
 
     public Mono<ReconcileReport> reconcile() {
-        return ledgerEntryRepository.sumAll()
-                .zipWith(accountRepository.findAll().collectList())
+        return Mono.zip(ledgerEntryRepository.sumAll(),
+                        accountRepository.findAll().collectList(),
+                        funding())
                 .flatMap(t -> {
                     long ledgerSum = t.getT1();
                     List<Account> accounts = t.getT2();
+                    Funding funding = t.getT3();
 
                     return checkDrift(accounts).map(drift -> {
                         long userTotal = accounts.stream()
@@ -51,21 +53,60 @@ public class ReconcileService {
                                 .filter(b -> b < 0)
                                 .sum();
 
+                        long giftedOutstanding = accounts.stream()
+                                .mapToLong(Account::getGiftPoolMinor).sum();
+                        // NOT negated, unlike the two issuance figures below. A spend moves
+                        // user -> house:shop, so house:shop is *credited* and its balance is
+                        // already positive; negating it reported every franc ever spent as a
+                        // negative number.
+                        long redeemed = houseBalance(accounts, Account.HOUSE_SHOP);
+
+                        // Invariant (§12.1): every conjured franc is either still in
+                        // someone's pool or has been drawn out of one. Non-zero means the
+                        // funding split is lying, and since the split feeds contra-revenue,
+                        // so is revenue.
+                        long giftPoolDrift = giftedOutstanding - funding.netGiftIntoPools();
+
+                        // gift + backed + credit = spend (D13). Backed is the remainder on
+                        // purpose: a stored third column is a third thing that can disagree
+                        // with the other two.
+                        long spentFromBacked = redeemed - funding.spentFromGift() - funding.spentFromCredit();
+
                         return new ReconcileReport(
-                                ledgerSum == 0 && drift.isEmpty() && userTotal + houseTotal == 0,
+                                ledgerSum == 0 && drift.isEmpty() && userTotal + houseTotal == 0
+                                        && giftPoolDrift == 0 && funding.violations() == 0,
                                 ledgerSum,
                                 userTotal,
                                 houseTotal,
                                 // Reported positive: "how much has been conjured" reads
-                                // better than a negative house balance.
+                                // better than a negative house balance. house:gift and
+                                // house:topup are debited when they issue, so these two are
+                                // the ones that need the sign flipped.
                                 -houseBalance(accounts, Account.HOUSE_GIFT),
                                 -houseBalance(accounts, Account.HOUSE_TOPUP),
-                                -houseBalance(accounts, Account.HOUSE_SHOP),
+                                redeemed,
                                 -creditOutstanding,
+                                giftedOutstanding,
+                                funding.spentFromGift(),
+                                spentFromBacked,
+                                funding.spentFromCredit(),
+                                giftPoolDrift,
+                                funding.violations(),
                                 drift);
                     });
                 });
     }
+
+    private Mono<Funding> funding() {
+        return Mono.zip(ledgerEntryRepository.netGiftIntoPools(),
+                        ledgerEntryRepository.spentFromGift(),
+                        ledgerEntryRepository.spentFromCredit(),
+                        ledgerEntryRepository.countFundingViolations())
+                .map(t -> new Funding(t.getT1(), t.getT2(), t.getT3(), t.getT4()));
+    }
+
+    private record Funding(long netGiftIntoPools, long spentFromGift,
+                           long spentFromCredit, long violations) {}
 
     /** Invariant 2, per account: the cache must equal the sum of its entries. */
     private Mono<List<AccountDrift>> checkDrift(List<Account> accounts) {

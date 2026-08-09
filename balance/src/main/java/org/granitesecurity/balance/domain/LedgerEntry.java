@@ -49,6 +49,28 @@ public class LedgerEntry {
 
     private String memo;
 
+    /**
+     * The conjured portion of this leg (docs/finance/accounting.md §5).
+     *
+     * <p>Recorded in both directions: drawn out of the payer's pool on a debit, and
+     * carried in on the credit leg of a GIFT, TRANSFER or REFUND. Both directions,
+     * because the pool has to be provable from the ledger alone — a refund that puts
+     * gifted money back would otherwise be indistinguishable, to any check, from
+     * conjured money that had been spent twice (§12.1).
+     */
+    @Column("gift_funded_minor")
+    private long giftFundedMinor;
+
+    /**
+     * The lent portion of this leg: money the payer did not have. Debits only.
+     *
+     * <p>Its own bucket rather than folded into gift or backed, because it is neither:
+     * a user holding CHF 10 who buys CHF 200 of goods was never gifted and never topped
+     * up CHF 190 of it. gift + credit + backed = amount is the invariant that says so.
+     */
+    @Column("credit_funded_minor")
+    private long creditFundedMinor;
+
     @Column("created_at")
     private Instant createdAt;
 }
