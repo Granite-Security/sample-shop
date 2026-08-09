@@ -513,7 +513,8 @@ export const FALLBACK_PRODUCTS: Product[] = [
 ];
 
 // The single source of truth for "which live products belong to
-// sichocolate.com" — matched by name against shop's Food & Sweets category in
-// store.tsx, since that category also holds the shared shop's own generic
-// products (see docs/plans/add-chocolates.md).
-export const CURATED_PRODUCT_NAMES = new Set(FALLBACK_PRODUCTS.map((p) => p.name));
+// sichocolate.com": everything in shop's own SI Chocolate category, created by
+// shop/src/main/resources/db/changelog/011-sichocolate-category.sql. Matched by
+// exact name in store.tsx, so renaming the category in the DB empties the
+// storefront back to FALLBACK_PRODUCTS above (see docs/plans/add-chocolates.md).
+export const SICHOCOLATE_CATEGORY_NAME = 'SI Chocolate';

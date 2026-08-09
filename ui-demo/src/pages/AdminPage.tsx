@@ -58,6 +58,14 @@ export function AdminPage() {
   // Only live backend products can be managed (fallback pieces have negative ids).
   const managed = products.filter((p) => p.id > 0);
 
+  // A piece filed outside the SI Chocolate category is invisible in this
+  // storefront — including in the list below — so don't offer the shared shop's
+  // other categories here. Falls back to the full list only when the category
+  // couldn't be resolved at all (backend down, or shop not yet migrated).
+  const assignable = chocolateCategoryId
+    ? categories.filter((c) => c.id === chocolateCategoryId)
+    : categories;
+
   const startEdit = (p: Product) => {
     setEditingId(p.id);
     setForm({
@@ -275,7 +283,7 @@ export function AdminPage() {
                   onChange={(e) => setForm({ ...form, categoryId: Number(e.target.value) })}
                   className={inputStyle}
                 >
-                  {categories.map((c) => (
+                  {assignable.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
