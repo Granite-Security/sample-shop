@@ -30,6 +30,28 @@ public class CustomerOrder {
     private Instant createdAt;
     @Column("updated_at")
     private Instant updatedAt;
+
+    /**
+     * The three moments a sale is bucketed by in the revenue reports
+     * (docs/finance/accounting.md D4), each written <em>once</em>, on first entry
+     * into the status that means it — see {@code OrderService.updateOrderStatus}.
+     *
+     * <p>They exist because neither of the timestamps above can bucket money.
+     * {@code createdAt} is when the order was submitted, which is not when it was
+     * paid; {@code updatedAt} moves on every transition, and the status graph walks
+     * backwards ({@code REIMBURSED -> RETURNED}), so bucketing on it lets a retry
+     * months later move a sale into a different month.
+     *
+     * <p>{@code deliveredAt} is the accrual recognition point: control passes to the
+     * customer on delivery, not on payment (IFRS 15.31). {@code refundedAt} is set at
+     * {@code REIMBURSED} only — {@code RETURNED} is a request, not money leaving.
+     */
+    @Column("paid_at")
+    private Instant paidAt;
+    @Column("delivered_at")
+    private Instant deliveredAt;
+    @Column("refunded_at")
+    private Instant refundedAt;
     @Column("recipient_name")
     private String recipientName;
     @Column("address_line1")

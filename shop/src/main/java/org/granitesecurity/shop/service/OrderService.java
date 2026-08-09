@@ -345,8 +345,45 @@ public class OrderService {
                     }
                     order.setStatus(targetStatus.name());
                     order.setUpdatedAt(Instant.now());
+                    stampMoneyDate(order, targetStatus);
                     return customerOrderRepository.save(order).then();
                 });
+    }
+
+    /**
+     * Records when the order first reached a money-relevant status, for the revenue
+     * reports (docs/finance/accounting.md D4).
+     *
+     * <p>The {@code == null} guard is the whole point and not defensiveness: the status
+     * graph is not a straight line. {@code REIMBURSED} can walk back to {@code RETURNED}
+     * and forward again when a provider fails a refund at the bank, and a retried refund
+     * that overwrote {@code refundedAt} would move the money out of the month it actually
+     * moved in. Same for a redelivery after a return: the sale was recognised on the first
+     * delivery and must stay in that period.
+     *
+     * <p>Nothing is stamped for {@code RETURNED} — a return is a request, and only
+     * {@code REIMBURSED} means cash left (D6).
+     */
+    private void stampMoneyDate(CustomerOrder order, OrderStatus targetStatus) {
+        Instant now = order.getUpdatedAt();
+        switch (targetStatus) {
+            case PAID -> {
+                if (order.getPaidAt() == null) {
+                    order.setPaidAt(now);
+                }
+            }
+            case DELIVERED -> {
+                if (order.getDeliveredAt() == null) {
+                    order.setDeliveredAt(now);
+                }
+            }
+            case REIMBURSED -> {
+                if (order.getRefundedAt() == null) {
+                    order.setRefundedAt(now);
+                }
+            }
+            default -> { }
+        }
     }
 
     private Mono<OrderResponse> enrichOrder(CustomerOrder order) {
