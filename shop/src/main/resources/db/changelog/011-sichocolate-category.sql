@@ -8,8 +8,13 @@
 -- two apart with a hardcoded allowlist of the 8 names in
 -- ui-demo/src/api.ts — so a product an admin created through ui-demo's own
 -- back-of-house never appeared anywhere in ui-demo, not even in the admin
--- list (see docs/plans/add-chocolates.md). Membership of the storefront is a
--- property of the data, so it belongs here, not in a client-side Set.
+-- list (see docs/plans/add-chocolates.md). Storefront membership is a
+-- fact about the row, so it belongs here, not in a client-side Set.
+--
+-- (Keep comment lines from starting with a Liquibase directive word. The
+-- formatted-SQL parser reads a leading "-- property ..." as a malformed
+-- --property directive and refuses to parse the whole changelog, which fails
+-- shop's startup rather than just this changeset.)
 --
 -- ui-demo now resolves this category by its exact name and shows everything
 -- in it. The name is therefore load-bearing: renaming it empties the
