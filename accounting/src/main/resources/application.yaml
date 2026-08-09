@@ -1,0 +1,6 @@
+
+spring:
+  application:
+    name: accounting
+server:
+  port: 8068
