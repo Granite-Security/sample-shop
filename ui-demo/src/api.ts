@@ -156,6 +156,13 @@ export const api = {
   getProducts: (page = 0, size = 50) =>
     request<PagedResult<Product>>(`/api/shop/products?page=${page}&size=${size}`),
 
+  // Back of house only: includes products that have been discontinued, which is
+  // the only way to find one again in order to put it back on sale.
+  getProductsForAdmin: (page = 0, size = 100) =>
+    request<PagedResult<Product>>(
+      `/api/shop/products?page=${page}&size=${size}&includeDiscontinued=true`,
+    ),
+
   getProduct: (id: number) => request<Product>(`/api/shop/products/${id}`),
 
   getCategories: (page = 0, size = 50) =>

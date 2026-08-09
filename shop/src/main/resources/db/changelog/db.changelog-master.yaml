@@ -31,3 +31,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/011-sichocolate-category.sql
       relativeToChangelogFile: false
+  - include:
+      file: db/changelog/012-product-discontinued.sql
+      relativeToChangelogFile: false

@@ -13,7 +13,9 @@ export default function ProductsManagement() {
   const [error, setError] = useState<string | null>(null);
 
   const load = () => {
-    api.catalog.getProducts(0, 100)
+    // Admin listing: includes discontinued products, since the storefront
+    // listing hides them and they would otherwise be unreachable to restore.
+    api.catalog.listForAdmin(0, 100)
       .then(result => setProducts(result.items))
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
@@ -33,10 +35,38 @@ export default function ProductsManagement() {
     );
   }
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Delete this product?')) return;
-    await api.catalog.deleteProduct(id);
-    load();
+  // Soft delete: the product leaves the catalog but is kept, because order_item
+  // references it and stores no product name of its own.
+  const handleDiscontinue = async (id: number) => {
+    if (!window.confirm('Discontinue this product? It stays on past orders and can be restored.')) return;
+    setError(null);
+    try {
+      await api.catalog.deleteProduct(id);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const handleRestore = async (p: Product) => {
+    setError(null);
+    try {
+      // Only `discontinued` is stated; the rest is sent unchanged so this does
+      // not double as an edit.
+      await api.catalog.updateProduct(p.id, {
+        name: p.name,
+        description: p.description,
+        price: p.price,
+        stock: p.stock,
+        categoryId: p.categoryId,
+        imageUrl: p.imageUrl,
+        media: p.media ?? [],
+        discontinued: false,
+      });
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
   };
 
   return (
@@ -72,11 +102,23 @@ export default function ProductsManagement() {
                 <strong>{p.name}</strong>
                 <p style={{ margin: '2px 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                   ${p.price.toFixed(2)} · {p.stock} in stock
+                  {p.discontinued && (
+                    <span style={{
+                      marginLeft: 8, padding: '1px 6px', borderRadius: 4,
+                      border: '1px solid var(--border)', fontSize: '0.7rem', textTransform: 'uppercase',
+                    }}>
+                      Discontinued
+                    </span>
+                  )}
                 </p>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <Link to={`/admin/products/${p.id}/edit`} className="btn">Edit</Link>
-                <button className="btn" style={{ color: 'var(--danger)' }} onClick={() => handleDelete(p.id)}>Delete</button>
+                {p.discontinued ? (
+                  <button className="btn" onClick={() => handleRestore(p)}>Restore</button>
+                ) : (
+                  <button className="btn" style={{ color: 'var(--danger)' }} onClick={() => handleDiscontinue(p.id)}>Discontinue</button>
+                )}
               </div>
             </div>
             );

@@ -29,7 +29,9 @@ public class CatalogHandler {
     public Mono<ServerResponse> getAllProducts(ServerRequest request) {
         int page = Integer.parseInt(request.queryParam("page").orElse("0"));
         int size = Integer.parseInt(request.queryParam("size").orElse("20"));
-        return catalogService.getAllProducts(page, size)
+        boolean includeDiscontinued = request.queryParam("includeDiscontinued")
+                .map(Boolean::parseBoolean).orElse(false);
+        return catalogService.getAllProducts(page, size, includeDiscontinued)
                 .flatMap(result -> ServerResponse.ok().bodyValue(result));
     }
 
@@ -77,9 +79,10 @@ public class CatalogHandler {
                 .flatMap(product -> ServerResponse.ok().bodyValue(product));
     }
 
-    @Operation(operationId = "deleteProduct", summary = "Delete a product", description = "Admin only")
+    @Operation(operationId = "deleteProduct", summary = "Discontinue a product",
+            description = "Admin only. Soft delete: the product leaves the catalog but is kept for order history.")
     @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "Product deleted", content = @Content()),
+            @ApiResponse(responseCode = "204", description = "Product discontinued", content = @Content()),
             @ApiResponse(responseCode = "403", description = "Forbidden — requires ADMIN role", content = @Content())
     })
     public Mono<ServerResponse> deleteProduct(ServerRequest request) {
