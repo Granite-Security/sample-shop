@@ -50,6 +50,12 @@ images:
   - name: granite-notification
     newName: docker.io/moldovean/granite-notification
     newTag: e2ec7ca971ac69aee5f029ce928910fabf0a655b
+  # newTag here is the bootstrap placeholder: no CI build has pushed this image
+  # yet, so update-gitops has nothing to overwrite it with until the first push
+  # to main touches accounting/.
+  - name: granite-accounting
+    newName: docker.io/moldovean/granite-accounting
+    newTag: latest
   - name: granite-balance
     newName: docker.io/moldovean/granite-balance
     newTag: b8181764430d1b07837b2be01c919c201e6a49fa

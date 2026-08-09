@@ -82,6 +82,11 @@ spec:
                 configMapKeyRef:
                   name: granite-config
                   key: MICROSERVICES_BALANCE_URI
+            - name: MICROSERVICES_ACCOUNTING_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: granite-config
+                  key: MICROSERVICES_ACCOUNTING_URI
             - name: MICROSERVICES_STORAGE_URI
               valueFrom:
                 configMapKeyRef:

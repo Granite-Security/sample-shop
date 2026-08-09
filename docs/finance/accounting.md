@@ -1,7 +1,10 @@
 # `accounting` — the books, and the revenue reports on top of them
 
-Status: **step 1 and step 11 built** (the `shop` money-date columns and the cash-view
-endpoint); everything else planned. Supersedes and absorbs the former `docs/finance/reports.md`.
+Status: **steps 1, 2, 4 and 11 built.** The `shop` money-date columns and cash-view endpoint
+(§7 step 1, §11 step 11), the `balance` funding split (step 2), and the `accounting` service
+with its schema and deployment (step 4) — it runs and serves the chart of accounts, but
+consumes nothing and posts nothing yet. Step 3 (`balance.events`) is in review. Steps 5 onward
+are planned. Supersedes and absorbs the former `docs/finance/reports.md`.
 
 - `finance.md` — how money moves. `balance` is the only writer, one append-only ledger, two doors.
 - **this** — what we *earned*, booked as journal entries that never change after the fact, and

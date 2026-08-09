@@ -25,11 +25,13 @@ Stripe/PayPal  ┘   path routing,          │
                                           └─ Delivery 8063    Profile 8064
                                              Storage 8065     Balance 8067
                                              Notification 8066 (no inbound API)
+                                             Accounting 8068 (admin-only books)
 ```
 
 Every service except `auth-server` is WebFlux + R2DBC end to end. Seven own a
 database (`authdb` 5432, `shopdb` 5433, `paymentdb` 5434, `deliverydb` 5435,
-`profiledb` 5436, `notificationdb` 5437, `balancedb` 5438); `storage` owns a
+`profiledb` 5436, `notificationdb` 5437, `balancedb` 5438, `accountingdb` 5439);
+`storage` owns a
 Garage S3 bucket instead, and `gateway`/`greetings` own no state.
 
 Services never call each other on the critical path — they exchange facts over
@@ -55,6 +57,7 @@ identity.events   auth-server ──>  profile (provisions), notification (email
 | `storage` | 8065 | WebFlux + S3 (Garage) | Presigned uploads: avatars, files, product media |
 | `notification` | 8066 | WebFlux + R2DBC + Kafka | Transactional email (Resend); owns all copy |
 | `balance` | 8067 | WebFlux + R2DBC + Kafka | CHF ledger; pays orders as a payment provider |
+| `accounting` | 8068 | WebFlux + R2DBC + Kafka | The books: journal entries derived from events. Read-only, admin-only, never moves money |
 | `ui-shop` | 5173 | React + Vite + oidc-client-ts | SPA storefront with Stripe Elements |
 | `ui-demo` | — | Static (nginx) | Alternate storefront, same backend |
 
@@ -225,6 +228,7 @@ receiving service enforces on the `Bearer` token the caller sends.
 | `/api/delivery/**` | JWT required | Delivery service |
 | `/api/profiles/**` | JWT required | Profile service |
 | `/api/balance/**` | JWT required | Balance service |
+| `/api/accounting/**` | JWT required, **ROLE_ADMIN** | Accounting service |
 | `/api/storage/**` | JWT required | Storage service (route retries on failure) |
 | `/auth/**` | Public | Auth server (login, token, JWKS, discovery) |
 | `/v3/api-docs/**`, `/swagger-ui/**` | Public | Shop service |

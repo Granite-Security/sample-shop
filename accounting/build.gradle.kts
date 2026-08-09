@@ -21,14 +21,25 @@ repositories {
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-r2dbc")
+    implementation("org.springframework.boot:spring-boot-starter-liquibase")
+    // Not optional, and the one dependency to check twice: without it Spring Security
+    // is absent entirely and every endpoint is open, which is how the balance service
+    // shipped its first cut (docs/finance/finance.md §6 step 0). A ledger with no
+    // resource server is a public ledger.
+    implementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
     implementation("org.springframework.boot:spring-boot-starter-kafka")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
+    // Liquibase runs over JDBC; everything else in this service is R2DBC.
+    implementation("org.springframework:spring-jdbc")
+    // Swagger UI. Functional routes are invisible to springdoc unless annotated
+    // with @RouterOperation — see AccountingRoute.
+    implementation("org.springdoc:springdoc-openapi-starter-webflux-ui:3.0.1")
     compileOnly("org.projectlombok:lombok")
-//    developmentOnly("org.springframework.boot:spring-boot-docker-compose")
     runtimeOnly("org.postgresql:postgresql")
     runtimeOnly("org.postgresql:r2dbc-postgresql")
     annotationProcessor("org.projectlombok:lombok")
     testImplementation("org.springframework.boot:spring-boot-starter-data-r2dbc-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server-test")
     testImplementation("org.springframework.boot:spring-boot-starter-kafka-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webflux-test")
     testCompileOnly("org.projectlombok:lombok")

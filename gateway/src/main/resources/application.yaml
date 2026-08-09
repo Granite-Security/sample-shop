@@ -73,5 +73,7 @@ microservices:
     uri: ${MICROSERVICES_STORAGE_URI:http://localhost:8065}
   balance:
     uri: ${MICROSERVICES_BALANCE_URI:http://localhost:8067}
+  accounting:
+    uri: ${MICROSERVICES_ACCOUNTING_URI:http://localhost:8068}
   spa:
     uri: ${SPA_MICROSERVICE:http://localhost:5173}

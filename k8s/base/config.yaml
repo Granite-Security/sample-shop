@@ -86,6 +86,13 @@ data:
   PAYMENT_PROVIDER_BALANCE_ENABLED: "true"
   BALANCE_R2DBC_URL: "r2dbc:postgresql://postgres-balance:5432/balancedb"
   BALANCE_JDBC_URL: "jdbc:postgresql://postgres-balance:5432/balancedb"
+
+  # accounting — the books (docs/finance/accounting.md). Read-only and admin-only;
+  # no HTTPRoute in any overlay, reached by port-forward.
+  ACCOUNTING_PORT: "8068"
+  MICROSERVICES_ACCOUNTING_URI: "http://accounting:8068"
+  ACCOUNTING_R2DBC_URL: "r2dbc:postgresql://postgres-accounting:5432/accountingdb"
+  ACCOUNTING_JDBC_URL: "jdbc:postgresql://postgres-accounting:5432/accountingdb"
   # Non-secret — the actual key is resend-api-key in granite-secrets.
   RESEND_FROM: "Granite Security <no-reply@notify.granite-security.org>"
   FRONTEND_ORIGIN: "https://granite-security.org"
