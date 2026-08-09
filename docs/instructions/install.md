@@ -444,9 +444,120 @@ Then in a browser: log in as `user`/`user` and confirm the JWT `iss` claim is `h
 | Logs | `kubectl -n granite logs -f deploy/<service>` |
 | kafka-ui (no HTTPRoute by design) | `kubectl -n granite port-forward deploy/kafka-ui 8090:8080` |
 | Resource pressure | `kubectl top pods -n granite` |
-| Teardown (keeps cluster + Traefik) | `kubectl delete namespace granite` |
+| Teardown (destructive — see section 20 before running) | `kubectl delete namespace granite` |
 
 `kubectl delete -k` destroys the PVCs. Delete individual deployments instead when you want to keep Postgres/Kafka data.
+
+## 20. Recovering after `kubectl delete namespace granite`
+
+Deleting the namespace is **not** a clean teardown you can simply re-apply. `kubectl apply -k`
+restores every Deployment, Service and PVC, and the cluster looks healthy — while object
+storage is empty and every database has been reseeded from scratch. Section 16 reads as
+first-install-only; it is equally a recovery step, because everything it does lives inside
+the volume that just went away.
+
+### What actually happens
+
+PVCs are namespaced, so all of them are deleted with the namespace. What happens to the data
+then depends on each PV's reclaim policy — check before you delete, not after:
+
+```bash
+kubectl get pv -o 'custom-columns=NAME:.metadata.name,RECLAIM:.spec.persistentVolumeReclaimPolicy,CLAIM:.spec.claimRef.name'
+```
+
+| Reclaim policy | Result |
+|---|---|
+| `Delete` (the `local-path` default) | Directory removed on the node. **Gone permanently.** |
+| `Retain` (`local-path-retain`) | Directory survives, but the PV goes `Released` and will **not** rebind — the new PVC has a new UID, so it provisions a fresh empty volume alongside the old data. |
+
+So even `Retain` gives you an empty database on restart; the old data sits orphaned under
+`/opt/local-path-provisioner/` until you hand-rebind it. If the data matters, dump it first —
+that is the only approach that does not depend on reclaim-policy archaeology:
+
+```bash
+for db in shop payment profile delivery auth notification balance; do
+  kubectl -n granite exec deploy/postgres-$db -- sh -c 'pg_dumpall -U $POSTGRES_USER' > ~/granite-$db-$(date +%F).sql
+done
+```
+
+### Recovery
+
+**1. Secrets before anything else.** `granite-secrets` is gitignored, so ArgoCD cannot recreate
+it — only your local copy can. It must exist *before* the Postgres pods first start: Postgres
+only applies `POSTGRES_PASSWORD` when it initialises an empty data directory, so patching the
+secret afterwards leaves you locked out of your own databases.
+
+```bash
+kubectl create namespace granite
+kubectl -n granite apply -f k8s/base/secrets.yaml
+kubectl -n granite patch secret granite-secrets --patch-file k8s/hetzner/iaka/secrets-patch.yaml
+```
+
+**2. Apply the overlay.**
+
+```bash
+kubectl apply -k k8s/hetzner/iaka
+kubectl -n granite wait --for=condition=ready pod --all --timeout=420s
+```
+
+`auth-server` typically dies once here, racing ahead of `postgres-auth` with a connection
+refused, and comes up on the retry. One restart is expected; a crash loop is not.
+
+**3. Re-bootstrap Garage.** This is section 16 again, with one difference that matters: use
+`key import` rather than `key create`, so the *existing* access key from `granite-secrets` is
+restored. `key create` mints a new one and forces you to edit the secret and restart `storage`.
+
+```bash
+NODE=$(kubectl -n granite exec deploy/garage -- /garage node id -q | cut -d@ -f1)
+kubectl -n granite exec deploy/garage -- /garage layout assign -z dc1 -c 5G $NODE
+kubectl -n granite exec deploy/garage -- /garage layout apply --version 1
+
+AK=$(kubectl -n granite get secret granite-secrets -o jsonpath='{.data.storage-s3-access-key}' | base64 -d)
+SK=$(kubectl -n granite get secret granite-secrets -o jsonpath='{.data.storage-s3-secret-key}' | base64 -d)
+kubectl -n granite exec deploy/garage -- /garage key import "$AK" "$SK" --yes
+kubectl -n granite exec deploy/garage -- /garage bucket create media.iaka.com
+kubectl -n granite exec deploy/garage -- /garage bucket allow --read --write --owner media.iaka.com --key "$AK"
+kubectl -n granite exec deploy/garage -- /garage bucket website --allow media.iaka.com
+```
+
+`--owner` is required, not optional: without it `PutBucketCors` in the next step fails with
+`AccessDenied: Operation is not allowed for this key`, and `--read --write` alone does not grant it.
+
+**4. CORS.** Without this, uploads fail in the browser with
+`Request header field content-type is not allowed by Access-Control-Allow-Headers`, while
+`curl` succeeds — preflight is a browser-only concern.
+
+Give **each origin its own rule**. Listing several origins in one rule makes Garage echo them
+comma-joined, and a multi-valued `Access-Control-Allow-Origin` is rejected by every browser.
+This runs the AWS CLI in-cluster, since the garage image has none:
+
+```bash
+kubectl -n granite run awscli --rm -i --restart=Never --image=amazon/aws-cli \
+  --env=AWS_ACCESS_KEY_ID="$AK" --env=AWS_SECRET_ACCESS_KEY="$SK" --env=AWS_DEFAULT_REGION=garage -- \
+  s3api put-bucket-cors --endpoint-url http://garage:3900 --bucket media.iaka.com \
+  --cors-configuration '{"CORSRules":[
+    {"AllowedOrigins":["https://iaka.com"],"AllowedMethods":["PUT","GET","HEAD"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":3600}
+  ]}'
+```
+
+Verify the preflight the way the browser issues it — a 200 with a single origin echoed back:
+
+```bash
+curl -s -i -X OPTIONS -H "Origin: https://iaka.com" \
+  -H "Access-Control-Request-Method: PUT" -H "Access-Control-Request-Headers: content-type" \
+  https://s3.iaka.com/media.iaka.com/probe | grep -iE '^HTTP|access-control'
+```
+
+**5. Split-horizon DNS** (section 17) — re-run it if Traefik's Service was recreated, since the
+ClusterIP changes.
+
+### What no recovery brings back
+
+- **Everything in Garage**: product photos and avatars. The `Delete` policy removes the volume,
+  and there is no backup. Database rows referencing those keys will 404 until re-uploaded.
+- **All database contents**, per the reclaim-policy table above.
+- Sequence values restart, so surrogate ids differ. Anything that hardcodes an id rather than
+  looking it up by name will silently point at the wrong row.
 
 ## Notes
 
