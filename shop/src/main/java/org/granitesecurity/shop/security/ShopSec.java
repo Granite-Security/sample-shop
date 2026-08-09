@@ -62,6 +62,14 @@ public class ShopSec {
                         // /api/shop/users/** admin rule below, since "internal"
                         // is not a username but would match {username}.
                         .pathMatchers("/api/shop/internal/**").hasAuthority("SCOPE_internal")
+                        // Reports (docs/finance/accounting.md §10). Placed before the
+                        // general /api/shop/orders/** authenticated rule for the same
+                        // reason as the /internal/** rule above: first match wins, and
+                        // an admin report must not fall through to "any logged-in user".
+                        // ADMIN + MANAGER mirrors /api/shop/orders/all — whoever can
+                        // already see every order can see their sum.
+                        .pathMatchers(HttpMethod.GET, "/api/shop/admin/**")
+                                .hasAnyRole("ADMIN", "MANAGER")
                         .pathMatchers(HttpMethod.GET, "/api/shop/users/*/orders").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.GET, "/api/shop/orders/all")
                                 .hasAnyRole("ADMIN", "MANAGER")

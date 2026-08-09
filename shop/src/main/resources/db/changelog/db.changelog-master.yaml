@@ -34,3 +34,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/012-product-discontinued.sql
       relativeToChangelogFile: false
+  - include:
+      file: db/changelog/013-add-order-money-dates.sql
+      relativeToChangelogFile: false

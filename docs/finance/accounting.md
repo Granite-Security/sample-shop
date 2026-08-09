@@ -1,6 +1,7 @@
 # `accounting` — the books, and the revenue reports on top of them
 
-Status: **planned, nothing built.** Supersedes and absorbs the former `docs/finance/reports.md`.
+Status: **step 1 and step 11 built** (the `shop` money-date columns and the cash-view
+endpoint); everything else planned. Supersedes and absorbs the former `docs/finance/reports.md`.
 
 - `finance.md` — how money moves. `balance` is the only writer, one append-only ledger, two doors.
 - **this** — what we *earned*, booked as journal entries that never change after the fact, and
@@ -101,9 +102,7 @@ liability** — we owe goods, not revenue. Only delivery satisfies the performan
 | `REIMBURSED` | Liability settled in cash. |
 | `PAYMENT_FAILED`, `CANCELLED` | Never anything. |
 
-If you would rather recognise on despatch, that is defensible *only* if your terms pass control
-at despatch. It is a terms-of-sale question, not a reporting preference, and ours do not say
-so. Hence: delivery, and hence `shipments.events` is consumed but not recognised on (§4.2).
+
 
 ### 2.2 Expected returns reduce revenue now, not later
 
@@ -613,7 +612,7 @@ period and is idempotent per period, so a re-run does not double-provide.
 Each step is deployable and verifiable on its own.
 
 ### Step 1 — record the facts (`shop`)
-1. Migration `010-add-order-money-dates.sql`:
+1. Migration `013-add-order-money-dates.sql`:
 
 ```sql
 ALTER TABLE customer_order
@@ -700,7 +699,7 @@ accounting:
    bare "expected credit loss: CHF 68" is not reviewable.
 
 ### Step 8 — inventory and cost (`shop`, `accounting`)
-17. `shop` migration `011-add-product-cost.sql`:
+17. `shop` migration `014-add-product-cost.sql`:
 
 ```sql
 ALTER TABLE product ADD COLUMN unit_cost NUMERIC(10,2);
@@ -1071,7 +1070,7 @@ Real cluster, admin login, `kubectl -n granite` — not unit tests.
 ### 14.1 Product cost and inventory
 
 `product` carries `price` and `stock` and **no cost**, so COGS is unmeasurable until a cost
-column exists. Migration `011-add-product-cost.sql`:
+column exists. Migration `014-add-product-cost.sql`:
 
 ```sql
 ALTER TABLE product ADD COLUMN unit_cost NUMERIC(10,2);

@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import org.granitesecurity.shop.dto.CreateCategoryRequest;
 import org.granitesecurity.shop.dto.CreateProductRequest;
 import org.granitesecurity.shop.dto.PlaceOrderRequest;
+import org.granitesecurity.shop.handler.AdminRevenueHandler;
 import org.granitesecurity.shop.handler.CatalogHandler;
 import org.granitesecurity.shop.handler.GreetingsHandler;
 import org.granitesecurity.shop.handler.OrderHandler;
@@ -131,6 +132,18 @@ public class ShopRoute {
             beanMethod = "refundOrder"
         ),
         @RouterOperation(
+            path = "/api/shop/admin/revenue",
+            method = RequestMethod.GET,
+            beanClass = AdminRevenueHandler.class,
+            beanMethod = "getRevenue"
+        ),
+        @RouterOperation(
+            path = "/api/shop/admin/revenue/currencies",
+            method = RequestMethod.GET,
+            beanClass = AdminRevenueHandler.class,
+            beanMethod = "getRevenueCurrencies"
+        ),
+        @RouterOperation(
             path = "/api/shop/users/{username}/orders",
             method = RequestMethod.GET,
             beanClass = UserOrderHandler.class,
@@ -141,7 +154,8 @@ public class ShopRoute {
             GreetingsHandler greetingsHandler,
             CatalogHandler catalogHandler,
             OrderHandler orderHandler,
-            UserOrderHandler userOrderHandler) {
+            UserOrderHandler userOrderHandler,
+            AdminRevenueHandler adminRevenueHandler) {
         return RouterFunctions.route()
                 .GET("/api/shop/greetings", greetingsHandler::respondWithGreeting)
 
@@ -167,6 +181,11 @@ public class ShopRoute {
                 .DELETE("/api/shop/internal/users/{username}/orders", userOrderHandler::purgeOrders)
                 .GET("/api/shop/internal/orders/owners", userOrderHandler::listOrderOwners)
                 .POST("/api/shop/internal/orders/unknown", userOrderHandler::findUnknownOrderIds)
+
+                // Admin — reports. Read-only: nothing under /admin has a side effect
+                // (docs/finance/accounting.md D20)
+                .GET("/api/shop/admin/revenue", adminRevenueHandler::getRevenue)
+                .GET("/api/shop/admin/revenue/currencies", adminRevenueHandler::getRevenueCurrencies)
 
                 // Admin — products
                 .POST("/api/shop/products", catalogHandler::createProduct)
