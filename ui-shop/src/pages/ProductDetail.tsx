@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router';
 import { api } from '../api';
 import type { Product } from '../types';
 import { useCart } from '../contexts/CartContext';
-import { getDefaultMedia } from '../utils/media';
+import { getDefaultMedia, isImageMedia } from '../utils/media';
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -17,8 +17,12 @@ export default function ProductDetail() {
     api.catalog.getProduct(Number(id))
       .then(p => {
         setProduct(p);
+        // Images only: product media may include video (played in ui-demo's
+        // gallery), and everything here is an <img>, which would render a
+        // broken tile.
+        const images = p.media.filter(isImageMedia);
         const def = getDefaultMedia(p.media);
-        setActiveImage(def?.url || p.imageUrl || p.media[0]?.url || null);
+        setActiveImage(def?.url || p.imageUrl || images[0]?.url || null);
       })
       .finally(() => setLoading(false));
   }, [id]);
@@ -34,9 +38,9 @@ export default function ProductDetail() {
             ? <img src={activeImage} alt={product.name} />
             : <div className="img-placeholder">No Image</div>}
         </div>
-        {product.media.length > 1 && (
+        {product.media.filter(isImageMedia).length > 1 && (
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            {product.media.map(item => (
+            {product.media.filter(isImageMedia).map(item => (
               <button key={item.key} onClick={() => setActiveImage(item.url)}
                 style={{ width: 48, height: 48, padding: 0, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-secondary)', cursor: 'pointer' }}>
                 <img src={item.url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
