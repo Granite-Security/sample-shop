@@ -8,6 +8,7 @@ import { ChocolateArt, variantFor } from '../components/ChocolateArt';
 import PaymentWidget from '../components/payment/PaymentWidget';
 import ProviderSelector from '../components/payment/ProviderSelector';
 import { usePaymentProviders } from '../components/payment/usePaymentProviders';
+import { SHIPPING_COUNTRIES, isShippable } from '../utils/countries';
 
 // Flow ported from ui-shop/src/pages/Checkout.tsx:
 // place order → poll for the provider payload → PaymentWidget (switched on the
@@ -31,6 +32,19 @@ const EMPTY_ADDRESS: DeliveryAddress = {
 
 const inputStyle =
   'w-full border border-cocoa/20 bg-white/70 px-4 py-3 text-sm text-cocoa placeholder:text-cocoa/40 focus:border-gold focus:outline-none';
+
+// Address book entries are compared on the fields the shopper typed, so a second
+// order to the same place doesn't add a duplicate. Case and stray whitespace are
+// noise here — "Chisinau " and "chisinau" are the same doorstep.
+const norm = (v?: string | null) => (v ?? '').trim().toLowerCase();
+const sameAddress = (a: DeliveryAddress, b: AddressResponse) =>
+  norm(a.recipientName) === norm(b.recipientName) &&
+  norm(a.addressLine1) === norm(b.addressLine1) &&
+  norm(a.addressLine2) === norm(b.addressLine2) &&
+  norm(a.city) === norm(b.city) &&
+  norm(a.state) === norm(b.state) &&
+  norm(a.zipCode) === norm(b.zipCode) &&
+  norm(a.country) === norm(b.country);
 
 export function CheckoutPage() {
   const { cart, cartTotal, clearCart } = useShop();
@@ -166,6 +180,11 @@ export function CheckoutPage() {
       setError('Please complete the delivery address.');
       return;
     }
+    // A saved address can predate this list, so the picker alone doesn't cover it.
+    if (!isShippable(address.country)) {
+      setError(`We currently ship to ${SHIPPING_COUNTRIES.join(', ')} only.`);
+      return;
+    }
     if (needsProviderChoice) {
       setError('Please choose a payment method.');
       return;
@@ -184,6 +203,14 @@ export function CheckoutPage() {
       });
       setOrder(result);
       clearCart();
+      // The order is already placed; keeping the address is a convenience for the
+      // next one, so a failure here must never surface as a checkout error.
+      if (useSaved === null && !addresses.some((a) => sameAddress(address, a))) {
+        api
+          .createAddress({ ...address, isDefault: addresses.length === 0 })
+          .then((saved) => setAddresses((prev) => [...prev, saved]))
+          .catch(() => {});
+      }
       // shop never fills this in — the SPA fetches it from payment — so this is
       // effectively always the polling branch. Kept in case that ever changes.
       if (result.providerPayload) {
@@ -438,13 +465,19 @@ export function CheckoutPage() {
                     onChange={(e) => setAddress({ ...address, zipCode: e.target.value })}
                     className={inputStyle}
                   />
-                  <input
+                  <select
                     aria-label="Country"
-                    placeholder="Country *"
                     value={address.country}
                     onChange={(e) => setAddress({ ...address, country: e.target.value })}
-                    className={inputStyle}
-                  />
+                    className={`${inputStyle} ${address.country ? '' : 'text-cocoa/40'}`}
+                  >
+                    <option value="">Country *</option>
+                    {SHIPPING_COUNTRIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
             </section>
