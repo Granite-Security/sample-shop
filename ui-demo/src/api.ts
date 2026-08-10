@@ -4,6 +4,7 @@ import type {
   Category,
   CreateProductRequest,
   OrderResponse,
+  DeliveryResponse,
   PlaceOrderRequest,
   CreatePaymentIntentResponse,
   PaymentProviderInfo,
@@ -236,6 +237,17 @@ export const api = {
   // Admin-only endpoints — the shop service requires ROLE_ADMIN on the JWT.
   getAllOrders: (page = 0, size = 50) =>
     request<PagedResult<OrderResponse>>(`/api/shop/orders/all?page=${page}&size=${size}`),
+
+  // Every shipment, newest handled first by the page. The delivery service
+  // only requires an authenticated caller here, but the status update below is
+  // ROLE_ADMIN/ROLE_MANAGER — so the page gates on the same roles.
+  getDeliveries: () => request<DeliveryResponse[]>('/api/delivery'),
+
+  updateDeliveryStatus: (orderId: number, status: string, description: string) =>
+    request<DeliveryResponse>(`/api/delivery/${orderId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status, description }),
+    }),
 
   createProduct: (body: CreateProductRequest) =>
     request<Product>('/api/shop/products', { method: 'POST', body: JSON.stringify(body) }),

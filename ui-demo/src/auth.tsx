@@ -14,6 +14,7 @@ interface AuthContext {
   user: User | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isManager: boolean;
   login: () => void;
   logout: () => void;
   loading: boolean;
@@ -103,9 +104,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAuthenticated = user !== null;
   const roles = (user?.claims?.roles as string[]) ?? [];
   const isAdmin = roles.some((r) => r === 'ROLE_ADMIN' || r === 'ADMIN');
+  // The delivery service authorizes status changes with hasAnyRole("ADMIN",
+  // "MANAGER"), so the back of house recognises managers too.
+  const isManager = roles.some((r) => r === 'ROLE_MANAGER' || r === 'MANAGER');
 
   return (
-    <AuthCtx.Provider value={{ user, isAuthenticated, isAdmin, login, logout, loading }}>
+    <AuthCtx.Provider value={{ user, isAuthenticated, isAdmin, isManager, login, logout, loading }}>
       {children}
     </AuthCtx.Provider>
   );

@@ -21,7 +21,7 @@ const inputStyle =
   'w-full border border-cocoa/20 bg-white/70 px-4 py-3 text-sm text-cocoa placeholder:text-cocoa/40 focus:border-gold focus:outline-none';
 
 export function AdminPage() {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, isManager, loading } = useAuth();
   const { products, categories, chocolateCategoryId, refresh, live } = useShop();
   const [form, setForm] = useState<CreateProductRequest>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -248,13 +248,21 @@ export function AdminPage() {
           Signed in as <span className="text-cocoa">{user?.name}</span> with admin access.
           {!live && ' The shop backend is unreachable — changes cannot be saved right now.'}
         </p>
-        <p className="mt-2 text-sm">
+        <p className="mt-2 flex flex-wrap gap-6 text-sm">
           <Link
             to="/admin/users"
             className="text-xs uppercase tracking-[0.14em] text-cocoa underline decoration-gold underline-offset-4 hover:text-terracotta"
           >
             Manage customer accounts →
           </Link>
+          {(isAdmin || isManager) && (
+            <Link
+              to="/admin/deliveries"
+              className="text-xs uppercase tracking-[0.14em] text-cocoa underline decoration-gold underline-offset-4 hover:text-terracotta"
+            >
+              Manage shipments →
+            </Link>
+          )}
         </p>
 
         {message && (
