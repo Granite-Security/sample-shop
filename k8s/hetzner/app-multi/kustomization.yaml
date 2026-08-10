@@ -43,7 +43,7 @@ images:
     newTag: b87edcbb91f4d46dc31ffd59c6eb686616c34e36
   - name: granite-shop
     newName: docker.io/moldovean/granite-shop
-    newTag: 3d15837d015492456a6a01d5c71706c370e53205
+    newTag: 5a524cc49d3d45e0560e54c627ea59a74e9697ef
   - name: granite-payment
     newName: docker.io/moldovean/granite-payment
     newTag: 02281b84c24a3e5e150faf92fe680912fc304d7c
@@ -55,7 +55,7 @@ images:
   # to main touches accounting/.
   - name: granite-accounting
     newName: docker.io/moldovean/granite-accounting
-    newTag: b4f1f2121d4417844d7afd738b75ec6ed8af6768
+    newTag: 5a524cc49d3d45e0560e54c627ea59a74e9697ef
   - name: granite-balance
     newName: docker.io/moldovean/granite-balance
     newTag: b8181764430d1b07837b2be01c919c201e6a49fa
