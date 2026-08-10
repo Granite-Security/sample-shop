@@ -66,6 +66,12 @@ public class AccountingRoute {
             beanMethod = "runEstimates"
         ),
         @RouterOperation(
+            path = "/api/accounting/opening-balance",
+            method = RequestMethod.POST,
+            beanClass = BooksHandler.class,
+            beanMethod = "postOpeningBalance"
+        ),
+        @RouterOperation(
             path = "/api/accounting/reconcile",
             method = RequestMethod.GET,
             beanClass = BooksHandler.class,
@@ -91,6 +97,9 @@ public class AccountingRoute {
                 .GET("/api/accounting/periods", booksHandler::getPeriods)
                 .POST("/api/accounting/periods/{code}/close", booksHandler::closePeriod)
                 .POST("/api/accounting/periods/{code}/estimates", booksHandler::runEstimates)
+
+                // Posted once, on the date the books open (D22)
+                .POST("/api/accounting/opening-balance", booksHandler::postOpeningBalance)
                 .build();
     }
 }
