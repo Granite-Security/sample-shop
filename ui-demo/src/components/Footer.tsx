@@ -31,8 +31,10 @@ export function Footer() {
             </p>
             <div className="mt-6 flex gap-4 text-ivory/60">
               <a
-                href="https://instagram.com"
+                href="https://www.instagram.com/inga.miron/"
                 aria-label="Instagram"
+                target="_blank"
+                rel="noreferrer noopener"
                 className="transition-colors hover:text-gold"
               >
                 <InstagramIcon />
