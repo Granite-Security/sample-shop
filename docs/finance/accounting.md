@@ -1,10 +1,10 @@
 # `accounting` — the books, and the revenue reports on top of them
 
-Status: **steps 1-6 and 11 built.** The `shop` money-date columns and cash-view endpoint,
-the `balance` funding split and `balance.events`, and the `accounting` service: schema,
-consumers, posting rules, periods and the audit-trail endpoints. Still planned: the estimates
-(step 7), inventory and cost (step 8), opening balances and depreciation (step 9), manual
-journals (step 10), the accrual endpoints (step 13) and the page (step 14).
+Status: **steps 1-8 and 11 built.** The `shop` money-date columns, cash-view endpoint and product
+cost; the `balance` funding split and `balance.events`; and the `accounting` service — schema,
+consumers, posting rules, periods, the period-end estimates and the cost side of a sale. Still
+planned: opening balances and depreciation (step 9), manual journals (step 10), the accrual
+endpoints (step 13) and the page (step 14).
 
 Supersedes and absorbs the former `docs/finance/reports.md`.
 

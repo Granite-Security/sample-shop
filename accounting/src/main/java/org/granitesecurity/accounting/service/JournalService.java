@@ -36,6 +36,19 @@ public class JournalService {
     public Mono<Journal> post(String periodCode, boolean priorPeriod, Instant occurredAt,
                               String source, String eventType, String reference, String memo,
                               String createdBy, List<PostingLine> lines) {
+        return post(periodCode, priorPeriod, occurredAt, source, eventType, reference, memo,
+                createdBy, lines, null);
+    }
+
+    /**
+     * @param assumptions the rate set an estimate was made under, or null for a measured
+     *                    entry. Set here, at insert: journals are append-only in the
+     *                    database, so there is no marking one as an estimate afterwards —
+     *                    which is the point. An entry states what it was when it was made.
+     */
+    public Mono<Journal> post(String periodCode, boolean priorPeriod, Instant occurredAt,
+                              String source, String eventType, String reference, String memo,
+                              String createdBy, List<PostingLine> lines, String assumptions) {
         long debits = lines.stream().mapToLong(PostingLine::debitMinor).sum();
         long credits = lines.stream().mapToLong(PostingLine::creditMinor).sum();
         if (lines.isEmpty()) {
@@ -58,6 +71,8 @@ public class JournalService {
         journal.setReference(reference);
         journal.setMemo(memo);
         journal.setCreatedBy(createdBy);
+        journal.setEstimated(assumptions != null);
+        journal.setAssumptions(assumptions);
 
         return journalRepository.save(journal)
                 .flatMap(saved -> Flux.fromIterable(lines)

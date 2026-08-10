@@ -5,6 +5,7 @@ import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.Collection;
 import java.util.UUID;
@@ -43,6 +44,47 @@ public interface JournalLineRepository extends ReactiveCrudRepository<JournalLin
             """)
     Flux<TrialBalanceRow> trialBalance(String periodCode);
 
+    /**
+     * Open receivables, one row per order, with the date the credit was extended.
+     *
+     * <p>Read from the books rather than from balance, because accounting never calls
+     * another service (D25) — the exposure it provides against must be the exposure it has
+     * actually booked, or the allowance would be measured against a number that appears
+     * nowhere in these accounts.
+     */
+    @Query("""
+            SELECT j.reference                                AS reference,
+                   MIN(j.occurred_at)                         AS opened_at,
+                   SUM(l.debit_minor) - SUM(l.credit_minor)   AS exposure_minor
+              FROM journal_line l
+              JOIN journal j ON j.id = l.journal_id
+             WHERE l.account_code = :accountCode
+               AND j.reference IS NOT NULL
+             GROUP BY j.reference
+            HAVING SUM(l.debit_minor) - SUM(l.credit_minor) > 0
+             ORDER BY 2
+            """)
+    Flux<OpenReceivable> openReceivables(String accountCode);
+
+    /** Net movement on one account within one period. Credits positive, so revenue reads positive. */
+    @Query("""
+            SELECT COALESCE(SUM(l.credit_minor) - SUM(l.debit_minor), 0)
+              FROM journal_line l
+              JOIN journal j ON j.id = l.journal_id
+             WHERE j.period_code = :periodCode AND l.account_code = :accountCode
+            """)
+    Mono<Long> netCreditIn(String periodCode, String accountCode);
+
+    /** The standing balance of an account across every period — a position, not a flow. */
+    @Query("""
+            SELECT COALESCE(SUM(l.credit_minor) - SUM(l.debit_minor), 0)
+              FROM journal_line l
+             WHERE l.account_code = :accountCode
+            """)
+    Mono<Long> netCreditBalance(String accountCode);
+
     record TrialBalanceRow(String accountCode, String accountName, String accountType,
                            long debitMinor, long creditMinor) {}
+
+    record OpenReceivable(String reference, java.time.Instant openedAt, long exposureMinor) {}
 }

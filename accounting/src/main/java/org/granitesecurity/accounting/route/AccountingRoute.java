@@ -54,6 +54,18 @@ public class AccountingRoute {
             beanMethod = "closePeriod"
         ),
         @RouterOperation(
+            path = "/api/accounting/credit-loss",
+            method = RequestMethod.GET,
+            beanClass = BooksHandler.class,
+            beanMethod = "getCreditLoss"
+        ),
+        @RouterOperation(
+            path = "/api/accounting/periods/{code}/estimates",
+            method = RequestMethod.POST,
+            beanClass = BooksHandler.class,
+            beanMethod = "runEstimates"
+        ),
+        @RouterOperation(
             path = "/api/accounting/reconcile",
             method = RequestMethod.GET,
             beanClass = BooksHandler.class,
@@ -70,10 +82,15 @@ public class AccountingRoute {
                 .GET("/api/accounting/trial-balance", booksHandler::getTrialBalance)
                 .GET("/api/accounting/reconcile", booksHandler::getReconcile)
 
+                // The estimates: an allowance is a position as of a date, so it is read
+                // here rather than bucketed into a month (§2.6)
+                .GET("/api/accounting/credit-loss", booksHandler::getCreditLoss)
+
                 // Periods. The close is the only write in this service, and it moves no
                 // money — it freezes a month (D20's read-only rule still holds for amounts).
                 .GET("/api/accounting/periods", booksHandler::getPeriods)
                 .POST("/api/accounting/periods/{code}/close", booksHandler::closePeriod)
+                .POST("/api/accounting/periods/{code}/estimates", booksHandler::runEstimates)
                 .build();
     }
 }

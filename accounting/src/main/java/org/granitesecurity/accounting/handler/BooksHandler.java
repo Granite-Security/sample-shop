@@ -13,6 +13,8 @@ import org.granitesecurity.accounting.repository.FactRepository;
 import org.granitesecurity.accounting.repository.JournalLineRepository;
 import org.granitesecurity.accounting.repository.JournalLineRepository.TrialBalanceRow;
 import org.granitesecurity.accounting.repository.JournalRepository;
+import org.granitesecurity.accounting.service.EstimatesService;
+import org.granitesecurity.accounting.service.PeriodEndJob;
 import org.granitesecurity.accounting.service.PeriodService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -45,15 +47,73 @@ public class BooksHandler {
     private final JournalLineRepository journalLineRepository;
     private final FactRepository factRepository;
     private final PeriodService periodService;
+    private final EstimatesService estimatesService;
+    private final PeriodEndJob periodEndJob;
 
     public BooksHandler(JournalRepository journalRepository,
                         JournalLineRepository journalLineRepository,
                         FactRepository factRepository,
-                        PeriodService periodService) {
+                        PeriodService periodService,
+                        EstimatesService estimatesService,
+                        PeriodEndJob periodEndJob) {
         this.journalRepository = journalRepository;
         this.journalLineRepository = journalLineRepository;
         this.factRepository = factRepository;
         this.periodService = periodService;
+        this.estimatesService = estimatesService;
+        this.periodEndJob = periodEndJob;
+    }
+
+    @Operation(operationId = "getCreditLoss", summary = "The expected-credit-loss matrix, with its working",
+            description = """
+                    Admin only. The IFRS 9 provision matrix: ageing bands, the exposure in each and
+                    the resulting allowance. A bare "expected credit loss: CHF 68" is not reviewable,
+                    so the bands come with it.
+
+                    `estimated` is always true and is not decoration: until there is repayment
+                    history these loss rates are assumptions, and `asOf` is the date they were set.
+                    This is a balance-sheet position as of a date, not a flow through a month, and it
+                    is never netted against revenue.""")
+    @SecurityRequirement(name = "bearer-jwt")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Bands, exposure and allowance"),
+            @ApiResponse(responseCode = "403", description = "Forbidden — requires ADMIN", content = @Content())
+    })
+    public Mono<ServerResponse> getCreditLoss(ServerRequest request) {
+        return estimatesService.creditLoss()
+                .flatMap(report -> ServerResponse.ok().bodyValue(report));
+    }
+
+    @Operation(operationId = "runEstimates", summary = "Run the period-end estimates now",
+            description = """
+                    Admin only. Posts the return provision and the credit-loss movement for one
+                    period, exactly as the nightly job would. Idempotent per period: running it
+                    twice posts once, and there is no way to amend the first entry if you disagree
+                    with it — correct it by reversal, like anything else in these books.
+
+                    Exists because the alternative way to see an estimate is to wait a month.""")
+    @SecurityRequirement(name = "bearer-jwt")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Ran; the response says what was posted"),
+            @ApiResponse(responseCode = "404", description = "No such period", content = @Content()),
+            @ApiResponse(responseCode = "409", description = "The period is closed", content = @Content())
+    })
+    public Mono<ServerResponse> runEstimates(ServerRequest request) {
+        String code = request.pathVariable("code");
+        return periodService.require(code)
+                .flatMap(period -> {
+                    if (period.isClosed()) {
+                        return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT,
+                                "Period " + code + " is closed; estimates cannot be added to it"));
+                    }
+                    return periodEndJob.estimatesFor(period);
+                })
+                .then(journalRepository.countScheduled(code, EstimatesService.RETURN_PROVISION)
+                        .zipWith(journalRepository.countScheduled(code, EstimatesService.CREDIT_LOSS)))
+                .flatMap(t -> ServerResponse.ok().bodyValue(Map.of(
+                        "period", code,
+                        "returnProvisionPosted", t.getT1() > 0,
+                        "creditLossPosted", t.getT2() > 0)));
     }
 
     @Operation(operationId = "getJournals", summary = "Journal entries with their lines",

@@ -25,6 +25,17 @@ public interface JournalRepository extends ReactiveCrudRepository<Journal, UUID>
     Mono<Long> countInWindow(Instant from, Instant to);
 
     /**
+     * Has this estimate already been posted for this period? Estimates are idempotent per
+     * period (§6): a re-run must not double-provide, and the entry itself cannot be amended
+     * or deleted to make room for a second one.
+     */
+    @Query("""
+            SELECT COUNT(*) FROM journal
+             WHERE period_code = :periodCode AND event_type = :eventType AND source = 'SCHEDULE'
+            """)
+    Mono<Long> countScheduled(String periodCode, String eventType);
+
+    /**
      * Invariant: debits equal credits in every entry. A constraint trigger already makes
      * a violation impossible to commit, so this must always return zero — it is here
      * because an invariant nobody checks is an invariant nobody notices losing.

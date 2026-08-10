@@ -37,3 +37,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/013-add-order-money-dates.sql
       relativeToChangelogFile: false
+  - include:
+      file: db/changelog/014-add-product-cost.sql
+      relativeToChangelogFile: false

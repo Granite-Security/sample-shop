@@ -57,4 +57,22 @@ public interface FactRepository extends ReactiveCrudRepository<Fact, Long> {
 
     @Query("SELECT COUNT(*) FROM fact WHERE status = 'UNPOSTED'")
     Mono<Long> countUnposted();
+
+    /**
+     * The trailing return rate's two inputs (§2.2): orders delivered, and orders whose money
+     * actually went back. One query, off facts this service already holds.
+     *
+     * <p>Refunds count PaymentRefunded only. payment publishes it for every provider
+     * including balance, so it is exactly one per refunded order — counting balance's own
+     * Refunded as well would double every balance-funded return and inflate the rate.
+     */
+    @Query("""
+            SELECT COUNT(*) FILTER (WHERE event_type = 'DeliveryDelivered') AS delivered,
+                   COUNT(*) FILTER (WHERE event_type = 'PaymentRefunded')   AS refunded
+              FROM fact
+             WHERE occurred_at >= :from AND occurred_at < :to
+            """)
+    Mono<ReturnCounts> returnCounts(java.time.Instant from, java.time.Instant to);
+
+    record ReturnCounts(long delivered, long refunded) {}
 }

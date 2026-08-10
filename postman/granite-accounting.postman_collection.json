@@ -1,0 +1,782 @@
+{
+  "info": {
+    "_postman_id": "8b1f0d2e-4c77-4a1e-9a63-2d5c1f0ac401",
+    "name": "Granite — accounting (the books)",
+    "description": "Exercises the accounting service (port 8068) — the journal entries derived from domain events, and the endpoints that prove they add up. See docs/finance/accounting.md.\n\n**Read this first**\n\n1. Everything here needs a **ROLE_ADMIN** token. The collection is configured for the authorization-code flow against `oidc-client`, which already has Postman's callback registered in auth-server's `SecurityConfig`. Hit **Get New Access Token** on this collection's Authorization tab and log in as `admin`/`admin`.\n2. Pick an environment: **granite-local** (gateway on localhost:8080) or **granite-hetzner** (https://granite-security.org). `/api/**` reaches the gateway in both.\n3. The service is read-only apart from closing a period. Nothing in this collection can move money — accounting projects the ledger, it never writes to it.\n\n**Why a response can be empty and still correct.** The books only contain what events have produced since `accounting.books-open-on`. A fresh deployment has an empty journal, a trial balance of all zeros, and that is the correct answer — not a failure. Use the *Drive the books* folder to make something appear.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "oauth2",
+    "oauth2": [
+      {
+        "key": "grant_type",
+        "value": "authorization_code",
+        "type": "string"
+      },
+      {
+        "key": "authUrl",
+        "value": "{{baseUrl}}/auth/oauth2/authorize",
+        "type": "string"
+      },
+      {
+        "key": "accessTokenUrl",
+        "value": "{{baseUrl}}/auth/oauth2/token",
+        "type": "string"
+      },
+      {
+        "key": "clientId",
+        "value": "{{clientId}}",
+        "type": "string"
+      },
+      {
+        "key": "clientSecret",
+        "value": "{{clientSecret}}",
+        "type": "string"
+      },
+      {
+        "key": "redirect_uri",
+        "value": "https://oauth.pstmn.io/v1/callback",
+        "type": "string"
+      },
+      {
+        "key": "scope",
+        "value": "openid profile email",
+        "type": "string"
+      },
+      {
+        "key": "client_authentication",
+        "value": "header",
+        "type": "string"
+      },
+      {
+        "key": "addTokenTo",
+        "value": "header",
+        "type": "string"
+      },
+      {
+        "key": "tokenType",
+        "value": "Bearer",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Runs after every request in the collection.",
+          "//",
+          "// A 401 here almost always means the token expired or auth-server restarted.",
+          "// The RSA key pair is generated fresh on every auth-server startup, so a",
+          "// restart invalidates every JWT ever issued — get a new token, the service is",
+          "// not broken.",
+          "if (pm.response.code === 401) {",
+          "    console.log('401: token missing, expired, or issued by an auth-server that has since restarted.');",
+          "}",
+          "if (pm.response.code === 403) {",
+          "    console.log('403: the token is valid but lacks ROLE_ADMIN. Log in as admin, not user.');",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "clientId",
+      "value": "oidc-client",
+      "type": "string"
+    },
+    {
+      "key": "clientSecret",
+      "value": "secret",
+      "type": "string"
+    },
+    {
+      "key": "period",
+      "value": "",
+      "type": "string",
+      "description": "YYYY-MM. Left empty so requests default to the current period; set it to pin one."
+    },
+    {
+      "key": "oldestOpenPeriod",
+      "value": "",
+      "type": "string",
+      "description": "Filled in by GET /periods so the close request can never be pointed at a month that is already frozen."
+    }
+  ],
+  "item": [
+    {
+      "name": "Chart of accounts",
+      "description": "The chart is seeded by migration and has no editor: a new account is an accounting-policy decision and belongs in a reviewed migration, not a form (§4.3).",
+      "item": [
+        {
+          "name": "GET /accounts — the chart",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounting/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounting",
+                "accounts"
+              ]
+            },
+            "description": "Also the end-to-end proof that the service is wired up: a 200 with the full chart means Liquibase ran, R2DBC is mapping, the resource server validated your token and the gateway route reaches the pod."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test('the chart is seeded', () => {",
+                  "    pm.expect(body.accounts).to.be.an('array').that.is.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('account codes are unique', () => {",
+                  "    const codes = body.accounts.map(a => a.code);",
+                  "    pm.expect(new Set(codes).size).to.eql(codes.length);",
+                  "});",
+                  "",
+                  "pm.test('revenue 4000 is a credit account and not contra', () => {",
+                  "    const revenue = body.accounts.find(a => a.code === '4000');",
+                  "    pm.expect(revenue, 'account 4000').to.exist;",
+                  "    pm.expect(revenue.normalSide).to.eql('CR');",
+                  "    pm.expect(revenue.contra).to.be.false;",
+                  "});",
+                  "",
+                  "pm.test('4100 gift credit is contra-revenue, debit side', () => {",
+                  "    // The §2.4 line. If this ever flips side, gifted credit stops reducing",
+                  "    // revenue and starts inflating it.",
+                  "    const contra = body.accounts.find(a => a.code === '4100');",
+                  "    pm.expect(contra, 'account 4100').to.exist;",
+                  "    pm.expect(contra.contra).to.be.true;",
+                  "    pm.expect(contra.normalSide).to.eql('DR');",
+                  "});",
+                  "",
+                  "pm.test('6500 impairment is an expense, never a revenue deduction (D11)', () => {",
+                  "    const ecl = body.accounts.find(a => a.code === '6500');",
+                  "    pm.expect(ecl, 'account 6500').to.exist;",
+                  "    pm.expect(ecl.type).to.eql('EXPENSE');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "The books",
+      "description": "The audit trail, and the two checks that make any of it believable.",
+      "item": [
+        {
+          "name": "GET /journals — the audit trail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounting/journals?from=&to=&page=0&size=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounting",
+                "journals"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "",
+                  "description": "ISO date, inclusive. Default: one month back."
+                },
+                {
+                  "key": "to",
+                  "value": "",
+                  "description": "ISO date, EXCLUSIVE. Default: tomorrow."
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "50",
+                  "description": "Max 200."
+                }
+              ]
+            },
+            "description": "Newest business date first. Entries are never amended — a correction is a separate reversing entry that points at the original via `reversesId`, and there is no endpoint that edits a posted journal for anyone.\n\n`occurredAt` is the business date the entry belongs to; `postedAt` is when we booked it. They differ whenever a fact arrived late, which is what makes `priorPeriod` visible as an adjustment rather than a month that changed by itself."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test('every journal balances', () => {",
+                  "    // The invariant the whole design rests on. A constraint trigger already",
+                  "    // makes a violation impossible to commit, so this failing means something",
+                  "    // is very wrong rather than slightly off.",
+                  "    body.journals.forEach(j => {",
+                  "        const debits = j.lines.reduce((sum, l) => sum + l.debitMinor, 0);",
+                  "        const credits = j.lines.reduce((sum, l) => sum + l.creditMinor, 0);",
+                  "        pm.expect(debits, `journal ${j.id} (${j.eventType})`).to.eql(credits);",
+                  "    });",
+                  "});",
+                  "",
+                  "pm.test('no line carries both a debit and a credit', () => {",
+                  "    // A line with both sides is two lines somebody did not write, and it makes",
+                  "    // every sum over the table ambiguous.",
+                  "    body.journals.forEach(j => j.lines.forEach(l => {",
+                  "        pm.expect((l.debitMinor === 0) !== (l.creditMinor === 0),",
+                  "            `journal ${j.id} line on ${l.account}`).to.be.true;",
+                  "    }));",
+                  "});",
+                  "",
+                  "pm.test('no journal is empty', () => {",
+                  "    body.journals.forEach(j => pm.expect(j.lines.length, `journal ${j.id}`).to.be.above(0));",
+                  "});",
+                  "",
+                  "pm.test('estimates state their assumptions (D21)', () => {",
+                  "    // An assumed number rendered like a measured one is this design's stated",
+                  "    // failure mode, so an estimated entry must carry the rates it used.",
+                  "    body.journals.filter(j => j.estimated)",
+                  "        .forEach(j => pm.expect(j.assumptions, `journal ${j.id}`).to.not.be.empty);",
+                  "});",
+                  "",
+                  "const priorPeriod = body.journals.filter(j => j.priorPeriod).length;",
+                  "console.log(`${body.total} journal(s) in window; ${priorPeriod} prior-period adjustment(s).`);",
+                  "if (body.total === 0) {",
+                  "    console.log('Empty is a valid answer: nothing has been booked in this window yet.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /trial-balance — does the period add up",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounting/trial-balance?period={{period}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounting",
+                "trial-balance"
+              ],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "{{period}}",
+                  "description": "YYYY-MM. Empty means the current period."
+                }
+              ]
+            },
+            "description": "Debits and credits per account, kept in separate columns. Netting them into one signed number is what stops it being a trial balance — the point is that the two totals are equal.\n\nEvery account appears, including ones with no movement: a missing row and a zero row mean different things and only one of them is true."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test('the trial balance balances', () => {",
+                  "    pm.expect(body.totalDebitsMinor).to.eql(body.totalCreditsMinor);",
+                  "});",
+                  "",
+                  "pm.test('the balanced flag agrees with the numbers', () => {",
+                  "    pm.expect(body.balanced).to.eql(body.totalDebitsMinor === body.totalCreditsMinor);",
+                  "});",
+                  "",
+                  "pm.test('every account is present, movement or not', () => {",
+                  "    pm.expect(body.rows).to.be.an('array').that.is.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('no row is negative', () => {",
+                  "    // Debits and credits are magnitudes. A negative one means a sign was",
+                  "    // applied somewhere it should not have been.",
+                  "    body.rows.forEach(r => {",
+                  "        pm.expect(r.debitMinor, `${r.accountCode} debits`).to.be.at.least(0);",
+                  "        pm.expect(r.creditMinor, `${r.accountCode} credits`).to.be.at.least(0);",
+                  "    });",
+                  "});",
+                  "",
+                  "const chf = m => (m / 100).toFixed(2);",
+                  "console.log(`Period ${body.period}: debits CHF ${chf(body.totalDebitsMinor)}, credits CHF ${chf(body.totalCreditsMinor)}`);",
+                  "body.rows.filter(r => r.debitMinor || r.creditMinor)",
+                  "    .forEach(r => console.log(`  ${r.accountCode} ${r.accountName}: Dr ${chf(r.debitMinor)} / Cr ${chf(r.creditMinor)}`));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /reconcile — prove the books",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounting/reconcile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounting",
+                "reconcile"
+              ]
+            },
+            "description": "Run after every deploy, the same discipline as balance's /reconcile.\n\n`unpostedFacts` is not a failure on its own. Across four topics, a delivery consumed before the order it delivers is ordinary, and the sweep resolves it within 30 seconds. A count that stays high is the signal: facts waiting on something that is never coming."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test('no unbalanced journals', () => {",
+                  "    pm.expect(body.unbalancedJournals).to.eql(0);",
+                  "});",
+                  "",
+                  "pm.test('the books balance', () => pm.expect(body.balanced).to.be.true);",
+                  "",
+                  "if (body.unpostedFacts > 0) {",
+                  "    console.log(`${body.unpostedFacts} fact(s) not yet posted. Normal right after an event lands —`",
+                  "        + ' the sweep runs every 30s. Re-run this; if it does not fall, something is waiting'",
+                  "        + ' on a prerequisite that is never coming.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /credit-loss — the provision matrix",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounting/credit-loss",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounting",
+                "credit-loss"
+              ]
+            },
+            "description": "The IFRS 9 matrix with its working shown: ageing bands, the exposure in each and the resulting allowance. A bare \"expected credit loss: CHF 68\" is not reviewable.\n\n`estimated` is always true and is not decoration — until there is repayment history these loss rates are assumptions, and `asOf` is the date they were set.\n\nThis is a balance-sheet position as of a date, not a flow through a month, and it is **never** netted against revenue. If it starts reporting a large allowance, the fix is a credit limit in balance's CreditPolicy: a high expected default means the platform is giving stock away, which is a product bug and not a reporting one."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test('labelled an estimate, with the date its rates were set (D21)', () => {",
+                  "    pm.expect(body.estimated).to.be.true;",
+                  "    pm.expect(body.asOf).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+                  "});",
+                  "",
+                  "pm.test('the working adds up', () => {",
+                  "    pm.expect(body.bands.reduce((s, b) => s + b.allowanceMinor, 0)).to.eql(body.allowanceMinor);",
+                  "    pm.expect(body.bands.reduce((s, b) => s + b.exposureMinor, 0)).to.eql(body.exposureMinor);",
+                  "});",
+                  "",
+                  "pm.test('each band applies its own rate', () => {",
+                  "    body.bands.forEach(b => {",
+                  "        pm.expect(b.allowanceMinor, `band <= ${b.maxAgeDays} days`)",
+                  "            .to.be.closeTo(Math.round(b.exposureMinor * b.lossRate), 1);",
+                  "    });",
+                  "});",
+                  "",
+                  "pm.test('the allowance never exceeds the exposure', () => {",
+                  "    pm.expect(body.allowanceMinor).to.be.at.most(body.exposureMinor);",
+                  "});",
+                  "",
+                  "const chf = m => (m / 100).toFixed(2);",
+                  "console.log(`Exposure CHF ${chf(body.exposureMinor)}, allowance CHF ${chf(body.allowanceMinor)} (rates as of ${body.asOf})`);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Periods",
+      "description": "Closing a period is what a report computed on demand can never do (§1.1). A closed month is frozen, and a fact arriving afterwards posts to the open period as a prior-period adjustment.",
+      "item": [
+        {
+          "name": "GET /periods — status of each month",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounting/periods",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounting",
+                "periods"
+              ]
+            },
+            "description": "Also reports `booksOpenedOn` (D22). Everything before that date is cash view only — there is no honest way to book a past that was never booked, and Kafka retention deleted it anyway."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test('the books have an opening date', () => {",
+                  "    pm.expect(body.booksOpenedOn).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+                  "});",
+                  "",
+                  "pm.test('every period is OPEN or CLOSED', () => {",
+                  "    body.periods.forEach(p => pm.expect(['OPEN', 'CLOSED']).to.include(p.status));",
+                  "});",
+                  "",
+                  "pm.test('a closed period records when and by whom', () => {",
+                  "    body.periods.filter(p => p.status === 'CLOSED').forEach(p => {",
+                  "        pm.expect(p.closedAt, `${p.code} closedAt`).to.not.be.null;",
+                  "        pm.expect(p.closedBy, `${p.code} closedBy`).to.not.be.null;",
+                  "    });",
+                  "});",
+                  "",
+                  "// Hand the oldest open period to the close request below, so it is never",
+                  "// pointed at a month that is already frozen.",
+                  "const open = body.periods.filter(p => p.status === 'OPEN').map(p => p.code).sort();",
+                  "if (open.length) {",
+                  "    pm.collectionVariables.set('oldestOpenPeriod', open[0]);",
+                  "    console.log(`Oldest open period: ${open[0]}`);",
+                  "}",
+                  "console.log(`Books opened on ${body.booksOpenedOn}; ${body.periods.length} period(s).`);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /periods/{code}/close — freeze a month",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounting/periods/{{oldestOpenPeriod}}/close",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounting",
+                "periods",
+                "{{oldestOpenPeriod}}",
+                "close"
+              ]
+            },
+            "description": "**The only write in this service, and it moves no amount.** Run *GET /periods* first — it sets `oldestOpenPeriod` for you.\n\nOne-way: there is no reopen. A month that can be reopened is not closed, and \"just this once\" is how a restated period becomes routine.\n\nRefused with 409 while the period still holds unposted facts. Freezing a month knowing entries are missing from it is precisely the failure this is meant to prevent — resolve them first (see /reconcile)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// 409 is a legitimate outcome, not a failure of the request: the period is",
+                  "// already closed, or it still holds facts that could not be posted.",
+                  "pm.test('closed, or refused for a stated reason', () => {",
+                  "    pm.expect([200, 409]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test('the period is now CLOSED and stamped', () => {",
+                  "        pm.expect(body.status).to.eql('CLOSED');",
+                  "        pm.expect(body.closedAt).to.not.be.null;",
+                  "        pm.expect(body.closedBy).to.not.be.null;",
+                  "    });",
+                  "    console.log(`Closed ${body.code}. Late facts for it now post to the open period, flagged priorPeriod.`);",
+                  "} else {",
+                  "    console.log('Refused: ' + (pm.response.json().detail || pm.response.text()));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /periods/{code}/estimates — run period end now",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounting/periods/{{oldestOpenPeriod}}/estimates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounting",
+                "periods",
+                "{{oldestOpenPeriod}}",
+                "estimates"
+              ]
+            },
+            "description": "Posts the return provision and the credit-loss movement for one period, exactly as the nightly job would. Run *GET /periods* first — it sets `oldestOpenPeriod`.\n\nExists because the alternative way to see an estimate is to wait a month.\n\n**Idempotent per period**: running it twice posts once. There is no way to amend the first entry if you disagree with it — correct it by reversal, like anything else in these books. Refused with 409 on a closed period."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ran, or refused because the period is closed', () => {",
+                  "    pm.expect([200, 409]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    console.log(`Period ${body.period}: return provision ${body.returnProvisionPosted ? 'posted' : 'not posted'},`",
+                  "        + ` credit loss ${body.creditLossPosted ? 'posted' : 'not posted'}.`);",
+                  "    console.log('Not posted is a valid outcome: no revenue to provide against, or the allowance'",
+                  "        + ' already matches the matrix. Re-run it — the second run must change nothing.');",
+                  "} else {",
+                  "    console.log('Refused: ' + (pm.response.json().detail || pm.response.text()));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Access control",
+      "description": "The gateway is a pass-through proxy and enforces nothing, so the service's own rules are the whole authorization model. These two requests are the proof.",
+      "item": [
+        {
+          "name": "GET /journals with no token → 401",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounting/journals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounting",
+                "journals"
+              ]
+            },
+            "description": "Adding a route to the gateway protects nothing by itself. If this ever returns 200, the resource-server dependency has gone missing from the build — which is exactly how balance shipped its first cut, with every endpoint open."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 without a token', () => pm.response.to.have.status(401));",
+                  "pm.test('the books are not served to anonymous callers', () => {",
+                  "    pm.expect(pm.response.code, 'a 200 here means the service is unprotected').to.not.eql(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /journals as a plain user → 403",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounting/journals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounting",
+                "journals"
+              ]
+            },
+            "description": "Set `userToken` in your environment to a token for `user`/`user` (log in with the collection auth as that user, then copy the token into the variable). Everything under /api/accounting is ROLE_ADMIN — there is no per-endpoint exception, and the catch-all denies rather than permits."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.environment.get('userToken') || pm.collectionVariables.get('userToken');",
+                  "if (!token) {",
+                  "    console.log('Not run: set userToken to a ROLE_USER token to check this.');",
+                  "} else {",
+                  "    pm.test('403 for a non-admin token', () => pm.response.to.have.status(403));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Drive the books",
+      "description": "The accounting service has no way to create anything — it only ever reacts to events from shop, payment, delivery and balance. These are the cheapest ways to make a fact appear, so the endpoints above have something to show.\n\nEverything here hits **other** services and needs the same admin token.",
+      "item": [
+        {
+          "name": "POST /api/balance/admin/gift — conjure credit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"user\",\n  \"amountChf\": 50.00,\n  \"reason\": \"postman smoke test\",\n  \"idempotencyKey\": \"{{$guid}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/balance/admin/gift",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "balance",
+                "admin",
+                "gift"
+              ]
+            },
+            "description": "Publishes `GiftIssued` on balance.events.\n\n**Expect no journal from this.** A gift is not booked at all: the reduction of revenue is recognised at the later of promising the consideration and recognising the revenue, which is always the delivery (IFRS 15.72). Outstanding gift credit is a memo figure balance already measures exactly — not a liability these books carry.\n\nWhat you should see instead: the fact recorded and marked IGNORED with that reason. The gift becomes visible in the books only when it is *spent* on an order that is then *delivered*, as a debit to 4100."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 gift issued', () => pm.response.to.have.status(201));",
+                  "console.log('GiftIssued published. It will produce NO journal — that is the correct outcome.');",
+                  "console.log('To see it reach the books: spend it on an order, then deliver that order.');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/balance/admin/reconcile — the ledger side",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/balance/admin/reconcile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "balance",
+                "admin",
+                "reconcile"
+              ]
+            },
+            "description": "Not an accounting endpoint, but the one to check beside it. balance owns the money; accounting only projects it. If the ledger does not balance, nothing derived from it can be trusted either — and the funding split reported here is the input to the contra-revenue line in the books."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('the ledger balances', () => pm.expect(body.balanced).to.be.true);",
+                  "pm.test('money is neither created nor destroyed', () => pm.expect(body.ledgerSumMinor).to.eql(0));",
+                  "",
+                  "if (body.spentFromGiftMinor !== undefined) {",
+                  "    pm.test('gift + backed + credit = spend (D13)', () => {",
+                  "        pm.expect(body.spentFromGiftMinor + body.spentFromBackedMinor + body.spentFromCreditMinor)",
+                  "            .to.eql(body.redeemedMinor);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
