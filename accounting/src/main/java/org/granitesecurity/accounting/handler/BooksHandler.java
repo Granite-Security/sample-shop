@@ -13,6 +13,7 @@ import org.granitesecurity.accounting.repository.FactRepository;
 import org.granitesecurity.accounting.repository.JournalLineRepository;
 import org.granitesecurity.accounting.repository.JournalLineRepository.TrialBalanceRow;
 import org.granitesecurity.accounting.repository.JournalRepository;
+import org.granitesecurity.accounting.service.AccrualReportService;
 import org.granitesecurity.accounting.service.EstimatesService;
 import org.granitesecurity.accounting.service.OpeningBalanceService;
 import org.granitesecurity.accounting.service.OpeningBalanceService.OpeningPosition;
@@ -52,6 +53,7 @@ public class BooksHandler {
     private final EstimatesService estimatesService;
     private final PeriodEndJob periodEndJob;
     private final OpeningBalanceService openingBalanceService;
+    private final AccrualReportService accrualReportService;
 
     public BooksHandler(JournalRepository journalRepository,
                         JournalLineRepository journalLineRepository,
@@ -59,7 +61,8 @@ public class BooksHandler {
                         PeriodService periodService,
                         EstimatesService estimatesService,
                         PeriodEndJob periodEndJob,
-                        OpeningBalanceService openingBalanceService) {
+                        OpeningBalanceService openingBalanceService,
+                        AccrualReportService accrualReportService) {
         this.journalRepository = journalRepository;
         this.journalLineRepository = journalLineRepository;
         this.factRepository = factRepository;
@@ -67,6 +70,34 @@ public class BooksHandler {
         this.estimatesService = estimatesService;
         this.periodEndJob = periodEndJob;
         this.openingBalanceService = openingBalanceService;
+        this.accrualReportService = accrualReportService;
+    }
+
+    @Operation(operationId = "getAccrualRevenue", summary = "What we earned — the accrual view",
+            description = """
+                    Admin only. Revenue as booked: recognised on delivery, credited gross, with
+                    gifted credit and expected returns shown as separate deductions rather than
+                    netted away.
+
+                    Different numbers on different dates from shop's cash view, and that is the
+                    point — one says what moved, this says what we earned. Never add the two.
+
+                    `creditLoss` sits outside `totals` deliberately: an allowance is a
+                    balance-sheet position as of a date, not a flow through a month, and keeping it
+                    out is what stops anyone netting it against revenue. `booksOpenedOn` marks
+                    where there are no books at all rather than no sales.""")
+    @SecurityRequirement(name = "bearer-jwt")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "One row per bucket, plus totals and the allowance"),
+            @ApiResponse(responseCode = "400", description = "Bad granularity or dates", content = @Content()),
+            @ApiResponse(responseCode = "403", description = "Forbidden — requires ADMIN", content = @Content())
+    })
+    public Mono<ServerResponse> getAccrualRevenue(ServerRequest request) {
+        return accrualReportService.report(
+                        request.queryParam("granularity").orElse(null),
+                        request.queryParam("from").orElse(null),
+                        request.queryParam("to").orElse(null))
+                .flatMap(report -> ServerResponse.ok().bodyValue(report));
     }
 
     @Operation(operationId = "postOpeningBalance", summary = "Open the books on a stated position",

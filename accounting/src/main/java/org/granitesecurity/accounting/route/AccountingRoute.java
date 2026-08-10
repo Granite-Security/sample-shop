@@ -31,6 +31,12 @@ public class AccountingRoute {
             beanMethod = "getChartOfAccounts"
         ),
         @RouterOperation(
+            path = "/api/accounting/revenue",
+            method = RequestMethod.GET,
+            beanClass = BooksHandler.class,
+            beanMethod = "getAccrualRevenue"
+        ),
+        @RouterOperation(
             path = "/api/accounting/journals",
             method = RequestMethod.GET,
             beanClass = BooksHandler.class,
@@ -114,6 +120,9 @@ public class AccountingRoute {
                                                            ManualJournalHandler manualJournalHandler) {
         return RouterFunctions.route()
                 .GET("/api/accounting/accounts", chartHandler::getChartOfAccounts)
+
+                // What we earned, as booked (§10)
+                .GET("/api/accounting/revenue", booksHandler::getAccrualRevenue)
 
                 // The audit trail: what was booked, and the proof it adds up
                 .GET("/api/accounting/journals", booksHandler::getJournals)

@@ -128,6 +128,12 @@ public class BalanceRoute {
                             description = "Two rows share a transferId and sum to zero.",
                             security = @SecurityRequirement(name = "bearer-jwt"))),
             @RouterOperation(
+                    path = "/api/balance/admin/money-supply",
+                    method = RequestMethod.GET,
+                    beanClass = AdminBalanceHandler.class,
+                    beanMethod = "moneySupply"
+            ),
+            @RouterOperation(
                     path = "/api/balance/admin/reconcile",
                     method = RequestMethod.GET,
                     beanClass = AdminBalanceHandler.class,
@@ -155,6 +161,8 @@ public class BalanceRoute {
                 // stay under /admin/ — a gift endpoint anywhere else would be
                 // authenticated but not role-checked.
                 .POST("/api/balance/admin/gifts", adminHandler::gift)
+                // Read-only: how much was conjured, and whether it was spent (§9.3)
+                .GET("/api/balance/admin/money-supply", adminHandler::moneySupply)
                 .GET("/api/balance/admin/reconcile", adminHandler::reconcile)
                 .GET("/api/balance/admin/accounts", adminHandler::listAccounts)
                 .GET("/api/balance/admin/ledger", adminHandler::ledger)
