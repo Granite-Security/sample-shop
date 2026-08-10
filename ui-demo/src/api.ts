@@ -27,6 +27,9 @@ import type {
   BalanceTransaction,
   LedgerEntryView,
   ReconcileReport,
+  RevenueReport,
+  MoneySupplyReport,
+  AccrualReport,
   TransferRequest,
   TransferResponse,
   GiftResponse,
@@ -407,6 +410,24 @@ export const api = {
 
   getBalanceLedger: (page = 0, size = 50) =>
     request<LedgerEntryView[]>(`/api/balance/admin/ledger?page=${page}&size=${size}`),
+
+  // The revenue reports (docs/finance/accounting.md §8), mirroring
+  // ui-shop/src/api/reports.ts. Three services, one page: shop knows what was
+  // sold, balance knows what was conjured, accounting knows what was earned.
+  // Nothing here crosses service boundaries to answer another's question.
+  revenueCash: (granularity: string, currency: string) =>
+    request<RevenueReport>(
+      `/api/shop/admin/revenue?granularity=${granularity}&currency=${currency}`,
+    ),
+
+  revenueCurrencies: () =>
+    request<{ currencies: string[] }>('/api/shop/admin/revenue/currencies'),
+
+  moneySupply: (granularity: string) =>
+    request<MoneySupplyReport>(`/api/balance/admin/money-supply?granularity=${granularity}`),
+
+  revenueAccrual: (granularity: string) =>
+    request<AccrualReport>(`/api/accounting/revenue?granularity=${granularity}`),
 
   createTopupIntent: (amountChf: number, provider: string, currency = 'CHF') =>
     request<CreatePaymentIntentResponse>('/api/payments/topup-intent', {

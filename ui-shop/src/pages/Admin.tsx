@@ -41,7 +41,7 @@ export default function Admin() {
 
       <section style={{ marginTop: 24 }}>
         <h2>Manage</h2>
-        <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+        <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
           <Link to="/admin/products" className="btn" style={{ textDecoration: 'none' }}>Products</Link>
           <span className="status status-paid">Categories</span>
           <span className="status status-paid">Orders</span>
@@ -49,6 +49,16 @@ export default function Admin() {
             <Link to="/admin/deliveries" className="btn" style={{ textDecoration: 'none' }}>Deliveries</Link>
           )}
           <Link to="/admin/users" className="btn" style={{ textDecoration: 'none' }}>Users</Link>
+        </div>
+      </section>
+
+      {/* The books live under /profile/* because they hang off AccountNav, but
+          they are admin work and this is where an admin looks for them. */}
+      <section style={{ marginTop: 24 }}>
+        <h2>Books</h2>
+        <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
+          <Link to="/profile/revenues" className="btn" style={{ textDecoration: 'none' }}>Revenues</Link>
+          <Link to="/profile/treasury" className="btn" style={{ textDecoration: 'none' }}>Treasury</Link>
         </div>
       </section>
     </div>
