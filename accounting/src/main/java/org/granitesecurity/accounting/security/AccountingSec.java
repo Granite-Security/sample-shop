@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.core.GrantedAuthority;
@@ -74,6 +75,15 @@ public class AccountingSec {
                         // for accounting, and there must not be one.
                         .pathMatchers("/v3/api-docs/**", "/swagger-ui/**",
                                 "/swagger-ui.html", "/webjars/swagger-ui/**").permitAll()
+                        // The manual journal forms (§15). ADMIN or MANAGER — the one
+                        // relaxation of the read-only rule, and note that ROLE_MANAGER only
+                        // means anything since auth-server/006 added it: the seed used to
+                        // grant a bare MANAGER authority that no gate anywhere looked at.
+                        .pathMatchers(HttpMethod.POST, "/api/accounting/purchases",
+                                "/api/accounting/expenses", "/api/accounting/reimbursements",
+                                "/api/accounting/journals", "/api/accounting/journals/**")
+                                .hasAnyRole("ADMIN", "MANAGER")
+                        // Everything else, including opening the books and closing a period.
                         .pathMatchers("/api/accounting/**").hasRole("ADMIN")
                         // denyAll, not permitAll as in BalanceSec. This service has no
                         // public surface whatsoever: no health endpoint, no callback, no
