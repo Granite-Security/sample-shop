@@ -248,22 +248,7 @@ export function AdminPage() {
           Signed in as <span className="text-cocoa">{user?.name}</span> with admin access.
           {!live && ' The shop backend is unreachable — changes cannot be saved right now.'}
         </p>
-        <p className="mt-2 flex flex-wrap gap-6 text-sm">
-          <Link
-            to="/admin/users"
-            className="text-xs uppercase tracking-[0.14em] text-cocoa underline decoration-gold underline-offset-4 hover:text-terracotta"
-          >
-            Manage customer accounts →
-          </Link>
-          {(isAdmin || isManager) && (
-            <Link
-              to="/admin/deliveries"
-              className="text-xs uppercase tracking-[0.14em] text-cocoa underline decoration-gold underline-offset-4 hover:text-terracotta"
-            >
-              Manage shipments →
-            </Link>
-          )}
-        </p>
+        <BackOfHouseNav canManageShipments={isAdmin || isManager} />
 
         {message && (
           <p
@@ -460,7 +445,7 @@ export function AdminPage() {
           </section>
 
           {/* product list */}
-          <section aria-label="Products">
+          <section id="collection" aria-label="Products" className="scroll-mt-28">
             <h2 className="font-display text-[24px] text-cocoa">
               Current Collection{' '}
               <span className="text-cocoa/40">({managed.filter((p) => !p.discontinued).length})</span>
@@ -527,6 +512,61 @@ export function AdminPage() {
   );
 }
 
+/**
+ * Everything the back of house can do, as one grid of destinations.
+ *
+ * Two of these are sections further down this page rather than routes; the rest
+ * are pages of their own, and the books (Revenues, Treasury) live under
+ * /profile/* because they hang off AccountNav — an admin should not have to know
+ * that to find them. Tiles render identically either way, since the difference is
+ * an implementation detail of where a screen happens to be mounted.
+ */
+function BackOfHouseNav({ canManageShipments }: { canManageShipments: boolean }) {
+  const scrollTo = (id: string) => () =>
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  return (
+    <nav aria-label="Back of house" className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <Tile label="Collection" hint="Add, edit and discontinue pieces" onClick={scrollTo('collection')} />
+      <Tile label="Orders" hint="Every order placed in the boutique" onClick={scrollTo('orders')} />
+      {canManageShipments && (
+        <Tile label="Shipments" hint="Dispatch, deliver, or record a failure" to="/admin/deliveries" />
+      )}
+      <Tile label="Customers" hint="Block, delete and gift balance" to="/admin/users" />
+      <Tile label="Revenues" hint="Cash, accrual and money created" to="/profile/revenues" />
+      <Tile label="Treasury" hint="The ledger, and whether it balances" to="/profile/treasury" />
+    </nav>
+  );
+}
+
+function Tile({ label, hint, to, onClick }: {
+  label: string;
+  hint: string;
+  to?: string;
+  onClick?: () => void;
+}) {
+  const className =
+    'group block border border-cocoa/20 px-5 py-4 text-left transition-colors duration-300 hover:border-cocoa hover:bg-cocoa/[0.04]';
+  const body = (
+    <>
+      <span className="block text-xs uppercase tracking-[0.18em] text-cocoa group-hover:text-terracotta">
+        {label}
+      </span>
+      <span className="mt-1 block text-sm text-cocoa/50">{hint}</span>
+    </>
+  );
+
+  return to ? (
+    <Link to={to} className={className}>
+      {body}
+    </Link>
+  ) : (
+    <button type="button" onClick={onClick} className={`${className} w-full`}>
+      {body}
+    </button>
+  );
+}
+
 const STATUS_STYLES: Record<string, string> = {
   PENDING: 'bg-gold/15 text-cocoa',
   PAID: 'bg-sage/20 text-cocoa',
@@ -564,7 +604,7 @@ function AllOrders() {
   }, []);
 
   return (
-    <section aria-label="All orders" className="mt-16">
+    <section id="orders" aria-label="All orders" className="mt-16 scroll-mt-28">
       <h2 className="font-display text-[24px] text-cocoa">
         Customer Orders {total > 0 && <span className="text-cocoa/40">({total})</span>}
       </h2>

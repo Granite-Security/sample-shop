@@ -27,6 +27,7 @@ import { AddressesPage } from './pages/AddressesPage';
 import { MessagesPage } from './pages/MessagesPage';
 import { BalancePage } from './pages/BalancePage';
 import { TreasuryPage } from './pages/TreasuryPage';
+import { RevenuesPage } from './pages/RevenuesPage';
 import { OrdersPage } from './pages/OrdersPage';
 import { OrderDetailPage } from './pages/OrderDetailPage';
 import { Register } from './pages/Register';
@@ -93,6 +94,7 @@ export default function App() {
                   <Route path="profile/messages" element={<MessagesPage />} />
                   <Route path="profile/balance" element={<BalancePage />} />
                   <Route path="profile/treasury" element={<TreasuryPage />} />
+                  <Route path="profile/revenues" element={<RevenuesPage />} />
                   <Route path="profile/orders" element={<OrdersPage />} />
                   <Route path="profile/orders/:id" element={<OrderDetailPage />} />
                 </Route>

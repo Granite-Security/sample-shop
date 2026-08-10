@@ -415,3 +415,112 @@ export interface ReconcileReport {
   creditOutstandingMinor: number;
   drift: AccountDrift[];
 }
+
+// The revenue reports (docs/finance/accounting.md, Part II). Mirrors
+// ui-shop/src/types.ts — three services answer three different questions and
+// none of these figures may be added to another's.
+
+export interface RevenueReport {
+  granularity: 'year' | 'month' | 'week';
+  currency: string;
+  from: string;
+  to: string;
+  buckets: RevenueBucket[];
+  totals: {
+    grossMinor: number;
+    refundedMinor: number;
+    netMinor: number;
+    orderCount: number;
+    refundCount: number;
+    returnsPendingMinor: number;
+  };
+}
+
+export interface RevenueBucket {
+  bucket: string;
+  label: string;
+  grossMinor: number;
+  refundedMinor: number;
+  netMinor: number;
+  orderCount: number;
+  refundCount: number;
+  /** Requested but not yet settled. Shown beside gross, never subtracted from it. */
+  returnsPendingMinor: number;
+}
+
+/** balance's money creation and where the spend came from. CHF only — no currency selector. */
+export interface MoneySupplyReport {
+  granularity: string;
+  from: string;
+  to: string;
+  buckets: MoneySupplyBucket[];
+  totals: {
+    giftedMinor: number;
+    toppedUpMinor: number;
+    spentMinor: number;
+    refundedMinor: number;
+    spentFromGiftMinor: number;
+    spentFromBackedMinor: number;
+    spentFromCreditMinor: number;
+    /** Conjured money still held: the disclosed figure standing in for a liability we do not book. */
+    giftedOutstandingMinor: number;
+  };
+}
+
+export interface MoneySupplyBucket {
+  bucket: string;
+  label: string;
+  giftedMinor: number;
+  toppedUpMinor: number;
+  spentMinor: number;
+  refundedMinor: number;
+  spentFromGiftMinor: number;
+  spentFromBackedMinor: number;
+  spentFromCreditMinor: number;
+}
+
+/** accounting's accrual view: what we earned, as booked. */
+export interface AccrualReport {
+  granularity: string;
+  currency: string;
+  booksOpenedOn: string;
+  from: string;
+  to: string;
+  buckets: AccrualBucket[];
+  /** Outside totals on purpose: a position as of a date, never netted against revenue. */
+  creditLoss: CreditLossReport;
+  totals: {
+    revenueGrossMinor: number;
+    contraGiftMinor: number;
+    contraReturnsMinor: number;
+    netRevenueMinor: number;
+    deliveredCount: number;
+  };
+}
+
+export interface AccrualBucket {
+  bucket: string;
+  label: string;
+  periodStatus: 'OPEN' | 'CLOSED';
+  revenueGrossMinor: number;
+  contraGiftMinor: number;
+  contraReturnsMinor: number;
+  netRevenueMinor: number;
+  deliveredCount: number;
+}
+
+export interface CreditLossReport {
+  asOf: string;
+  /** Always true. The UI keys its "assumption, not measurement" styling off it. */
+  estimated: boolean;
+  exposureMinor: number;
+  allowanceMinor: number;
+  bands: CreditLossBand[];
+}
+
+export interface CreditLossBand {
+  maxAgeDays: number | null;
+  lossRate: number;
+  exposureMinor: number;
+  allowanceMinor: number;
+}

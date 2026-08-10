@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import type { AccrualReport, MoneySupplyReport, RevenueReport } from '../types';
 
@@ -22,6 +22,12 @@ type Granularity = 'year' | 'month' | 'week';
  * No chart library. Bars are a div with a percentage width, matching Treasury's
  * existing table-and-`--primary` styling: adding recharts for six bars is 200 kB
  * for a rounding of the visual.
+ *
+ * Every table reads newest-first. The services return buckets ascending (three
+ * `ORDER BY 1`s), which put the current month at the bottom of a twelve-row
+ * table — the one row anybody opens this page to read. Reversed here rather than
+ * in SQL: it is a presentation choice, the reports are small, and the three
+ * backends have other consumers.
  */
 export default function Revenues() {
   const [granularity, setGranularity] = useState<Granularity>('month');
@@ -60,8 +66,14 @@ export default function Revenues() {
       .finally(() => setLoading(false));
   }, [granularity, currency]);
 
-  const maxNet = Math.max(1, ...(cash?.buckets ?? []).map(b => Math.abs(b.netMinor)));
-  const maxSupply = Math.max(1, ...(supply?.buckets ?? []).map(b => b.giftedMinor + b.toppedUpMinor));
+  // Newest first. Every bucket key is an ISO date — a week bucket is its Monday,
+  // not '2026-W32' — so a lexical compare is a chronological one.
+  const cashBuckets = useMemo(() => newestFirst(cash?.buckets), [cash]);
+  const accrualBuckets = useMemo(() => newestFirst(accrual?.buckets), [accrual]);
+  const supplyBuckets = useMemo(() => newestFirst(supply?.buckets), [supply]);
+
+  const maxNet = Math.max(1, ...cashBuckets.map(b => Math.abs(b.netMinor)));
+  const maxSupply = Math.max(1, ...supplyBuckets.map(b => b.giftedMinor + b.toppedUpMinor));
 
   return (
     <div>
@@ -110,9 +122,9 @@ export default function Revenues() {
               <tr><th>Bucket</th><th>Gross</th><th>Refunded</th><th>Net</th><th>Orders</th><th /></tr>
             </thead>
             <tbody>
-              {cash.buckets.map(b => (
+              {cashBuckets.map((b, i) => (
                 <tr key={b.bucket}>
-                  <td>{b.label}</td>
+                  <td>{b.label}{i === 0 && <Current />}</td>
                   <td>{chf(b.grossMinor)}</td>
                   <td>{b.refundedMinor ? `−${chf(b.refundedMinor)}` : '—'}</td>
                   <td style={{ color: b.netMinor < 0 ? 'var(--danger)' : undefined }}>{chf(b.netMinor)}</td>
@@ -160,12 +172,13 @@ export default function Revenues() {
               </tr>
             </thead>
             <tbody>
-              {accrual.buckets.map(b => {
+              {accrualBuckets.map((b, i) => {
                 const beforeBooks = b.bucket < accrual.booksOpenedOn;
                 return (
                   <tr key={b.bucket} style={{ opacity: beforeBooks ? 0.5 : 1 }}>
                     <td>
                       {b.label}
+                      {i === 0 && <Current />}
                       {b.periodStatus === 'CLOSED' && (
                         <span title="This period is closed; a late fact posts to the open one"
                               style={{ marginLeft: 6, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -215,9 +228,9 @@ export default function Revenues() {
               <tr><th>Bucket</th><th>Gifted</th><th>Topped up</th><th /></tr>
             </thead>
             <tbody>
-              {supply.buckets.map(b => (
+              {supplyBuckets.map((b, i) => (
                 <tr key={b.bucket}>
-                  <td>{b.label}</td>
+                  <td>{b.label}{i === 0 && <Current />}</td>
                   <td>{chf(b.giftedMinor)}</td>
                   <td>{chf(b.toppedUpMinor)}</td>
                   <td style={{ width: '40%' }}>
@@ -286,6 +299,29 @@ export default function Revenues() {
         </Section>
       )}
     </div>
+  );
+}
+
+/**
+ * Newest bucket first. The window always ends at today (`to` defaults to
+ * tomorrow, exclusive) and gaps are filled server-side with zero rows, so the
+ * first row after this sort is the period in progress — which is what <Current />
+ * labels, without this page having to work out where Zurich's month boundary is.
+ */
+function newestFirst<T extends { bucket: string }>(buckets: T[] | undefined): T[] {
+  return [...(buckets ?? [])].sort((a, b) => (a.bucket < b.bucket ? 1 : a.bucket > b.bucket ? -1 : 0));
+}
+
+/** Marks the period in progress: its numbers are partial and will still move. */
+function Current() {
+  return (
+    <span
+      title="The period in progress — these numbers are still moving."
+      style={{ marginLeft: 6, fontSize: '0.7rem', textTransform: 'uppercase',
+               letterSpacing: '0.05em', color: 'var(--primary)' }}
+    >
+      current
+    </span>
   );
 }
 
