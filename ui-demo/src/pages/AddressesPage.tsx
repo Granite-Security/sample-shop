@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api';
 import type { AddressRequest, AddressResponse } from '../types';
+import { SHIPPING_COUNTRIES, isShippable } from '../utils/countries';
 
 const inputStyle =
   'w-full border border-cocoa/20 bg-white/70 px-4 py-3 text-sm text-cocoa placeholder:text-cocoa/40 focus:border-gold focus:outline-none';
@@ -59,6 +60,12 @@ export function AddressesPage() {
     e.preventDefault();
     if (!form.recipientName || !form.addressLine1 || !form.city || !form.zipCode || !form.country) {
       setMessage({ kind: 'error', text: 'Please complete the required address fields.' });
+      return;
+    }
+    // Editing an address saved before this list existed can carry a country we no
+    // longer ship to; the select shows it blank, so say why rather than saving it back.
+    if (!isShippable(form.country)) {
+      setMessage({ kind: 'error', text: `We currently ship to ${SHIPPING_COUNTRIES.join(', ')} only.` });
       return;
     }
     setBusy(true);
@@ -166,13 +173,19 @@ export function AddressesPage() {
               onChange={(e) => setForm({ ...form, zipCode: e.target.value })}
               className={inputStyle}
             />
-            <input
+            <select
               aria-label="Country"
-              placeholder="Country *"
               value={form.country}
               onChange={(e) => setForm({ ...form, country: e.target.value })}
-              className={inputStyle}
-            />
+              className={`${inputStyle} ${form.country ? '' : 'text-cocoa/40'}`}
+            >
+              <option value="">Country *</option>
+              {SHIPPING_COUNTRIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
             <label className="flex items-center gap-2 text-sm text-cocoa sm:col-span-2">
               <input
                 type="checkbox"
