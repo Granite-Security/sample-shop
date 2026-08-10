@@ -2,6 +2,7 @@ package org.granitesecurity.accounting.route;
 
 import org.granitesecurity.accounting.handler.BooksHandler;
 import org.granitesecurity.accounting.handler.ChartHandler;
+import org.granitesecurity.accounting.handler.ManualJournalHandler;
 import org.springdoc.core.annotations.RouterOperation;
 import org.springdoc.core.annotations.RouterOperations;
 import org.springframework.context.annotation.Bean;
@@ -28,6 +29,12 @@ public class AccountingRoute {
             method = RequestMethod.GET,
             beanClass = ChartHandler.class,
             beanMethod = "getChartOfAccounts"
+        ),
+        @RouterOperation(
+            path = "/api/accounting/revenue",
+            method = RequestMethod.GET,
+            beanClass = BooksHandler.class,
+            beanMethod = "getAccrualRevenue"
         ),
         @RouterOperation(
             path = "/api/accounting/journals",
@@ -66,6 +73,42 @@ public class AccountingRoute {
             beanMethod = "runEstimates"
         ),
         @RouterOperation(
+            path = "/api/accounting/purchases",
+            method = RequestMethod.POST,
+            beanClass = ManualJournalHandler.class,
+            beanMethod = "postPurchase"
+        ),
+        @RouterOperation(
+            path = "/api/accounting/expenses",
+            method = RequestMethod.POST,
+            beanClass = ManualJournalHandler.class,
+            beanMethod = "postExpense"
+        ),
+        @RouterOperation(
+            path = "/api/accounting/reimbursements",
+            method = RequestMethod.POST,
+            beanClass = ManualJournalHandler.class,
+            beanMethod = "postReimbursement"
+        ),
+        @RouterOperation(
+            path = "/api/accounting/journals",
+            method = RequestMethod.POST,
+            beanClass = ManualJournalHandler.class,
+            beanMethod = "postJournal"
+        ),
+        @RouterOperation(
+            path = "/api/accounting/journals/{id}/reverse",
+            method = RequestMethod.POST,
+            beanClass = ManualJournalHandler.class,
+            beanMethod = "reverseJournal"
+        ),
+        @RouterOperation(
+            path = "/api/accounting/opening-balance",
+            method = RequestMethod.POST,
+            beanClass = BooksHandler.class,
+            beanMethod = "postOpeningBalance"
+        ),
+        @RouterOperation(
             path = "/api/accounting/reconcile",
             method = RequestMethod.GET,
             beanClass = BooksHandler.class,
@@ -73,9 +116,13 @@ public class AccountingRoute {
         ),
     })
     public RouterFunction<ServerResponse> accountingRoutes(ChartHandler chartHandler,
-                                                           BooksHandler booksHandler) {
+                                                           BooksHandler booksHandler,
+                                                           ManualJournalHandler manualJournalHandler) {
         return RouterFunctions.route()
                 .GET("/api/accounting/accounts", chartHandler::getChartOfAccounts)
+
+                // What we earned, as booked (§10)
+                .GET("/api/accounting/revenue", booksHandler::getAccrualRevenue)
 
                 // The audit trail: what was booked, and the proof it adds up
                 .GET("/api/accounting/journals", booksHandler::getJournals)
@@ -91,6 +138,17 @@ public class AccountingRoute {
                 .GET("/api/accounting/periods", booksHandler::getPeriods)
                 .POST("/api/accounting/periods/{code}/close", booksHandler::closePeriod)
                 .POST("/api/accounting/periods/{code}/estimates", booksHandler::runEstimates)
+
+                // Posted once, on the date the books open (D22)
+                .POST("/api/accounting/opening-balance", booksHandler::postOpeningBalance)
+
+                // The one place the read-only rule is relaxed (D34), and it must stay the
+                // only one. Corrections are reversals — nothing here edits a posted entry.
+                .POST("/api/accounting/purchases", manualJournalHandler::postPurchase)
+                .POST("/api/accounting/expenses", manualJournalHandler::postExpense)
+                .POST("/api/accounting/reimbursements", manualJournalHandler::postReimbursement)
+                .POST("/api/accounting/journals/{id}/reverse", manualJournalHandler::reverseJournal)
+                .POST("/api/accounting/journals", manualJournalHandler::postJournal)
                 .build();
     }
 }

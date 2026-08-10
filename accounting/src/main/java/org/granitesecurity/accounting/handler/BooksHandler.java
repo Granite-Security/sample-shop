@@ -13,7 +13,10 @@ import org.granitesecurity.accounting.repository.FactRepository;
 import org.granitesecurity.accounting.repository.JournalLineRepository;
 import org.granitesecurity.accounting.repository.JournalLineRepository.TrialBalanceRow;
 import org.granitesecurity.accounting.repository.JournalRepository;
+import org.granitesecurity.accounting.service.AccrualReportService;
 import org.granitesecurity.accounting.service.EstimatesService;
+import org.granitesecurity.accounting.service.OpeningBalanceService;
+import org.granitesecurity.accounting.service.OpeningBalanceService.OpeningPosition;
 import org.granitesecurity.accounting.service.PeriodEndJob;
 import org.granitesecurity.accounting.service.PeriodService;
 import org.springframework.http.HttpStatus;
@@ -49,19 +52,86 @@ public class BooksHandler {
     private final PeriodService periodService;
     private final EstimatesService estimatesService;
     private final PeriodEndJob periodEndJob;
+    private final OpeningBalanceService openingBalanceService;
+    private final AccrualReportService accrualReportService;
 
     public BooksHandler(JournalRepository journalRepository,
                         JournalLineRepository journalLineRepository,
                         FactRepository factRepository,
                         PeriodService periodService,
                         EstimatesService estimatesService,
-                        PeriodEndJob periodEndJob) {
+                        PeriodEndJob periodEndJob,
+                        OpeningBalanceService openingBalanceService,
+                        AccrualReportService accrualReportService) {
         this.journalRepository = journalRepository;
         this.journalLineRepository = journalLineRepository;
         this.factRepository = factRepository;
         this.periodService = periodService;
         this.estimatesService = estimatesService;
         this.periodEndJob = periodEndJob;
+        this.openingBalanceService = openingBalanceService;
+        this.accrualReportService = accrualReportService;
+    }
+
+    @Operation(operationId = "getAccrualRevenue", summary = "What we earned — the accrual view",
+            description = """
+                    Admin only. Revenue as booked: recognised on delivery, credited gross, with
+                    gifted credit and expected returns shown as separate deductions rather than
+                    netted away.
+
+                    Different numbers on different dates from shop's cash view, and that is the
+                    point — one says what moved, this says what we earned. Never add the two.
+
+                    `creditLoss` sits outside `totals` deliberately: an allowance is a
+                    balance-sheet position as of a date, not a flow through a month, and keeping it
+                    out is what stops anyone netting it against revenue. `booksOpenedOn` marks
+                    where there are no books at all rather than no sales.""")
+    @SecurityRequirement(name = "bearer-jwt")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "One row per bucket, plus totals and the allowance"),
+            @ApiResponse(responseCode = "400", description = "Bad granularity or dates", content = @Content()),
+            @ApiResponse(responseCode = "403", description = "Forbidden — requires ADMIN", content = @Content())
+    })
+    public Mono<ServerResponse> getAccrualRevenue(ServerRequest request) {
+        return accrualReportService.report(
+                        request.queryParam("granularity").orElse(null),
+                        request.queryParam("from").orElse(null),
+                        request.queryParam("to").orElse(null))
+                .flatMap(report -> ServerResponse.ok().bodyValue(report));
+    }
+
+    @Operation(operationId = "postOpeningBalance", summary = "Open the books on a stated position",
+            description = """
+                    Admin only, and **once**. The books start on a date: Kafka retention has already
+                    deleted the history, so there is nothing to replay and no honest way to
+                    reconstruct a past that was never booked.
+
+                    The figures are stated by you, not fetched — accounting never calls another
+                    service, and an opening balance is a declaration someone is accountable for
+                    rather than a number scraped from two databases at whatever moment a job ran.
+
+                    Two of them need care. `storedValueBackedMinor` is the **backed portion only**:
+                    Σ(positive balances) − Σ(gift pools), because policy (b) books no liability for
+                    gifted credit. And owner's capital is not a field — it is computed as whatever
+                    makes the entry balance, and the journal records that it is a plug.
+
+                    A second call is refused. A second opening balance is not a correction, it is a
+                    second past; correct the first by reversal.""")
+    @SecurityRequirement(name = "bearer-jwt")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Posted"),
+            @ApiResponse(responseCode = "400", description = "An opening balance of nothing", content = @Content()),
+            @ApiResponse(responseCode = "409", description = "The books are already open", content = @Content())
+    })
+    public Mono<ServerResponse> postOpeningBalance(ServerRequest request) {
+        return request.principal()
+                .cast(Authentication.class)
+                .map(auth -> ((Jwt) auth.getCredentials()).getSubject())
+                .zipWith(request.bodyToMono(OpeningPosition.class)
+                        .switchIfEmpty(Mono.error(new ResponseStatusException(
+                                HttpStatus.BAD_REQUEST, "An opening position is required"))))
+                .flatMap(t -> openingBalanceService.post(t.getT2(), t.getT1()))
+                .flatMap(journal -> ServerResponse.ok().bodyValue(toView(journal, List.of())));
     }
 
     @Operation(operationId = "getCreditLoss", summary = "The expected-credit-loss matrix, with its working",

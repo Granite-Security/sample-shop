@@ -49,6 +49,19 @@ public class JournalService {
     public Mono<Journal> post(String periodCode, boolean priorPeriod, Instant occurredAt,
                               String source, String eventType, String reference, String memo,
                               String createdBy, List<PostingLine> lines, String assumptions) {
+        return post(periodCode, priorPeriod, occurredAt, source, eventType, reference, memo,
+                createdBy, lines, assumptions, null);
+    }
+
+    /**
+     * @param reversesId the entry this one corrects. Set at insert, like everything else:
+     *                   a posted journal cannot be updated, so a reversal that did not know
+     *                   what it reversed at the moment it was written never could
+     */
+    public Mono<Journal> post(String periodCode, boolean priorPeriod, Instant occurredAt,
+                              String source, String eventType, String reference, String memo,
+                              String createdBy, List<PostingLine> lines, String assumptions,
+                              UUID reversesId) {
         long debits = lines.stream().mapToLong(PostingLine::debitMinor).sum();
         long credits = lines.stream().mapToLong(PostingLine::creditMinor).sum();
         if (lines.isEmpty()) {
@@ -73,6 +86,7 @@ public class JournalService {
         journal.setCreatedBy(createdBy);
         journal.setEstimated(assumptions != null);
         journal.setAssumptions(assumptions);
+        journal.setReversesId(reversesId);
 
         return journalRepository.save(journal)
                 .flatMap(saved -> Flux.fromIterable(lines)
@@ -86,6 +100,7 @@ public class JournalService {
         entity.setAccountCode(line.accountCode());
         entity.setDebitMinor(line.debitMinor());
         entity.setCreditMinor(line.creditMinor());
+        entity.setParty(line.party());
         entity.setMemo(line.memo());
         return entity;
     }

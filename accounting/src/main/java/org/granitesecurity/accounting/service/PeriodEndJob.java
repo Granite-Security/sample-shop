@@ -29,10 +29,14 @@ public class PeriodEndJob {
 
     private final PeriodRepository periodRepository;
     private final EstimatesService estimatesService;
+    private final DepreciationService depreciationService;
 
-    public PeriodEndJob(PeriodRepository periodRepository, EstimatesService estimatesService) {
+    public PeriodEndJob(PeriodRepository periodRepository,
+                        EstimatesService estimatesService,
+                        DepreciationService depreciationService) {
         this.periodRepository = periodRepository;
         this.estimatesService = estimatesService;
+        this.depreciationService = depreciationService;
     }
 
     @Scheduled(cron = "${accounting.estimates.cron:0 30 2 * * *}", zone = "Europe/Zurich")
@@ -53,12 +57,17 @@ public class PeriodEndJob {
     }
 
     /**
-     * The return provision first, then the allowance. Order matters only for legibility —
-     * they touch different accounts — but reading a period's entries in the order an
-     * accountant would expect is worth the one line it costs.
+     * Depreciation, then the return provision, then the allowance. Order matters only for
+     * legibility — they touch different accounts — but reading a period's entries in the
+     * order an accountant would expect is worth the one line it costs.
+     *
+     * <p>Depreciation goes first for a second reason: it is a measured schedule, while the
+     * two below it are estimates. Seeing them in that order in a period's journals makes
+     * the difference obvious.
      */
     public Mono<Void> estimatesFor(Period period) {
-        return estimatesService.postReturnProvision(period.getCode())
+        return depreciationService.postFor(period.getCode())
+                .then(estimatesService.postReturnProvision(period.getCode()))
                 .then(estimatesService.postCreditLossAllowance(period.getCode()))
                 .then();
     }

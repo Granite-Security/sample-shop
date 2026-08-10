@@ -16,7 +16,9 @@ export default function AccountNav() {
   // Treasury shows every user's balance, so it is admin-only. The server
   // enforces that too — this only decides what is worth rendering.
   const links = isAdmin
-    ? [...LINKS, { to: '/profile/treasury', label: 'Treasury', end: false }]
+    ? [...LINKS,
+       { to: '/profile/treasury', label: 'Treasury', end: false },
+       { to: '/profile/revenues', label: 'Revenues', end: false }]
     : LINKS;
 
   return (

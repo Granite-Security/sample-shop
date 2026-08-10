@@ -11,6 +11,7 @@ import org.granitesecurity.balance.repository.LedgerEntryRepository;
 import org.granitesecurity.balance.service.BalanceService;
 import org.granitesecurity.balance.service.IdempotencyService;
 import org.granitesecurity.balance.service.Money;
+import org.granitesecurity.balance.service.MoneySupplyService;
 import org.granitesecurity.balance.service.ReconcileService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,17 +38,20 @@ public class AdminBalanceHandler {
 
     private final BalanceService balanceService;
     private final ReconcileService reconcileService;
+    private final MoneySupplyService moneySupplyService;
     private final IdempotencyService idempotencyService;
     private final AccountRepository accountRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
 
     public AdminBalanceHandler(BalanceService balanceService,
                                ReconcileService reconcileService,
+                               MoneySupplyService moneySupplyService,
                                IdempotencyService idempotencyService,
                                AccountRepository accountRepository,
                                LedgerEntryRepository ledgerEntryRepository) {
         this.balanceService = balanceService;
         this.reconcileService = reconcileService;
+        this.moneySupplyService = moneySupplyService;
         this.idempotencyService = idempotencyService;
         this.accountRepository = accountRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
@@ -127,6 +131,20 @@ public class AdminBalanceHandler {
                 // are bad requests, not server errors.
                 .onErrorResume(IllegalArgumentException.class, e ->
                         ServerResponse.badRequest().bodyValue(Map.of("error", e.getMessage())));
+    }
+
+    /**
+     * How much money we conjured, and whether it was spent (docs/finance/accounting.md §9.3).
+     *
+     * <p>Read-only and admin-only, like everything under /admin. It reports what the ledger
+     * already records — this endpoint cannot move a rappen.
+     */
+    public Mono<ServerResponse> moneySupply(ServerRequest request) {
+        return moneySupplyService.report(
+                        request.queryParam("granularity").orElse(null),
+                        request.queryParam("from").orElse(null),
+                        request.queryParam("to").orElse(null))
+                .flatMap(report -> ServerResponse.ok().bodyValue(report));
     }
 
     public Mono<ServerResponse> reconcile(ServerRequest request) {

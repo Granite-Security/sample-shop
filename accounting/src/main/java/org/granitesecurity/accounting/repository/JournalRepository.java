@@ -35,6 +35,10 @@ public interface JournalRepository extends ReactiveCrudRepository<Journal, UUID>
             """)
     Mono<Long> countScheduled(String periodCode, String eventType);
 
+    /** The books open once. A second opening balance is not a correction, it is a second past. */
+    @Query("SELECT COUNT(*) FROM journal WHERE source = :source")
+    Mono<Long> countBySource(String source);
+
     /**
      * Invariant: debits equal credits in every entry. A constraint trigger already makes
      * a violation impossible to commit, so this must always return zero — it is here

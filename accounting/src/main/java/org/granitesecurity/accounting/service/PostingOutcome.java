@@ -25,15 +25,31 @@ public sealed interface PostingOutcome {
      */
     record Wait(String waitingFor) implements PostingOutcome {}
 
-    /** One side of one line. Debit and credit have separate factories so neither can be signed wrong. */
-    record PostingLine(String accountCode, long debitMinor, long creditMinor, String memo) {
+    /**
+     * One side of one line. Debit and credit have separate factories so neither can be
+     * signed wrong.
+     *
+     * <p>{@code party} rides the line rather than being applied afterwards, because a posted
+     * journal cannot be updated — the database refuses it. Everything a line will ever say
+     * has to be true at the moment it is written.
+     */
+    record PostingLine(String accountCode, long debitMinor, long creditMinor, String party, String memo) {
 
         public static PostingLine debit(String accountCode, long amountMinor) {
-            return new PostingLine(accountCode, amountMinor, 0, null);
+            return new PostingLine(accountCode, amountMinor, 0, null, null);
         }
 
         public static PostingLine credit(String accountCode, long amountMinor) {
-            return new PostingLine(accountCode, 0, amountMinor, null);
+            return new PostingLine(accountCode, 0, amountMinor, null, null);
+        }
+
+        /** A line that names who we owe or are settling with (D35). */
+        public static PostingLine debit(String accountCode, long amountMinor, String party) {
+            return new PostingLine(accountCode, amountMinor, 0, party, null);
+        }
+
+        public static PostingLine credit(String accountCode, long amountMinor, String party) {
+            return new PostingLine(accountCode, 0, amountMinor, party, null);
         }
     }
 }

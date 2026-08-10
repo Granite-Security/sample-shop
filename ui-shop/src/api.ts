@@ -8,6 +8,7 @@ import { messagesApi } from './api/messages';
 import { ordersApi } from './api/orders';
 import { paymentsApi } from './api/payments';
 import { profileApi } from './api/profile';
+import { reportsApi } from './api/reports';
 import { shopApi } from './api/shop';
 import { storageApi } from './api/storage';
 
@@ -21,6 +22,7 @@ export const api = {
   orders: ordersApi,
   payments: paymentsApi,
   profile: profileApi,
+  reports: reportsApi,
   delivery: deliveryApi,
   messages: messagesApi,
   storage: storageApi,

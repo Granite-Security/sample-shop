@@ -93,6 +93,14 @@ accounting:
     # period, so a daily run either does the work or finds it already done.
     cron: ${ACCOUNTING_ESTIMATES_CRON:0 30 2 * * *}
 
+  # The one stated fixed asset (§14.3, D32): CHF 5,000 straight line over ten years, nil
+  # residual. 41.67 x 120 is 5,000.40, so the final month posts the balancing 41.27 — a
+  # schedule that posts a fixed rounded amount every period over-depreciates.
+  depreciation:
+    cost-minor: ${ACCOUNTING_EQUIPMENT_COST_MINOR:500000}
+    monthly-minor: ${ACCOUNTING_DEPRECIATION_MONTHLY_MINOR:4167}
+    life-months: ${ACCOUNTING_EQUIPMENT_LIFE_MONTHS:120}
+
   # IFRS 9 provision matrix (§2.6). THESE RATES ARE ASSUMPTIONS. There is no repayment
   # history to derive them from, so every figure built on them is labelled an estimate and
   # carries as-of. A provision matrix with invented rates presented as a measured figure is
