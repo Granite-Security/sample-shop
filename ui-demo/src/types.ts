@@ -81,6 +81,30 @@ export interface OrderResponse {
 }
 
 /**
+ * A shipment as the delivery service sees it — one per order, created when the
+ * OrderPlaced event lands. `status` is the delivery lifecycle (PENDING →
+ * DISPATCHED → DELIVERED, or FAILED); `paymentStatus` is the order's payment
+ * state mirrored from the payments topic, and is not something this UI sets.
+ */
+export interface DeliveryResponse {
+  id: string;
+  orderId: number;
+  status: string;
+  paymentStatus: string;
+  items: string | null;
+  recipientName: string;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  state: string | null;
+  zipCode: string;
+  country: string;
+  estimatedDeliveryDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
  * Whatever the provider needs to complete the payment in the browser. Its shape
  * depends on the confirmation mode — a client secret for CLIENT_SDK, a redirect
  * URL for REDIRECT — so never assume a field is present.
