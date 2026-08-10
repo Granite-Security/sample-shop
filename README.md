@@ -229,7 +229,7 @@ receiving service enforces on the `Bearer` token the caller sends.
 | `/api/delivery/**` | JWT required | Delivery service |
 | `/api/profiles/**` | JWT required | Profile service |
 | `/api/balance/**` | JWT required | Balance service |
-| `/api/accounting/**` | JWT required, **ROLE_ADMIN** | Accounting service |
+| `/api/accounting/**` | JWT required, **ROLE_ADMIN** (manual journals also allow MANAGER) | Accounting service |
 | `/api/storage/**` | JWT required | Storage service (route retries on failure) |
 | `/auth/**` | Public | Auth server (login, token, JWKS, discovery) |
 | `/v3/api-docs/**`, `/swagger-ui/**` | Public | Shop service |

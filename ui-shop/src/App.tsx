@@ -25,6 +25,7 @@ import Callback from './pages/Callback'
 import Addresses from './pages/Addresses'
 import Messages from './pages/Messages'
 import Balance from './pages/Balance'
+import Revenues from './pages/Revenues'
 import Treasury from './pages/Treasury'
 import Profile from './pages/Profile'
 import Password from './pages/Password'
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="profile/files" element={<Files />} />
             <Route path="profile/balance" element={<Balance />} />
             <Route path="profile/treasury" element={<Treasury />} />
+            <Route path="profile/revenues" element={<Revenues />} />
             <Route path="addresses" element={<Addresses />} />
             <Route path="messages" element={<Messages />} />
             <Route path="orders" element={<Orders />} />
