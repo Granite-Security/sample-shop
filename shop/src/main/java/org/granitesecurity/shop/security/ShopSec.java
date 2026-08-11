@@ -70,6 +70,17 @@ public class ShopSec {
                         // already see every order can see their sum.
                         .pathMatchers(HttpMethod.GET, "/api/shop/admin/**")
                                 .hasAnyRole("ADMIN", "MANAGER")
+                        // Packaging maintenance is ADMIN alone, unlike the reports
+                        // above: repricing a box changes what every future shopper is
+                        // charged, and retiring the wrong one takes a group of products
+                        // off sale. Reading a report does neither.
+                        .pathMatchers(HttpMethod.POST, "/api/shop/admin/packaging/**").hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.PUT, "/api/shop/admin/packaging/**").hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.DELETE, "/api/shop/admin/packaging/**").hasRole("ADMIN")
+                        // Quoting reads the catalogue and stores nothing, but it is not
+                        // public: it is a checkout step, and the cart it takes is the
+                        // shopper's.
+                        .pathMatchers(HttpMethod.POST, "/api/shop/packaging/quote").authenticated()
                         .pathMatchers(HttpMethod.GET, "/api/shop/users/*/orders").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.GET, "/api/shop/orders/all")
                                 .hasAnyRole("ADMIN", "MANAGER")

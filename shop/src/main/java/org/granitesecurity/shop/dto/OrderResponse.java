@@ -23,8 +23,24 @@ public record OrderResponse(
         @Schema(description = "Deprecated alias for providerPayload.clientSecret. Null here for the "
                 + "same reason; kept until ui-demo migrates.",
                 example = "pi_xxx_secret_yyy") String clientSecret,
-        @Schema(description = "Delivery address") DeliveryAddress address
+        @Schema(description = "Delivery address") DeliveryAddress address,
+        @Schema(description = "How much of total is packaging", example = "12.00") BigDecimal packagingTotal,
+        @Schema(description = "What the order was packed in, one entry per packaging group")
+        List<OrderPackagingResponse> packaging
 ) {
+
+    /**
+     * The shape before packaging existed, for callers that construct one without.
+     * Reads as an order that needed no boxes, which is what every order placed before
+     * packaging was.
+     */
+    public OrderResponse(Long id, String username, String status, BigDecimal total, String currency,
+                         Instant createdAt, List<OrderItemResponse> items, String provider,
+                         Map<String, Object> providerPayload, String clientSecret,
+                         DeliveryAddress address) {
+        this(id, username, status, total, currency, createdAt, items, provider, providerPayload,
+                clientSecret, address, BigDecimal.ZERO, List.of());
+    }
     @Schema(description = "Delivery address snapshot")
     public record DeliveryAddress(
             @Schema(description = "Recipient name", example = "Alice Smith") String recipientName,

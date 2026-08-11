@@ -25,7 +25,14 @@ public record CreateProductRequest(
         // CatalogService infers RECEIPT for an increase and COUNT_CORRECTION for a
         // decrease — but stating it is what lets accounting book a shrinkage as
         // shrinkage rather than as a mystery.
-        @Schema(description = "RECEIPT | DAMAGE | SHRINKAGE | COUNT_CORRECTION", example = "DAMAGE") String stockReason
+        @Schema(description = "RECEIPT | DAMAGE | SHRINKAGE | COUNT_CORRECTION", example = "DAMAGE") String stockReason,
+        // Nullable for the same reason as discontinued: on update, null means "leave it
+        // alone", so an admin editing a price does not silently make a boxed product
+        // unpackageable. Clearing it needs the explicit sentinel below — see
+        // CatalogService.
+        @Schema(description = "Packaging group this product belongs to; null means it needs no "
+                + "packaging on create, and leaves it unchanged on update. Send 0 to clear it.",
+                example = "1") Long packagingGroupId
 ) {
 
     /**
@@ -40,6 +47,25 @@ public record CreateProductRequest(
     public CreateProductRequest(String name, String description, BigDecimal price, Integer stock,
                                 Long categoryId, String imageUrl, List<MediaItem> media,
                                 Boolean discontinued) {
-        this(name, description, price, stock, null, categoryId, imageUrl, media, discontinued, null);
+        this(name, description, price, stock, null, categoryId, imageUrl, media, discontinued, null, null);
     }
+
+    /** The shape before {@code packagingGroupId} existed. */
+    public CreateProductRequest(String name, String description, BigDecimal price, Integer stock,
+                                BigDecimal unitCost, Long categoryId, String imageUrl,
+                                List<MediaItem> media, Boolean discontinued, String stockReason) {
+        this(name, description, price, stock, unitCost, categoryId, imageUrl, media, discontinued,
+                stockReason, null);
+    }
+
+    /**
+     * What {@code packagingGroupId} must be to mean "this product no longer needs
+     * packaging".
+     *
+     * <p>Null already means "not stated" on update, and both meanings are needed: an
+     * admin fixing a typo sends no packaging group and expects the box to stay, while
+     * one who has started shipping a product pre-boxed needs a way to say so. A sentinel
+     * rather than a second boolean field, because two fields can contradict each other.
+     */
+    public static final long CLEAR_PACKAGING_GROUP = 0L;
 }

@@ -10,8 +10,27 @@ public record PlaceOrderRequest(
         @Schema(description = "Payment provider id from GET /api/payments/providers. "
                 + "Required: an order that names none is a 400, because payment cannot "
                 + "pick one on the shopper's behalf once several are enabled.",
-                requiredMode = Schema.RequiredMode.REQUIRED, example = "stripe") String provider
+                requiredMode = Schema.RequiredMode.REQUIRED, example = "stripe") String provider,
+        // Ids only, one per packaging group in the cart — the server reprices them
+        // (docs/packaging/packaging.md D43). Required when anything in the cart needs a
+        // box: an order whose packaging was never chosen is one nobody can pack.
+        @Schema(description = "Chosen box per packaging group, from POST /api/shop/packaging/quote. "
+                + "Required when the cart contains anything that needs packaging.")
+        List<PackagingChoice> packaging
 ) {
+
+    /**
+     * The shape before packaging existed.
+     *
+     * <p>A cart of bars needs no box and so sends no choices, and the seed data and the
+     * older SPA builds never had an opinion either: a record's canonical constructor is
+     * fixed-arity, but its deserialisation is by name, so those bodies keep working. An
+     * order that <em>does</em> contain truffles and omits this is a 400 — see
+     * OrderService.
+     */
+    public PlaceOrderRequest(List<LineItem> items, DeliveryAddress address, String provider) {
+        this(items, address, provider, null);
+    }
     @Schema(description = "Product and quantity pair")
     public record LineItem(
             @Schema(description = "Product ID", example = "1") Long productId,

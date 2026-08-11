@@ -3,8 +3,11 @@ import { useNavigate, Link } from 'react-router';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../auth';
 import { api } from '../api';
-import type { OrderResponse, AddressResponse, DeliveryAddress, ProviderPayload } from '../types';
+import type {
+  OrderResponse, AddressResponse, DeliveryAddress, ProviderPayload, PackagingQuote,
+} from '../types';
 import ErrorBoundary from '../components/ErrorBoundary';
+import PackagingPicker from '../components/packaging/PackagingPicker';
 import PaymentWidget from '../components/payment/PaymentWidget';
 import ProviderSelector from '../components/payment/ProviderSelector';
 import { usePaymentProviders } from '../components/payment/usePaymentProviders';
@@ -29,6 +32,12 @@ function CheckoutInner() {
   const [newAddress, setNewAddress] = useState<DeliveryAddress>({
     recipientName: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '', country: '',
   });
+  // Carries the cart it was computed for, so a quote is never read against a cart it
+  // does not describe: `loading` then falls out of "the answer is for another cart"
+  // rather than needing a setState in the effect body to turn it on.
+  const [packagingState, setPackagingState] = useState<
+    { key: string; quote: PackagingQuote | null; error: string } | null>(null);
+  const [packagingSelection, setPackagingSelection] = useState<Record<number, number>>({});
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { providers, selected: selectedProvider, setSelected: setSelectedProvider, find } =
     usePaymentProviders();
@@ -45,6 +54,64 @@ function CheckoutInner() {
     // Depends on `order` as a whole: the React Compiler infers that from reading two
     // of its properties, and a narrower list here disables optimisation entirely.
   }, [order]);
+
+  // Re-quoted whenever the cart changes: the box count is ceil(units / capacity),
+  // so removing one truffle can remove a whole box and change the price.
+  //
+  // Keyed on the line items rather than the array identity, which is a new object on
+  // every render.
+  const cartKey = items.map(i => `${i.product.id}:${i.quantity}`).join(',');
+
+  useEffect(() => {
+    if (!isAuthenticated || items.length === 0) return;
+    let cancelled = false;
+    const key = cartKey;
+    api.packaging.quote(items.map(i => ({ productId: i.product.id, quantity: i.quantity })))
+      .then(quote => {
+        if (cancelled) return;
+        setPackagingState({ key, quote, error: '' });
+        // The server decides what "no preference" means, and says so with
+        // `default`. Existing choices are kept so re-quoting after a cart edit
+        // does not silently move the shopper back to the free box.
+        setPackagingSelection(prev => {
+          const next: Record<number, number> = {};
+          for (const group of quote.groups) {
+            const stillOffered = group.options.some(o => o.optionId === prev[group.groupId]);
+            next[group.groupId] = stillOffered
+              ? prev[group.groupId]
+              : (group.options.find(o => o.default) ?? group.options[0])?.optionId;
+          }
+          return next;
+        });
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        // Blocking: without a quote there is no way to know whether this order needs
+        // a box, and placing it would be a 400 the shopper cannot act on.
+        setPackagingState({
+          key,
+          quote: null,
+          error: e instanceof Error ? e.message : 'Could not load packaging options',
+        });
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, cartKey]);
+
+  const packagingSettled = packagingState?.key === cartKey;
+  const packagingQuote = packagingSettled ? packagingState!.quote : null;
+  const packagingError = packagingSettled ? packagingState!.error : '';
+  const packagingLoading = isAuthenticated && items.length > 0 && !packagingSettled;
+
+  // What the chosen boxes add. Read off the quote the server sent, never computed
+  // here — the order response's total stays authoritative either way.
+  const packagingTotal = useMemo(() => {
+    if (!packagingQuote?.packagingRequired) return 0;
+    return packagingQuote.groups.reduce((sum, group) => {
+      const chosen = group.options.find(o => o.optionId === packagingSelection[group.groupId]);
+      return sum + (chosen?.total ?? 0);
+    }, 0);
+  }, [packagingQuote, packagingSelection]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -150,6 +217,11 @@ function CheckoutInner() {
   // or failed, and "wait a moment" beats a raw 400 for either.
   const needsProviderChoice = !selectedProvider;
 
+  // A group with no selection blocks the order, because shop rejects it anyway —
+  // better a disabled button than a 400 after the address has been filled in.
+  const needsPackagingChoice = Boolean(packagingQuote?.packagingRequired)
+    && packagingQuote!.groups.some(g => !packagingSelection[g.groupId]);
+
   const handlePlaceOrder = async () => {
     if (!selectedAddress) {
       setError('Please select a delivery address');
@@ -157,6 +229,10 @@ function CheckoutInner() {
     }
     if (needsProviderChoice) {
       setError('Please choose a payment method');
+      return;
+    }
+    if (needsPackagingChoice) {
+      setError('Please choose your packaging');
       return;
     }
     setStep('placing');
@@ -167,6 +243,13 @@ function CheckoutInner() {
         address: selectedAddress,
         // Always set: needsProviderChoice above blocks the click until it is.
         provider: selectedProvider ?? undefined,
+        // Ids only — the server reprices them. Omitted entirely when nothing in the
+        // cart needs a box, which is what shop expects for such an order.
+        packaging: packagingQuote?.packagingRequired
+          ? Object.entries(packagingSelection).map(([groupId, optionId]) => ({
+              groupId: Number(groupId), optionId,
+            }))
+          : undefined,
       });
       setOrder(result);
       clearCart();
@@ -353,7 +436,21 @@ function CheckoutInner() {
                   Shipping to: <strong>{selectedAddress.recipientName}</strong>, {selectedAddress.addressLine1}, {selectedAddress.city}, {selectedAddress.country}
                 </p>
               )}
-              <h2>Total: ${total.toFixed(2)}</h2>
+              <PackagingPicker
+                quote={packagingQuote}
+                loading={packagingLoading}
+                error={packagingError}
+                selection={packagingSelection}
+                onSelect={(groupId, optionId) =>
+                  setPackagingSelection(prev => ({ ...prev, [groupId]: optionId }))}
+                disabled={step === 'placing'}
+              />
+              {packagingTotal > 0 && (
+                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: '4px 0' }}>
+                  Items ${total.toFixed(2)} + packaging ${packagingTotal.toFixed(2)}
+                </p>
+              )}
+              <h2>Total: ${(total + packagingTotal).toFixed(2)}</h2>
               <ProviderSelector
                 providers={providers}
                 selected={selectedProvider}
@@ -363,7 +460,8 @@ function CheckoutInner() {
               {error && <p className="error">{error}</p>}
               <button
                 className="btn btn-primary"
-                disabled={step === 'placing' || !selectedAddress || needsProviderChoice}
+                disabled={step === 'placing' || !selectedAddress || needsProviderChoice
+                  || needsPackagingChoice || packagingLoading}
                 onClick={handlePlaceOrder}
               >
                 {step === 'placing' ? 'Placing Order...' : 'Place Order'}

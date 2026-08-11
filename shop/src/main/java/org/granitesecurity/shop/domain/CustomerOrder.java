@@ -26,6 +26,21 @@ public class CustomerOrder {
      * after the shop moves to CHF.
      */
     private String currency;
+
+    /**
+     * How much of {@code total} is boxes (docs/packaging/packaging.md D42).
+     *
+     * <p>Split out rather than folded into {@code total} silently: without it, a
+     * reconciliation of the line items against the order total stops balancing the
+     * moment a shopper picks a premium box, and nothing says why.
+     *
+     * <p>Zero for an order that needed no packaging, and also for one packed entirely
+     * in free boxes — free is a price, so the charge really is zero even though a box
+     * was used and cost us something. What it cost lives on {@code order_packaging}.
+     */
+    @Column("packaging_total")
+    private BigDecimal packagingTotal;
+
     @Column("created_at")
     private Instant createdAt;
     @Column("updated_at")
@@ -85,6 +100,7 @@ public class CustomerOrder {
         this.status = status;
         this.total = total;
         this.currency = currency;
+        this.packagingTotal = BigDecimal.ZERO;
         this.recipientName = recipientName;
         this.addressLine1 = addressLine1;
         this.addressLine2 = addressLine2;

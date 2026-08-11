@@ -17,6 +17,8 @@ export interface Product {
   // Retired from the catalog: hidden from the storefront listing, kept so
   // existing orders still resolve. Only admin listings ask for these.
   discontinued?: boolean;
+  /** Null when the product needs no packaging — it already arrived in a box. */
+  packagingGroupId?: number | null;
 }
 
 export interface Category {
@@ -46,6 +48,63 @@ export interface OrderResponse {
   /** @deprecated use providerPayload.clientSecret. Server always sends null. */
   clientSecret?: string;
   address?: DeliveryAddress;
+  /** How much of `total` is boxes. Zero when nothing needed packaging. */
+  packagingTotal?: number;
+  /** What the order was packed in — the frozen prices, not today's. */
+  packaging?: OrderPackagingResponse[];
+}
+
+export interface OrderPackagingResponse {
+  groupId: number;
+  groupCode: string;
+  groupName: string;
+  optionId: number;
+  optionCode: string;
+  optionName: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+/**
+ * What boxing a cart would cost, from POST /api/shop/packaging/quote.
+ *
+ * Every number here is the server's — the client never computes a packaging
+ * price, it only sends back the chosen ids.
+ */
+export interface PackagingQuote {
+  packagingRequired: boolean;
+  currency: string;
+  groups: PackagingGroupQuote[];
+}
+
+export interface PackagingGroupQuote {
+  groupId: number;
+  code: string;
+  name: string;
+  description?: string;
+  units: number;
+  options: PackagingOptionQuote[];
+}
+
+export interface PackagingOptionQuote {
+  optionId: number;
+  code: string;
+  name: string;
+  description?: string;
+  imageUrl?: string;
+  capacity: number;
+  /** Boxes needed for this cart: ceil(units / capacity). */
+  packages: number;
+  unitPrice: number;
+  total: number;
+  /** Pre-selected when the shopper expresses no preference. */
+  default: boolean;
+}
+
+export interface PackagingChoice {
+  groupId: number;
+  optionId: number;
 }
 
 export interface RefundInfo {
@@ -114,6 +173,8 @@ export interface CreateProductRequest {
   // discontinued product does not quietly put it back on sale. Send false to
   // restore it, true to retire it.
   discontinued?: boolean;
+  /** Same rule: omitted leaves it alone, 0 clears it, an id sets it. */
+  packagingGroupId?: number | null;
 }
 
 export interface PresignResponse {
@@ -232,6 +293,12 @@ export interface PlaceOrderRequest {
   address: DeliveryAddress;
   /** Omitted while only one provider is enabled; required once several are. */
   provider?: string;
+  /**
+   * One choice per packaging group in the cart. Required when the quote says
+   * `packagingRequired` — the server rejects an order for something that needs a
+   * box and names none.
+   */
+  packaging?: PackagingChoice[];
 }
 
 export interface CartItem {

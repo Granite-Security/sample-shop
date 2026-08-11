@@ -6,15 +6,23 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.granitesecurity.shop.domain.CustomerOrder;
 import org.granitesecurity.shop.domain.OrderItem;
+import org.granitesecurity.shop.domain.OrderPackaging;
+import org.granitesecurity.shop.domain.PackagingGroup;
+import org.granitesecurity.shop.domain.PackagingOption;
 import org.granitesecurity.shop.domain.OrderStatus;
 import org.granitesecurity.shop.domain.OutboxEvent;
 import org.granitesecurity.shop.domain.Product;
 import org.granitesecurity.shop.dto.OrderItemResponse;
+import org.granitesecurity.shop.dto.OrderPackagingResponse;
 import org.granitesecurity.shop.dto.OrderResponse;
+import org.granitesecurity.shop.dto.PackagingChoice;
 import org.granitesecurity.shop.dto.PagedResult;
 import org.granitesecurity.shop.dto.PlaceOrderRequest;
 import org.granitesecurity.shop.repository.CustomerOrderRepository;
 import org.granitesecurity.shop.repository.OrderItemRepository;
+import org.granitesecurity.shop.repository.OrderPackagingRepository;
+import org.granitesecurity.shop.repository.PackagingGroupRepository;
+import org.granitesecurity.shop.repository.PackagingOptionRepository;
 import org.granitesecurity.shop.repository.OutboxRepository;
 import org.granitesecurity.shop.repository.ProductRepository;
 import org.springframework.http.HttpStatus;
@@ -46,6 +54,10 @@ public class OrderService {
     private final OrderItemRepository orderItemRepository;
     private final ProductRepository productRepository;
     private final OutboxRepository outboxRepository;
+    private final PackagingService packagingService;
+    private final OrderPackagingRepository orderPackagingRepository;
+    private final PackagingGroupRepository packagingGroupRepository;
+    private final PackagingOptionRepository packagingOptionRepository;
 
     /**
      * The currency new orders are priced in. Must match payment's shop-currency —
@@ -57,11 +69,19 @@ public class OrderService {
     public OrderService(CustomerOrderRepository customerOrderRepository,
                         OrderItemRepository orderItemRepository,
                         ProductRepository productRepository,
-                        OutboxRepository outboxRepository) {
+                        OutboxRepository outboxRepository,
+                        PackagingService packagingService,
+                        OrderPackagingRepository orderPackagingRepository,
+                        PackagingGroupRepository packagingGroupRepository,
+                        PackagingOptionRepository packagingOptionRepository) {
         this.customerOrderRepository = customerOrderRepository;
         this.orderItemRepository = orderItemRepository;
         this.productRepository = productRepository;
         this.outboxRepository = outboxRepository;
+        this.packagingService = packagingService;
+        this.orderPackagingRepository = orderPackagingRepository;
+        this.packagingGroupRepository = packagingGroupRepository;
+        this.packagingOptionRepository = packagingOptionRepository;
     }
 
     @Transactional
@@ -122,9 +142,34 @@ public class OrderService {
         PlaceOrderRequest.DeliveryAddress addr = request.address();
         String addrLine2 = addr.addressLine2() != null ? addr.addressLine2() : "";
         String state = addr.state() != null ? addr.state() : "";
-        CustomerOrder order = new CustomerOrder(username, OrderStatus.PENDING.name(), total, shopCurrency,
-                addr.recipientName(), addr.addressLine1(), addrLine2, addr.city(), state, addr.zipCode(), addr.country());
-        return Mono.just(new OrderContext(order, items, productMap, request.provider()));
+        BigDecimal itemsTotal = total;
+
+        // Packaging is priced here, from the shopper's chosen option ids and nothing
+        // else they sent (docs/packaging/packaging.md D43). A cart with nothing that
+        // needs a box yields an empty plan and a zero total, and any choices sent with
+        // it are ignored.
+        return packagingService.plan(productMap, request.items(), packagingChoices(request))
+                .map(plan -> {
+                    CustomerOrder order = new CustomerOrder(username, OrderStatus.PENDING.name(),
+                            itemsTotal.add(plan.packagingTotal()), shopCurrency,
+                            addr.recipientName(), addr.addressLine1(), addrLine2, addr.city(), state,
+                            addr.zipCode(), addr.country());
+                    order.setPackagingTotal(plan.packagingTotal());
+                    return new OrderContext(order, items, productMap, request.provider(), plan);
+                });
+    }
+
+    /**
+     * The shopper's box choices, or an empty list rather than null when the request
+     * omits them.
+     *
+     * <p>The distinction matters: null puts PackagingService in quote mode, which
+     * chooses nothing and charges nothing — so an order for truffles that named no
+     * packaging would silently ship in no box. An empty list keeps it in choice mode,
+     * where a group with no choice is the 400 it should be.
+     */
+    private static List<PackagingChoice> packagingChoices(PlaceOrderRequest request) {
+        return request.packaging() == null ? List.of() : request.packaging();
     }
 
     private Mono<OrderResponse> persistOrder(OrderContext ctx) {
@@ -149,12 +194,28 @@ public class OrderService {
                 })
                 .toList();
 
+        // Same transaction as the items and the stock decrement: an order whose boxes
+        // were not recorded is one that cannot be packed or costed, and it must not be
+        // able to commit without them.
+        List<OrderPackaging> packagingRows = ctx.packaging().groups().stream()
+                .filter(group -> group.chosen() != null)
+                .map(group -> new OrderPackaging(
+                        savedOrder.getId(), group.groupId(), group.chosen().optionId(),
+                        group.chosen().packages(),
+                        // Frozen at placement, like OrderItem.unitPrice (D26): repricing a
+                        // box must not reach back into an order that already shipped.
+                        group.chosen().unitPrice(), group.chosen().unitCost()))
+                .toList();
+
         Mono<CustomerOrder> afterSave = orderItemRepository.saveAll(itemsWithOrderId).collectList()
-                .flatMap(savedItems -> Mono.when(stockUpdates).thenReturn(savedOrder));
+                .flatMap(savedItems -> Mono.when(stockUpdates).thenReturn(savedOrder))
+                .flatMap(order -> orderPackagingRepository.saveAll(packagingRows).collectList()
+                        .thenReturn(order));
 
         return afterSave.flatMap(order -> {
             CustomerOrder co = order;
-            OutboxEvent outbox = createOutboxEvent(co, itemsWithOrderId, ctx.provider(), ctx.productMap());
+            OutboxEvent outbox = createOutboxEvent(co, itemsWithOrderId, ctx.provider(), ctx.productMap(),
+                    ctx.packaging());
             // Second row, second topic, same transaction as the order. Not
             // REQUIRES_NEW or NESTED: a notice that can commit while the order rolls
             // back would tell admin about an order that does not exist. "Desirable,
@@ -168,11 +229,12 @@ public class OrderService {
     }
 
     private OutboxEvent createOutboxEvent(CustomerOrder order, List<OrderItem> items, String provider,
-                                          Map<Long, Product> productMap) {
+                                          Map<Long, Product> productMap, PackagingPlan packaging) {
         try {
             Map<Long, BigDecimal> unitCosts = new LinkedHashMap<>();
             productMap.forEach((id, product) -> unitCosts.put(id, product.getUnitCost()));
-            String payload = OBJECT_MAPPER.writeValueAsString(buildPayload(order, items, provider, unitCosts));
+            String payload = OBJECT_MAPPER.writeValueAsString(
+                    buildPayload(order, items, provider, unitCosts, packaging));
             return new OutboxEvent("order", String.valueOf(order.getId()), "OrderPlaced", payload, "PENDING");
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to serialize outbox payload", e);
@@ -205,7 +267,7 @@ public class OrderService {
     }
 
     private Map<String, Object> buildPayload(CustomerOrder order, List<OrderItem> items, String provider,
-                                             Map<Long, BigDecimal> unitCosts) {
+                                             Map<Long, BigDecimal> unitCosts, PackagingPlan packaging) {
         List<Map<String, Object>> itemList = items.stream().map(item -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("productId", item.getProductId());
@@ -238,6 +300,28 @@ public class OrderService {
         payload.put("orderId", order.getId());
         payload.put("username", order.getUsername());
         payload.put("items", itemList);
+        // Codes, not ids: an event that outlives the row it points at has to stay
+        // readable, and a consumer that has never seen our id space can still tell a
+        // PREMIUM box from a FREE one. Absent-as-empty when the order needed none.
+        //
+        // unitCost is here for the same reason it is on the items — a free box still
+        // costs us something, and delivery is where that gets expensed (D44). It is the
+        // only place accounting can learn it, because asking shop later would make the
+        // report depend on a live service.
+        List<Map<String, Object>> packagingList = packaging.groups().stream()
+                .filter(group -> group.chosen() != null)
+                .map(group -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("groupCode", group.code());
+                    m.put("optionCode", group.chosen().code());
+                    m.put("quantity", group.chosen().packages());
+                    m.put("unitPrice", group.chosen().unitPrice());
+                    m.put("unitCost", group.chosen().unitCost());
+                    return m;
+                })
+                .toList();
+        payload.put("packaging", packagingList);
+        payload.put("packagingTotal", order.getPackagingTotal());
         payload.put("total", order.getTotal());
         // Currency travels with the amount: payment must charge what shop priced, not
         // whatever its own config currently says.
@@ -398,17 +482,61 @@ public class OrderService {
     private Mono<OrderResponse> enrichOrder(CustomerOrder order) {
         return orderItemRepository.findByOrderId(order.getId())
                 .collectList()
-                .flatMap(items -> resolveProductNames(items)
-                        .map(nameMap -> toOrderResponse(order, items.stream()
-                                .map(item -> toItemResponse(item, nameMap))
-                                .toList(), null)));
+                .flatMap(items -> buildOrderResponse(order, items, null));
     }
 
     private Mono<OrderResponse> buildOrderResponse(CustomerOrder order, List<OrderItem> items, String clientSecret) {
         return resolveProductNames(items)
-                .map(nameMap -> toOrderResponse(order, items.stream()
-                        .map(item -> toItemResponse(item, nameMap))
-                        .toList(), clientSecret));
+                .zipWith(resolvePackaging(order.getId()))
+                .map(tuple -> toOrderResponse(order, items.stream()
+                        .map(item -> toItemResponse(item, tuple.getT1()))
+                        .toList(), tuple.getT2(), clientSecret));
+    }
+
+    /**
+     * What the order was packed in, with the group and option named rather than
+     * numbered.
+     *
+     * <p>Resolves through the option table even for retired options — that is why they
+     * are deactivated and never deleted: an order has to keep describing the box it
+     * actually shipped in.
+     *
+     * <p>Short-circuits on the empty case, which is most orders: a cart of bars needs
+     * no boxes and should not pay for three queries to be told so.
+     */
+    private Mono<List<OrderPackagingResponse>> resolvePackaging(Long orderId) {
+        return orderPackagingRepository.findByOrderId(orderId)
+                .collectList()
+                .flatMap(rows -> {
+                    if (rows.isEmpty()) {
+                        return Mono.just(List.<OrderPackagingResponse>of());
+                    }
+                    Mono<Map<Long, PackagingGroup>> groups = packagingGroupRepository
+                            .findAllById(rows.stream().map(OrderPackaging::getPackagingGroupId).distinct().toList())
+                            .collectMap(PackagingGroup::getId, Function.identity());
+                    Mono<Map<Long, PackagingOption>> options = packagingOptionRepository
+                            .findAllById(rows.stream().map(OrderPackaging::getPackagingOptionId).distinct().toList())
+                            .collectMap(PackagingOption::getId, Function.identity());
+                    return groups.zipWith(options).map(resolved -> rows.stream()
+                            .map(row -> toPackagingResponse(row, resolved.getT1(), resolved.getT2()))
+                            .toList());
+                });
+    }
+
+    private OrderPackagingResponse toPackagingResponse(OrderPackaging row, Map<Long, PackagingGroup> groups,
+                                                       Map<Long, PackagingOption> options) {
+        PackagingGroup group = groups.get(row.getPackagingGroupId());
+        PackagingOption option = options.get(row.getPackagingOptionId());
+        return new OrderPackagingResponse(
+                row.getPackagingGroupId(),
+                group != null ? group.getCode() : null,
+                group != null ? group.getName() : "Unknown",
+                row.getPackagingOptionId(),
+                option != null ? option.getCode() : null,
+                option != null ? option.getName() : "Unknown",
+                row.getQuantity(),
+                row.getUnitPrice(),
+                row.getUnitPrice().multiply(BigDecimal.valueOf(row.getQuantity())));
     }
 
     private OrderItemResponse toItemResponse(OrderItem item, Map<Long, String> productNames) {
@@ -429,7 +557,8 @@ public class OrderService {
                 .collectMap(Product::getId, Product::getName);
     }
 
-    private OrderResponse toOrderResponse(CustomerOrder order, List<OrderItemResponse> items, String clientSecret) {
+    private OrderResponse toOrderResponse(CustomerOrder order, List<OrderItemResponse> items,
+                                          List<OrderPackagingResponse> packaging, String clientSecret) {
         return new OrderResponse(
                 order.getId(),
                 order.getUsername(),
@@ -452,7 +581,9 @@ public class OrderService {
                         order.getState(),
                         order.getZipCode(),
                         order.getCountry()
-                )
+                ),
+                order.getPackagingTotal() != null ? order.getPackagingTotal() : BigDecimal.ZERO,
+                packaging
         );
     }
 
@@ -463,5 +594,6 @@ public class OrderService {
      *                 which provider a payment ended up on.
      */
     private record OrderContext(CustomerOrder order, List<OrderItem> items,
-                                Map<Long, Product> productMap, String provider) {}
+                                Map<Long, Product> productMap, String provider,
+                                PackagingPlan packaging) {}
 }

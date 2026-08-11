@@ -135,6 +135,8 @@ public class CatalogService {
         product.setMedia(serializeMedia(normalizeDefault(request.media())));
         product.setDiscontinued(Boolean.TRUE.equals(request.discontinued()));
         product.setUnitCost(costOrDefault(request.unitCost(), request.price()));
+        // Null on create simply means "needs no packaging" — most of the catalogue.
+        product.setPackagingGroupId(resolvePackagingGroup(request.packagingGroupId(), null));
         // created_at/updated_at are NOT NULL; R2DBC includes them in the INSERT,
         // bypassing the column defaults, so they must be set explicitly.
         Instant now = Instant.now();
@@ -165,6 +167,8 @@ public class CatalogService {
                     if (request.discontinued() != null) {
                         existing.setDiscontinued(request.discontinued());
                     }
+                    existing.setPackagingGroupId(resolvePackagingGroup(
+                            request.packagingGroupId(), existing.getPackagingGroupId()));
                     existing.setUpdatedAt(Instant.now());
                     return productRepository.save(existing)
                             .flatMap(saved -> announceStockChange(saved, stockBefore, request.stockReason())
@@ -233,6 +237,22 @@ public class CatalogService {
         }
     }
 
+    /**
+     * Applies the three meanings {@code packagingGroupId} carries: null leaves the
+     * existing group alone, {@link CreateProductRequest#CLEAR_PACKAGING_GROUP} removes
+     * it, and anything else sets it.
+     *
+     * <p>Not validated against {@code packaging_group} here — the foreign key does that,
+     * and a duplicated check that can fall out of date with the constraint is worse than
+     * no check.
+     */
+    private static Long resolvePackagingGroup(Long requested, Long existing) {
+        if (requested == null) {
+            return existing;
+        }
+        return requested == CreateProductRequest.CLEAR_PACKAGING_GROUP ? null : requested;
+    }
+
     private static BigDecimal costOrDefault(BigDecimal stated, BigDecimal price) {
         if (stated != null) {
             return stated;
@@ -257,7 +277,8 @@ public class CatalogService {
                 product.getCategoryId(),
                 product.getImageUrl(),
                 deserializeMedia(product.getMedia()),
-                Boolean.TRUE.equals(product.getDiscontinued())
+                Boolean.TRUE.equals(product.getDiscontinued()),
+                product.getPackagingGroupId()
         );
     }
 
