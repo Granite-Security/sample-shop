@@ -215,7 +215,7 @@ class EventConsumerTest {
         private final CustomerOrderRepository repo;
 
         OrderServiceStub(CustomerOrderRepository repo) {
-            super(repo, null, null, null);
+            super(repo, null, null, null, null, null, null, null);
             this.repo = repo;
         }
 

@@ -38,6 +38,17 @@ public class Product {
     private Long categoryId;
     /** Soft-deleted: hidden from listings, still resolvable by id for order history. */
     private Boolean discontinued;
+
+    /**
+     * Which packaging group this product belongs to, or null when it needs no
+     * packaging (docs/packaging/packaging.md D36).
+     *
+     * <p>Null is the answer for anything that already arrives in a box — a gift box
+     * is its own box. Non-null says both "this needs packaging" and "here is what it
+     * can share one with", which is one column rather than two that can disagree.
+     */
+    @Column("packaging_group_id")
+    private Long packagingGroupId;
     @Column("created_at")
     private Instant createdAt;
     @Column("updated_at")

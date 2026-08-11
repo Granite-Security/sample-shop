@@ -14,6 +14,14 @@ public record ProductResponse(
         @Schema(description = "Category ID this product belongs to", example = "1") Long categoryId,
         @Schema(description = "Product image URL", example = "https://picsum.photos/seed/headphones/400/400") String imageUrl,
         @Schema(description = "Gallery/video media attached to the product") List<MediaItem> media,
-        @Schema(description = "Retired from the catalog; hidden from listings but kept for order history", example = "false") boolean discontinued
+        @Schema(description = "Retired from the catalog; hidden from listings but kept for order history", example = "false") boolean discontinued,
+        @Schema(description = "Packaging group, or null when the product needs no packaging "
+                + "(docs/packaging/packaging.md D36)", example = "1") Long packagingGroupId
 ) {
+
+    /** The shape before packaging existed; reads as a product that needs no box. */
+    public ProductResponse(Long id, String name, String description, BigDecimal price, Integer stock,
+                           Long categoryId, String imageUrl, List<MediaItem> media, boolean discontinued) {
+        this(id, name, description, price, stock, categoryId, imageUrl, media, discontinued, null);
+    }
 }

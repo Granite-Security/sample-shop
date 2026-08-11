@@ -3,7 +3,9 @@ import { Link } from 'react-router';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { formatPrice, useShop } from '../store';
-import type { AddressResponse, DeliveryAddress, OrderResponse, ProviderPayload } from '../types';
+import type {
+  AddressResponse, DeliveryAddress, OrderResponse, PackagingQuote, ProviderPayload,
+} from '../types';
 import { ChocolateArt, variantFor } from '../components/ChocolateArt';
 import PaymentWidget from '../components/payment/PaymentWidget';
 import ProviderSelector from '../components/payment/ProviderSelector';
@@ -55,6 +57,12 @@ export function CheckoutPage() {
   const [addresses, setAddresses] = useState<AddressResponse[]>([]);
   const [address, setAddress] = useState<DeliveryAddress>(EMPTY_ADDRESS);
   const [useSaved, setUseSaved] = useState<number | null>(null);
+  // Carries the cart it was computed for, so a quote is never read against a cart it
+  // does not describe — and "loading" falls out of that instead of needing a
+  // setState in the effect body.
+  const [packagingState, setPackagingState] = useState<
+    { key: string; quote: PackagingQuote | null } | null>(null);
+  const [packagingChoice, setPackagingChoice] = useState<Record<number, number>>({});
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { providers, selected: selectedProvider, setSelected: setSelectedProvider, find } =
@@ -175,6 +183,74 @@ export function CheckoutPage() {
   // or failed, and "wait a moment" beats a raw 400 for either.
   const needsProviderChoice = !selectedProvider;
 
+  // Re-quoted whenever the cart changes: box count is ceil(units / capacity), so
+  // removing one truffle can remove a whole box and change the price. Keyed on the
+  // line items rather than the array, which is a new object every render.
+  //
+  // Fallback pieces (negative ids) are left out here for the same reason they are
+  // left out of the order — they exist only client-side.
+  const orderableKey = cart
+    .filter((l) => l.product.id > 0)
+    .map((l) => `${l.product.id}:${l.quantity}`)
+    .join(',');
+
+  useEffect(() => {
+    if (!isAuthenticated || !orderableKey) return;
+    let cancelled = false;
+    const key = orderableKey;
+    api
+      .quotePackaging(
+        orderableKey.split(',').map((pair) => {
+          const [productId, quantity] = pair.split(':');
+          return { productId: Number(productId), quantity: Number(quantity) };
+        }),
+      )
+      .then((quote) => {
+        if (cancelled) return;
+        setPackagingState({ key, quote });
+        // `default` is the server's answer to "shopper expressed no preference".
+        // An existing choice is kept so re-quoting after a cart edit does not
+        // silently move them back to the plain box.
+        setPackagingChoice((prev) => {
+          const next: Record<number, number> = {};
+          for (const group of quote.groups) {
+            const kept = group.options.some((o) => o.optionId === prev[group.groupId]);
+            next[group.groupId] = kept
+              ? prev[group.groupId]
+              : (group.options.find((o) => o.default) ?? group.options[0])?.optionId;
+          }
+          return next;
+        });
+      })
+      .catch(() => {
+        // Quietly: the storefront runs against a fallback catalog when shop is
+        // unreachable, and a packaging error there would be noise about something
+        // the shopper cannot order anyway. placeOrder still refuses a truffle order
+        // with no choice, so nothing gets through unpackaged.
+        if (!cancelled) setPackagingState({ key, quote: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, orderableKey]);
+
+  const packagingSettled = packagingState?.key === orderableKey;
+  const packaging = packagingSettled ? packagingState!.quote : null;
+  const packagingLoading = isAuthenticated && Boolean(orderableKey) && !packagingSettled;
+
+  const packagingTotal = useMemo(() => {
+    if (!packaging?.packagingRequired) return 0;
+    return packaging.groups.reduce((sum, group) => {
+      const chosen = group.options.find((o) => o.optionId === packagingChoice[group.groupId]);
+      return sum + (chosen?.total ?? 0);
+    }, 0);
+  }, [packaging, packagingChoice]);
+
+  // A group with no selection blocks the order, because shop rejects it anyway.
+  const needsPackagingChoice = Boolean(packaging?.packagingRequired)
+    && packaging!.groups.some((g) => !packagingChoice[g.groupId]);
+
   const placeOrder = async () => {
     if (!address.recipientName || !address.addressLine1 || !address.city || !address.zipCode || !address.country) {
       setError('Please complete the delivery address.');
@@ -183,6 +259,10 @@ export function CheckoutPage() {
     // A saved address can predate this list, so the picker alone doesn't cover it.
     if (!isShippable(address.country)) {
       setError(`We currently ship to ${SHIPPING_COUNTRIES.join(', ')} only.`);
+      return;
+    }
+    if (needsPackagingChoice) {
+      setError('Please choose how your pieces should be boxed.');
       return;
     }
     if (needsProviderChoice) {
@@ -200,6 +280,13 @@ export function CheckoutPage() {
         address,
         // Always set: needsProviderChoice above blocks the click until it is.
         provider: selectedProvider ?? undefined,
+        // Ids only — the server reprices them. Omitted when nothing needs a box.
+        packaging: packaging?.packagingRequired
+          ? Object.entries(packagingChoice).map(([groupId, optionId]) => ({
+              groupId: Number(groupId),
+              optionId,
+            }))
+          : undefined,
       });
       setOrder(result);
       clearCart();
@@ -359,9 +446,15 @@ export function CheckoutPage() {
                   </li>
                 ))}
               </ul>
+              {packagingTotal > 0 && (
+                <p className="mt-4 flex justify-between text-sm text-cocoa/70">
+                  <span>Packaging</span>
+                  <span>{formatPrice(packagingTotal)}</span>
+                </p>
+              )}
               <p className="mt-4 flex justify-between font-display text-xl text-cocoa">
                 <span>Total</span>
-                <span>{formatPrice(cartTotal)}</span>
+                <span>{formatPrice(cartTotal + packagingTotal)}</span>
               </p>
               {fallbackItems.length > 0 && (
                 <p className="mt-3 text-sm text-terracotta">
@@ -482,6 +575,66 @@ export function CheckoutPage() {
               )}
             </section>
 
+            {/* packaging — rendered only when something in the cart needs a box */}
+            {packaging?.packagingRequired && (
+              <section aria-label="Packaging">
+                <h2 className="font-display text-[22px] text-cocoa">Presentation</h2>
+                {packaging.groups.map((group) => (
+                  <div key={group.groupId} className="mt-4">
+                    {/* Named only when there is more than one group to tell apart. */}
+                    {packaging.groups.length > 1 && (
+                      <p className="text-sm text-cocoa/70">
+                        {group.name} · {group.units} {group.units === 1 ? 'piece' : 'pieces'}
+                      </p>
+                    )}
+                    <div className="mt-2 space-y-2">
+                      {group.options.map((option) => (
+                        <label
+                          key={option.optionId}
+                          className={`flex cursor-pointer items-start gap-3 border px-4 py-3 transition-colors ${
+                            packagingChoice[group.groupId] === option.optionId
+                              ? 'border-cocoa bg-cocoa/5'
+                              : 'border-cocoa/15 hover:border-cocoa/40'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name={`packaging-${group.groupId}`}
+                            checked={packagingChoice[group.groupId] === option.optionId}
+                            disabled={step === 'placing'}
+                            onChange={() =>
+                              setPackagingChoice((prev) => ({
+                                ...prev,
+                                [group.groupId]: option.optionId,
+                              }))
+                            }
+                            className="mt-1"
+                          />
+                          <span className="flex-1">
+                            <span className="flex justify-between text-cocoa">
+                              <span>{option.name}</span>
+                              {/* Zero reads as "included", not "0.00": the box exists and is
+                                  being given, which a number does not say. */}
+                              <span>{option.total > 0 ? formatPrice(option.total) : 'Included'}</span>
+                            </span>
+                            {option.description && (
+                              <span className="mt-1 block text-sm text-cocoa/60">
+                                {option.description}
+                              </span>
+                            )}
+                            <span className="mt-1 block text-xs text-cocoa/50">
+                              {option.packages} {option.packages === 1 ? 'box' : 'boxes'} · holds{' '}
+                              {option.capacity}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </section>
+            )}
+
             <ProviderSelector
               providers={providers}
               selected={selectedProvider}
@@ -496,11 +649,14 @@ export function CheckoutPage() {
             )}
 
             <button
-              disabled={step === 'placing' || liveItems.length === 0 || needsProviderChoice}
+              disabled={step === 'placing' || liveItems.length === 0 || needsProviderChoice
+                || needsPackagingChoice || packagingLoading}
               onClick={placeOrder}
               className="w-full bg-cocoa py-4 text-xs uppercase tracking-[0.2em] text-ivory transition-colors duration-300 hover:bg-espresso disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {step === 'placing' ? 'Placing Order…' : `Place Order — ${formatPrice(cartTotal)}`}
+              {step === 'placing'
+                ? 'Placing Order…'
+                : `Place Order — ${formatPrice(cartTotal + packagingTotal)}`}
             </button>
           </div>
         )}

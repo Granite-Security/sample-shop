@@ -43,7 +43,7 @@ commit while the order rolls back would announce an order that does not exist.
 
 | Topic | Direction | Event | Fields that matter |
 |-------|-----------|-------|--------------------|
-| `orders.events` | out | `OrderPlaced` | `eventType`, `orderId` (also the Kafka key), `provider` — which payment provider must handle it, never null |
+| `orders.events` | out | `OrderPlaced` | `eventType`, `orderId` (also the Kafka key), `provider` — which payment provider must handle it, never null; `packaging[]` + `packagingTotal` (empty when nothing needed a box) |
 | `orders.events` | out | `RefundRequested` | `orderId`, `eventType` |
 | `orders.events` | out | `OrdersPurged` | `orderIds` (plural), `eventType`; keyed by **username**, not order id |
 | `shop.notifications` | out | `OrderPlacedNotice` | `username` — that is the whole point of it; `orderId` and `occurredAt` are for profile's dedupe and staleness guard, not for display |
@@ -56,6 +56,12 @@ the tagged types — which meant any type they did not know was processed as an
 order and logged as a malformed one. Consumers still treat an absent `eventType`
 as `OrderPlaced` so nothing published before the change is lost; that tolerance
 comes out once no untagged message can be in flight or PENDING in the outbox.
+
+`OrderPlaced.packaging` names the group and option by **code**, not by id, and
+carries frozen `unitPrice` and `unitCost` per box (`docs/packaging/packaging.md`
+D42). Codes because an event outlives the row it points at, and the cost because
+a free box still costs us something — delivery is where accounting expenses it,
+and asking shop later would make the report depend on a live service.
 
 `OrdersPurged` is keyed by username while everything else is keyed by order id,
 so it is not ordered against that user's own `OrderPlaced`.

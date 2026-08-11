@@ -261,6 +261,7 @@ config so revising it is not a migration (D21).
 | **Cost of goods** | `product.unit_cost`, defaulting to **50% of price** | A 50% gross margin before everything else. Weighted average cost (§14.1) |
 | **Processor fee** | **3% + CHF 0.30** per Stripe/PayPal payment | Not on balance-funded orders — no processor is involved (§2.9) |
 | **Shipping** | **CHF 1.00 per order**, cost only | We do not charge customers for it yet (§2.10) |
+| **Packaging** | `order_packaging.unit_cost × quantity`, **measured, not assumed** | The one line here that is a real number: it is frozen on the order and on `OrderPlaced` (§2.11) |
 | **Depreciation** | CHF 5,000 equipment, **10 years straight line**, nil residual | CHF 500/year, CHF 41.67/month (§14.3) |
 
 A CHF 60 order paid by card, in full:
@@ -277,6 +278,11 @@ A CHF 60 order paid by card, in full:
 The same order paid from balance earns **CHF 29.00** — no processor is involved, so the fee is
 zero. That is a real business observation and it falls straight out of the posting rules: paying
 with balance is cheaper for us than a card.
+
+The packaging line is the exception to "each is a stated assumption": every other row is a rule
+we chose, but a box has a price we paid for it, and the order says which box it was. It is
+therefore the only cost line that does not need revising when the assumption behind it is
+questioned.
 
 ### 2.9 Settlement: processor cash is cash
 
@@ -308,6 +314,43 @@ sits in the period of its revenue.
 If we ever charge for shipping, that changes: a delivery service the customer pays for is
 generally a separate performance obligation under IFRS 15, recognised as it is provided, and the
 order total has to be allocated between goods and shipping. Not today.
+
+### 2.11 Packaging is part of the goods, not a second obligation
+
+We *do* charge for packaging — CHF 6.00 for a premium gift box — so unlike shipping it is not
+free, and the question of whether it is a separate performance obligation has to be answered
+rather than dodged.
+
+It is not one. The box is not a good the customer could have bought or benefited from on its
+own: it is not distinct within the contract (IFRS 15.27(b)), because its only purpose is to
+deliver the chocolates in it and it is transferred in the same moment they are. So the packaging
+charge is **part of the transaction price of the goods**, recognised as goods revenue on delivery
+with everything else on the order. There is no packaging revenue account and no allocation to
+make.
+
+The **cost** of the box is a fulfilment cost, expensed at delivery alongside COGS and the CHF 1.00
+shipping — the same treatment, for the same reason: the whole cost of a sale belongs in the period
+of its revenue.
+
+The free box is what makes the cost line necessary rather than convenient. `FREE` charges CHF 0.00
+and costs CHF 0.40, so a shop that derived box cost from box price would record nothing at all for
+the majority of orders. That is why `packaging_option.unit_cost` is a stored column and why it is
+frozen onto `order_packaging` and `OrderPlaced` at placement (D26) — repricing a box must not
+change what an order that already shipped cost us.
+
+A CHF 60 order of truffles in a premium box, paid by card:
+
+```
+ revenue                    72.00     60.00 goods + 12.00 packaging, one revenue line
+ cost of goods             −30.00     50% of the goods price
+ packaging                  −4.40     2 boxes × 2.20
+ processor fee              −2.46     3% × 72 + 0.30
+ shipping                   −1.00
+                          ────────
+ gross profit               34.14     47.4%
+```
+
+Full details in `docs/packaging/packaging.md`.
 
 ---
 
@@ -349,6 +392,7 @@ order total has to be allocated between goods and shipping. Not today.
 | D33 | **The books open with a stated balance sheet** (§14.2): CHF 1,000 bank, CHF 5,000 equipment, inventory at cost, and owner's capital as the plug. |
 | D34 | **Manual journals exist and are the one exception to D20's read-only rule** — `ROLE_ADMIN` or `ROLE_MANAGER`, audited, append-only, corrections by reversal (§15). |
 | D35 | **Staff expenses create a payable to a named person** (`2600`, with a `party` on the line), settled from the bank — `accounting` never credits anyone's platform balance (§15.3). |
+| D44 | **Packaging is not a distinct performance obligation** (IFRS 15.27(b)): the charge is part of the goods' transaction price and recognised with them on delivery; the box cost is a fulfilment cost expensed at delivery, measured from the frozen `unit_cost` (§2.11). |
 | D27 | **Accounting only consumes outbox-backed topics.** `identity.events` is deliberately lossy (`finance.md`, auth-server: fire-and-forget, no outbox). **A general ledger cannot consume a lossy topic** (§16.1). |
 
 ---

@@ -6,6 +6,7 @@ import { contactApi } from './api/contact';
 import { deliveryApi } from './api/delivery';
 import { messagesApi } from './api/messages';
 import { ordersApi } from './api/orders';
+import { packagingApi } from './api/packaging';
 import { paymentsApi } from './api/payments';
 import { profileApi } from './api/profile';
 import { reportsApi } from './api/reports';
@@ -20,6 +21,7 @@ export const api = {
   catalog: catalogApi,
   contact: contactApi,
   orders: ordersApi,
+  packaging: packagingApi,
   payments: paymentsApi,
   profile: profileApi,
   reports: reportsApi,

@@ -6,6 +6,7 @@ import type {
   OrderResponse,
   DeliveryResponse,
   PlaceOrderRequest,
+  PackagingQuote,
   CreatePaymentIntentResponse,
   PaymentProviderInfo,
   AddressResponse,
@@ -175,6 +176,15 @@ export const api = {
   // Orders + payment — same flow as ui-shop's checkout.
   placeOrder: (body: PlaceOrderRequest) =>
     request<OrderResponse>('/api/shop/orders', { method: 'POST', body: JSON.stringify(body) }),
+
+  // Prices every box option for a cart. Read-only — nothing is stored, so it is
+  // safe to re-ask whenever the cart changes. A POST because the cart is the
+  // question, and a cart does not fit in a query string.
+  quotePackaging: (items: { productId: number; quantity: number }[]) =>
+    request<PackagingQuote>('/api/shop/packaging/quote', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    }),
 
   getOrders: (page = 0, size = 20) =>
     request<PagedResult<OrderResponse>>(`/api/shop/orders?page=${page}&size=${size}`),

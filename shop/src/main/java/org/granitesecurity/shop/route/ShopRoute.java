@@ -11,6 +11,8 @@ import org.granitesecurity.shop.handler.AdminRevenueHandler;
 import org.granitesecurity.shop.handler.CatalogHandler;
 import org.granitesecurity.shop.handler.GreetingsHandler;
 import org.granitesecurity.shop.handler.OrderHandler;
+import org.granitesecurity.shop.handler.PackagingAdminHandler;
+import org.granitesecurity.shop.handler.PackagingHandler;
 import org.granitesecurity.shop.handler.UserOrderHandler;
 import org.springdoc.core.annotations.RouterOperation;
 import org.springdoc.core.annotations.RouterOperations;
@@ -144,6 +146,27 @@ public class ShopRoute {
             beanMethod = "getRevenueCurrencies"
         ),
         @RouterOperation(
+            path = "/api/shop/packaging/quote",
+            method = RequestMethod.POST,
+            beanClass = PackagingHandler.class,
+            beanMethod = "quote",
+            operation = @Operation(
+                requestBody = @RequestBody(content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE))
+            )
+        ),
+        @RouterOperation(
+            path = "/api/shop/admin/packaging/groups",
+            method = RequestMethod.GET,
+            beanClass = PackagingAdminHandler.class,
+            beanMethod = "listGroups"
+        ),
+        @RouterOperation(
+            path = "/api/shop/admin/packaging/options",
+            method = RequestMethod.GET,
+            beanClass = PackagingAdminHandler.class,
+            beanMethod = "listOptions"
+        ),
+        @RouterOperation(
             path = "/api/shop/users/{username}/orders",
             method = RequestMethod.GET,
             beanClass = UserOrderHandler.class,
@@ -155,7 +178,9 @@ public class ShopRoute {
             CatalogHandler catalogHandler,
             OrderHandler orderHandler,
             UserOrderHandler userOrderHandler,
-            AdminRevenueHandler adminRevenueHandler) {
+            AdminRevenueHandler adminRevenueHandler,
+            PackagingHandler packagingHandler,
+            PackagingAdminHandler packagingAdminHandler) {
         return RouterFunctions.route()
                 .GET("/api/shop/greetings", greetingsHandler::respondWithGreeting)
 
@@ -182,10 +207,31 @@ public class ShopRoute {
                 .GET("/api/shop/internal/orders/owners", userOrderHandler::listOrderOwners)
                 .POST("/api/shop/internal/orders/unknown", userOrderHandler::findUnknownOrderIds)
 
-                // Admin — reports. Read-only: nothing under /admin has a side effect
-                // (docs/finance/accounting.md D20)
+                // Packaging — authenticated. A POST because the cart is the question,
+                // and a cart does not fit in a query string. Nothing is stored: it
+                // prices boxes for a cart that may never become an order.
+                .POST("/api/shop/packaging/quote", packagingHandler::quote)
+
+                // Admin — reports. Read-only: nothing under /admin/revenue has a side
+                // effect (docs/finance/accounting.md D20). The packaging routes below
+                // do write, which is why the read-only rule is stated per-subtree here
+                // rather than for /admin as a whole.
                 .GET("/api/shop/admin/revenue", adminRevenueHandler::getRevenue)
                 .GET("/api/shop/admin/revenue/currencies", adminRevenueHandler::getRevenueCurrencies)
+
+                // Admin — packaging (docs/packaging/packaging.md step 7)
+                .GET("/api/shop/admin/packaging/groups", packagingAdminHandler::listGroups)
+                .POST("/api/shop/admin/packaging/groups", packagingAdminHandler::createGroup)
+                .PUT("/api/shop/admin/packaging/groups/{id}", packagingAdminHandler::updateGroup)
+                .GET("/api/shop/admin/packaging/options", packagingAdminHandler::listOptions)
+                .POST("/api/shop/admin/packaging/options", packagingAdminHandler::createOption)
+                .PUT("/api/shop/admin/packaging/options/{id}", packagingAdminHandler::updateOption)
+                // Capacity belongs to the pairing, so it is addressed under the group
+                // and names the option — never under the option alone, which has no
+                // capacity of its own.
+                .PUT("/api/shop/admin/packaging/groups/{id}/options", packagingAdminHandler::setCapacity)
+                .DELETE("/api/shop/admin/packaging/groups/{id}/options/{optionId}",
+                        packagingAdminHandler::removeCapacity)
 
                 // Admin — products
                 .POST("/api/shop/products", catalogHandler::createProduct)

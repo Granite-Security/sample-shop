@@ -20,6 +20,8 @@ export interface Product {
   // Retired from the catalog. The storefront listing never returns these, so
   // only the back of house (which asks for them explicitly) sees it set.
   discontinued?: boolean;
+  /** Null when the product needs no packaging — it already arrived in a box. */
+  packagingGroupId?: number | null;
 }
 
 export interface Category {
@@ -78,6 +80,63 @@ export interface OrderResponse {
   provider?: string;
   providerPayload?: ProviderPayload;
   address?: DeliveryAddress;
+  /** How much of `total` is boxes. Zero when nothing needed packaging. */
+  packagingTotal?: number;
+  /** What the order was packed in — the frozen prices, not today's. */
+  packaging?: OrderPackagingResponse[];
+}
+
+export interface OrderPackagingResponse {
+  groupId: number;
+  groupCode: string;
+  groupName: string;
+  optionId: number;
+  optionCode: string;
+  optionName: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+/**
+ * What boxing a cart would cost, from POST /api/shop/packaging/quote.
+ *
+ * Every number here is the server's — the client never computes a packaging
+ * price, it only sends back the chosen ids.
+ */
+export interface PackagingQuote {
+  packagingRequired: boolean;
+  currency: string;
+  groups: PackagingGroupQuote[];
+}
+
+export interface PackagingGroupQuote {
+  groupId: number;
+  code: string;
+  name: string;
+  description?: string;
+  units: number;
+  options: PackagingOptionQuote[];
+}
+
+export interface PackagingOptionQuote {
+  optionId: number;
+  code: string;
+  name: string;
+  description?: string;
+  imageUrl?: string;
+  capacity: number;
+  /** Boxes needed for this cart: ceil(units / capacity). */
+  packages: number;
+  unitPrice: number;
+  total: number;
+  /** Pre-selected when the shopper expresses no preference. */
+  default: boolean;
+}
+
+export interface PackagingChoice {
+  groupId: number;
+  optionId: number;
 }
 
 /**
@@ -130,6 +189,12 @@ export interface PlaceOrderRequest {
   address: DeliveryAddress;
   /** Omitted while only one provider is enabled; required once several are. */
   provider?: string;
+  /**
+   * One choice per packaging group in the cart. Required when the quote says
+   * `packagingRequired` — the server rejects an order for something that needs a
+   * box and names none.
+   */
+  packaging?: PackagingChoice[];
 }
 
 export interface CreatePaymentIntentResponse {

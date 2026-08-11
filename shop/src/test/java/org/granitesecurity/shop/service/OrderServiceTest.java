@@ -7,8 +7,12 @@ import org.granitesecurity.shop.domain.Product;
 import org.granitesecurity.shop.dto.PlaceOrderRequest;
 import org.granitesecurity.shop.repository.CustomerOrderRepository;
 import org.granitesecurity.shop.repository.OrderItemRepository;
+import org.granitesecurity.shop.repository.OrderPackagingRepository;
+import org.granitesecurity.shop.repository.PackagingGroupRepository;
+import org.granitesecurity.shop.repository.PackagingOptionRepository;
 import org.granitesecurity.shop.repository.OutboxRepository;
 import org.granitesecurity.shop.repository.ProductRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -25,6 +29,7 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -42,11 +47,35 @@ class OrderServiceTest {
     @Mock
     private OutboxRepository outboxRepository;
 
+    @Mock
+    private PackagingService packagingService;
+
+    @Mock
+    private OrderPackagingRepository orderPackagingRepository;
+
+    @Mock
+    private PackagingGroupRepository packagingGroupRepository;
+
+    @Mock
+    private PackagingOptionRepository packagingOptionRepository;
+
     @Captor
     private ArgumentCaptor<OutboxEvent> outboxCaptor;
 
     @InjectMocks
     private OrderService orderService;
+
+    /**
+     * Nothing in these carts needs a box, which is what an empty plan means. Stubbed
+     * lenient because the tests that reject an order never reach the packaging step.
+     */
+    @BeforeEach
+    void noPackagingNeeded() {
+        lenient().when(packagingService.plan(any(), any(), any()))
+                .thenReturn(Mono.just(PackagingPlan.empty()));
+        lenient().when(orderPackagingRepository.saveAll(anyList())).thenReturn(Flux.empty());
+        lenient().when(orderPackagingRepository.findByOrderId(any())).thenReturn(Flux.empty());
+    }
 
     private static final PlaceOrderRequest.DeliveryAddress ADDRESS = new PlaceOrderRequest.DeliveryAddress(
             "Alice Smith", "123 Main St", null, "Springfield", "IL", "62701", "USA");

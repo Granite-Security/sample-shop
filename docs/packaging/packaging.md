@@ -1,6 +1,7 @@
 # Packaging — implementation plan
 
-**Status:** proposed, unbuilt. All of it lives in `shop`. No new microservice.
+**Status:** built, steps 1–9. Unverified against the cluster — §5 is the check list.
+All of it lives in `shop` (plus the two SPAs and one accounting decision). No new microservice.
 
 ---
 
@@ -57,7 +58,7 @@ total. `FREE` is pre-selected.
 
 Each step is one PR off `main`.
 
-### Step 1 — schema and seed (`shop`)
+### Step 1 — schema and seed (`shop`) — built
 
 Three changelogs plus three `include` entries in `db.changelog-master.yaml`. House pattern:
 `--liquibase formatted sql`, `--preconditions onFail:MARK_RAN`, a `--rollback` per changeset.
@@ -143,12 +144,14 @@ WHERE name IN ('Sea Salt Caramel Truffles',
 Everything else stays NULL. In particular `Truffle Collection Box`, `The Signature Gift Box` and
 `Espresso Ganache Collection` are already packaged and must not be caught by a pattern match.
 
+Built as `015-add-packaging.sql`, `016-seed-packaging.sql` and
+`017-assign-truffle-packaging.sql`, each changeset guarded and with a `--rollback`.
 Revise these three freely **before** they are first applied. After that Liquibase checksums them
 and `shop` refuses to start if they change — see §6.
 
 ---
 
-### Step 2 — domain and repositories (`shop`)
+### Step 2 — domain and repositories (`shop`) — built
 
 `domain/`: `PackagingGroup`, `PackagingOption`, `PackagingGroupOption`, `OrderPackaging` —
 `@Table`, `@Data`, `@Column` for snake_case, matching `Product`/`OrderItem`.
@@ -165,7 +168,7 @@ Liquibase and the admin endpoint (step 7).
 
 ---
 
-### Step 3 — `PackagingService` (`shop`)
+### Step 3 — `PackagingService` (`shop`) — built
 
 One class, one public entry point used by both the quote endpoint and `OrderService`:
 
@@ -187,7 +190,7 @@ Rules:
 
 ---
 
-### Step 4 — quote endpoint (`shop`)
+### Step 4 — quote endpoint (`shop`) — built
 
 `POST /api/shop/packaging/quote`, authenticated. `PackagingHandler` + `ShopRoute` entry +
 `ShopSec` `.pathMatchers(HttpMethod.POST, "/api/shop/packaging/quote").authenticated()`.
@@ -223,7 +226,7 @@ the lowest `sort_order` active option — the server decides what "shopper did n
 
 ---
 
-### Step 5 — checkout (`shop`)
+### Step 5 — checkout (`shop`) — built
 
 `PlaceOrderRequest` gains an optional component, added via a second constructor delegating to
 the canonical one (same move `CreateProductRequest` made for `unitCost`):
@@ -252,7 +255,7 @@ copied from the option at this moment.
 
 ---
 
-### Step 6 — `OrderPlaced` (`shop`)
+### Step 6 — `OrderPlaced` (`shop`) — built
 
 `OrderService.buildPayload` gains, alongside `items`:
 
@@ -268,7 +271,7 @@ map and branch on `eventType`, so `payment`, `delivery` and `profile` need no ch
 
 ---
 
-### Step 7 — admin (`shop`)
+### Step 7 — admin (`shop`) — built
 
 - `CreateProductRequest` gains nullable `packagingGroupId`; null on update means "leave alone"
   (as with `discontinued`). `ProductResponse` exposes it.
@@ -278,7 +281,7 @@ map and branch on `eventType`, so `payment`, `delivery` and `profile` need no ch
 
 ---
 
-### Step 8 — checkout UI (`ui-shop`, then `ui-demo`)
+### Step 8 — checkout UI (`ui-shop`, then `ui-demo`) — built
 
 Step between cart and address:
 
@@ -292,11 +295,14 @@ Step between cart and address:
 
 ---
 
-### Step 9 — accounting (`accounting`, after its steps 3–10)
+### Step 9 — accounting — doc written; the service consumes it after its steps 3–10
 
 `order_packaging.unit_cost × quantity` is a fulfilment cost, expensed at delivery alongside COGS
 and the CHF 1.00 shipping. The packaging charge is part of goods revenue — no new revenue
-account. Add D44 to `accounting.md` §3 and the cost line to §2.8.
+account.
+
+Written up in `accounting.md` as §2.11, D44 and a fifth row in the §2.8 cost table. Nothing in
+the `accounting` service reads `OrderPlaced.packaging` yet; it lands there with its step 5.
 
 `FREE` is why `unit_cost` is stored and not derived: it charges 0.00 and costs 0.40.
 
