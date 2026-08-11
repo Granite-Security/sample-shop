@@ -72,6 +72,29 @@ that topic.
 Transitions are validated against a whitelist in `OrderStatus`; an illegal one
 is rejected, not silently applied.
 
+## Catalogue data, and what survives a namespace delete
+
+The catalogue is Liquibase-seeded, so a rebuilt cluster comes back with the real
+products: `002` (generic + Food & Sweets), `019` (the SI Chocolate range),
+`016`/`017`/`018` (packaging and which products need it).
+
+`019` exists because the eight placeholders `005` seeded were later renamed and
+repriced in place through the admin UI. Liquibase had no idea — `005` is recorded
+as applied — so a rebuild would have restored the placeholder names and silently
+lost every real product. **Anything created or edited through the admin UI lives
+only in the running database until a changelog captures it.** Before deleting the
+namespace, diff what is live against the seeds:
+
+```bash
+kubectl -n granite exec -i deploy/postgres-shop -- psql -U myuser -d shopdb   -c "SELECT id, name, price, stock, packaging_group_id FROM product ORDER BY id"
+```
+
+**Product images are not covered by any of this.** `product.media` holds URLs on
+`media.granite-security.org`, served by garage from `garage-pvc` — a `local-path`
+volume whose reclaim policy is `Delete`. Deleting the namespace destroys the
+photographs, and the seeded rows come back pointing at URLs that 404. Back the
+bucket up separately first.
+
 ## Configuration
 
 | Variable | Purpose |

@@ -141,8 +141,25 @@ WHERE name IN ('Sea Salt Caramel Truffles',
                'Pistachio & Rose Praline');
 ```
 
-Everything else stays NULL. In particular `Truffle Collection Box`, `The Signature Gift Box` and
-`Espresso Ganache Collection` are already packaged and must not be caught by a pattern match.
+Everything else stays NULL. `Truffle Collection Box` and `The Signature Gift Box` are already
+packaged and must not be caught by a pattern match.
+
+The list is explicit in both directions, which is the whole argument against deriving membership
+from the name: `Truffle Collection Box` contains "Truffle" and needs no box, while `Espresso
+Ganache Collection` contains neither "truffle" nor "praline" and is one. No pattern gets both
+right, and the cost of being wrong is either a box around a box or a loose piece shipped
+unprotected.
+
+**`017` matched almost nothing in the live catalogue** — its names came from
+`005-seed-choco-products.sql`, but the SI Chocolate range was created through the admin UI with
+entirely different ones, and the single match sits in a category the sichocolate storefront
+filters out. The result was a storefront where no truffle needed a box and the picker never
+appeared. Corrected by `018-assign-si-truffles.sql`. Check the assignment against the real
+`product` rows, not against a seed changelog:
+
+```sql
+SELECT id, name, packaging_group_id FROM product ORDER BY id;
+```
 
 Built as `015-add-packaging.sql`, `016-seed-packaging.sql` and
 `017-assign-truffle-packaging.sql`, each changeset guarded and with a `--rollback`.
@@ -330,7 +347,7 @@ HTTP checks go through the gateway with a bearer token from the SPA login.
 | # | After | Check | Expect |
 |---|---|---|---|
 | 1 | 1 | `\d product`, `\d order_packaging` | columns and constraints present |
-| 2 | 1 | `SELECT name, packaging_group_id FROM product ORDER BY 1` | 3 truffle rows set; `Truffle Collection Box`, `The Signature Gift Box` NULL |
+| 2 | 1 | `SELECT name, packaging_group_id FROM product ORDER BY 1` | every truffle **actually on sale** is set — not just the names in `017`; `Truffle Collection Box` NULL |
 | 3 | 1 | `SELECT code, price, unit_cost, active FROM packaging_option` | `FREE` 0.00/0.40, `PREMIUM` 6.00/2.20, both active |
 | 4 | 4 | quote a cart of bars only | `packagingRequired: false`, `groups: []` |
 | 5 | 4 | quote 13 truffles | both options, `packages: 2`; `FREE` total 0.00 and `default: true`; `PREMIUM` total 12.00 |
