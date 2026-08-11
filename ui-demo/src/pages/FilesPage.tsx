@@ -83,15 +83,46 @@ export function FilesPage() {
           Uploaded files are public — anyone with the link can open them. Don't upload sensitive documents here.
         </p>
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={ALLOWED_FILE_TYPES.join(',')}
-          onChange={handleFileSelected}
-          disabled={uploading}
-          className="mt-4 text-sm text-cocoa/70"
-        />
-        {uploading && <p className="mt-2 text-sm text-cocoa/60">Uploading…</p>}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          {/* Hidden but focusable, so the label beside it acts as a real button
+              for mouse and keyboard alike. peer-* needs them to stay siblings. */}
+          <input
+            id="file-upload"
+            ref={fileInputRef}
+            type="file"
+            accept={ALLOWED_FILE_TYPES.join(',')}
+            onChange={handleFileSelected}
+            disabled={uploading}
+            className="peer sr-only"
+          />
+          <label
+            htmlFor="file-upload"
+            className={`inline-flex cursor-pointer items-center gap-2 border border-cocoa/30 bg-ivory px-6 py-3 text-xs uppercase tracking-[0.18em] text-cocoa transition-colors duration-300 hover:border-cocoa hover:bg-cocoa hover:text-ivory peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-gold ${
+              uploading ? 'pointer-events-none opacity-40' : ''
+            }`}
+          >
+            {uploading ? (
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" className="opacity-25" />
+                <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            )}
+            {uploading ? 'Uploading…' : 'Choose a file'}
+          </label>
+          <span className="text-[11px] uppercase tracking-wide text-cocoa/40">
+            JPG, PNG, WEBP, PDF or TXT
+          </span>
+        </div>
         {fileError && (
           <p className="mt-2 border-l-2 border-terracotta bg-terracotta/10 px-4 py-3 text-sm text-terracotta">
             {fileError}

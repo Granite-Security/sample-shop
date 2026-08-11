@@ -41,6 +41,7 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
+import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.DefaultRedirectStrategy;
@@ -60,6 +61,7 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
@@ -302,6 +304,18 @@ public class SecurityConfig {
         };
     }
 
+    /**
+     * Every client's access token lives 15 minutes rather than the framework's
+     * 5. The SPAs renew silently and retry a 401 once, so 5 was survivable, but
+     * it put a renewal in the middle of any admin form that took a moment to
+     * fill in. Everything else here is the framework default — notably the
+     * 60-minute, reused (non-rotating) refresh token, which is what actually
+     * caps a session's length.
+     */
+    private static final TokenSettings TOKEN_SETTINGS = TokenSettings.builder()
+            .accessTokenTimeToLive(Duration.ofMinutes(15))
+            .build();
+
     @Bean
     public RegisteredClientRepository registeredClientRepository() {
         RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
@@ -320,6 +334,7 @@ public class SecurityConfig {
                 // First-party client: no consent screen, the requested scopes
                 // (openid/profile/email) are granted on login.
                 .clientSettings(ClientSettings.builder().requireAuthorizationConsent(false).build())
+                .tokenSettings(TOKEN_SETTINGS)
                 .build();
 
         // Two SPA clients, not one client with two redirect URIs: each domain's
@@ -340,6 +355,7 @@ public class SecurityConfig {
                         .requireAuthorizationConsent(false)
                         .requireProofKey(true)
                         .build())
+                .tokenSettings(TOKEN_SETTINGS)
                 .build();
 
         RegisteredClient spaClientChocolate = RegisteredClient.withId(UUID.randomUUID().toString())
@@ -356,6 +372,7 @@ public class SecurityConfig {
                         .requireAuthorizationConsent(false)
                         .requireProofKey(true)
                         .build())
+                .tokenSettings(TOKEN_SETTINGS)
                 .build();
 
         RegisteredClient externalClient = RegisteredClient.withId(UUID.randomUUID().toString())
@@ -364,6 +381,7 @@ public class SecurityConfig {
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
                 .scope(OidcScopes.OPENID)
+                .tokenSettings(TOKEN_SETTINGS)
                 .build();
 
         // Used by profile to mint a service-to-service token for calling
@@ -374,6 +392,7 @@ public class SecurityConfig {
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
                 .scope("internal")
+                .tokenSettings(TOKEN_SETTINGS)
                 .build();
 
         // Deliberately NOT the internal-service client above. "internal" is a
@@ -388,6 +407,7 @@ public class SecurityConfig {
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
                 .scope("identity.admin")
+                .tokenSettings(TOKEN_SETTINGS)
                 .build();
 
         return new InMemoryRegisteredClientRepository(

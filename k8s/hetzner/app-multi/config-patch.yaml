@@ -60,6 +60,8 @@ data:
   # domains we may return to — and must be updated with it.
   STOREFRONT_ORIGINS: "https://granite-security.org,https://sichocolate.com"
 
+  PUBLIC_BASE_URL: "https://sichocolate.com"
+
   # ── Storage (+ Garage S3 backend) ─────────────────────
   # The storage service itself stays cluster-internal (MICROSERVICES_STORAGE_URI
   # keeps its k8s/base default, http://storage:8065 — only the gateway calls it).
