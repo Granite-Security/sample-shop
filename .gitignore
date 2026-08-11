@@ -11,3 +11,10 @@ k8s/hetzner/secrets.info
 k8s/hetzner/app-multi/secrets-patch.yaml
 kimi-export-session_-20260726-184213.md
 docs/ignore/
+# Product photographs, ~15 MB of binaries kept out of git history — CI clones
+# this repo on every build. The images are a local backup of the garage bucket
+# (garage-pvc, reclaim policy Delete), not source. The manifest is tracked: it
+# maps each file to its garage object key, which is the only record of where a
+# photo has to be re-uploaded after a namespace rebuild.
+assets/pics/*
+!assets/pics/README.md
