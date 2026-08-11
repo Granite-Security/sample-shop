@@ -21,11 +21,15 @@ validates the caller's JWT itself.
 ui-shop (5173) ┐                          ┌─ Auth Server (9090) ── OIDC provider,
 ui-demo        ├─> Gateway (8080) ────────┤   (servlet + JPA)      JWT + roles claim
 Stripe/PayPal  ┘   path routing,          │
-  webhooks         no auth of its own     ├─ Greetings 8060   Shop 8061   Payment 8062
-                                          └─ Delivery 8063    Profile 8064
-                                             Storage 8065     Balance 8067
-                                             Notification 8066 (no inbound API)
-                                             Accounting 8068 (admin-only books)
+  webhooks         no auth of its own     ├─   Greetings 8060 (Hello World microservice)  
+                                          ├─   Shop 8061   (Also responsible for orders)     
+                                          ├─   Payment 8062
+                                          ├─   Delivery 8063
+                                          ├─   Profile 8064
+                                          ├─   Storage 8065     Balance 8067
+                                          ├─   Notification 8066 (no inbound API)
+                                          ├─   Balance 8067
+                                          └─   Accounting 8068 (admin-only books)
 ```
 
 Every service except `auth-server` is WebFlux + R2DBC end to end. Seven own a
