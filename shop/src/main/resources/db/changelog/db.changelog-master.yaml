@@ -49,3 +49,9 @@ databaseChangeLog:
   - include:
       file: db/changelog/017-assign-truffle-packaging.sql
       relativeToChangelogFile: false
+  - include:
+      file: db/changelog/018-assign-si-truffles.sql
+      relativeToChangelogFile: false
+  - include:
+      file: db/changelog/019-seed-si-chocolate.sql
+      relativeToChangelogFile: false
