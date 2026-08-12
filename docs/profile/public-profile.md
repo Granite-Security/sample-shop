@@ -190,6 +190,11 @@ profile by itself.
 - `PublicFileResponse` is its own record — never `objectKey`, never `contentHash`.
 - Both frontends: a *Publish to profile* / *Remove from profile* button per row on My
   Files, and a Files section on the public page that renders nothing when empty.
+- Images preview as thumbnails, gated on an explicit
+  `image/jpeg | image/png | image/webp` allow-list rather than an `image/*` prefix test,
+  so adding SVG to uploads cannot silently start inlining script-capable files
+  (`../todo/guardrails.md` items 1 and 2). Everything else stays a download link, and a
+  thumbnail that fails to load hides itself rather than showing a broken-image icon.
 
 ## Verification
 

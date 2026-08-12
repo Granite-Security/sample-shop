@@ -25,11 +25,17 @@ cannot be uploaded today at all**, which is why leaving this out costs nothing r
 It becomes real the moment that list grows. If SVG is ever added for avatars or media,
 this check has to land in the same change.
 
-### 2. Render by content type on the public page
+### 2. Render by content type on the public page — **done**
 
-Currently every published file renders as a plain link. If that ever becomes an inline
-preview, bind the rendering to `contentType`: `image/*` as `<img>`, everything else as a
-download link. Never an inline HTML/PDF embed of a stranger's file.
+Published images render as thumbnails; everything else stays a plain download link.
+
+The rendering is bound to an explicit allow-list, `image/jpeg | image/png | image/webp`,
+rather than a `contentType.startsWith('image/')` test. That matters for guardrail 1
+above: a prefix check would begin inlining `image/svg+xml` the day SVG is added to the
+upload allow-list, silently. Adding a previewable type now has to be a deliberate edit in
+both frontends.
+
+Still holds: never an inline HTML or PDF embed of a stranger's file.
 
 ### 3. Cap the number of published files
 
