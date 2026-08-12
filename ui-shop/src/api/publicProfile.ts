@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { PublicProfileResponse } from '../types';
+import type { PublicFile, PublicProfileResponse } from '../types';
 
 /**
  * The one API call in this app that works with no session at all
@@ -15,5 +15,9 @@ import type { PublicProfileResponse } from '../types';
 export const publicProfileApi = {
   get: (handle: string) =>
     request<PublicProfileResponse>(`/api/profiles/public/${encodeURIComponent(handle)}`,
+      { skipAuth: true }),
+
+  files: (handle: string) =>
+    request<PublicFile[]>(`/api/profiles/public/${encodeURIComponent(handle)}/files`,
       { skipAuth: true }),
 };

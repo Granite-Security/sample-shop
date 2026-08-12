@@ -3,6 +3,7 @@ package org.granitesecurity.profile.service;
 import org.granitesecurity.profile.client.StorageClient;
 import org.granitesecurity.profile.domain.UserFile;
 import org.granitesecurity.profile.dto.DuplicateFileCheckResponse;
+import org.granitesecurity.profile.dto.PublicFileResponse;
 import org.granitesecurity.profile.dto.RegisterFileRequest;
 import org.granitesecurity.profile.dto.UserFileResponse;
 import org.granitesecurity.profile.repository.UserFileRepository;
@@ -46,6 +47,37 @@ public class UserFileService {
     public Flux<UserFileResponse> listFiles(String username) {
         return userFileRepository.findByUsernameOrderByCreatedAtDesc(username)
                 .map(this::toResponse);
+    }
+
+    /**
+     * Publishes a file to, or removes it from, the owner's public profile.
+     *
+     * <p>A flag on the file row rather than a URL copied onto the profile: one source
+     * of truth, so deleting the file takes it off the public page by itself instead of
+     * leaving a dead link behind (docs/profile/public-profile.md §11).
+     */
+    public Mono<UserFileResponse> setShared(String username, Long id, Boolean shared) {
+        if (shared == null) {
+            return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, "shared is required"));
+        }
+        return userFileRepository.findByIdAndUsername(id, username)
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "File not found")))
+                .flatMap(file -> userFileRepository.updateShared(id, username, shared))
+                .then(userFileRepository.findByIdAndUsername(id, username))
+                .map(this::toResponse);
+    }
+
+    /** Anonymous listing behind /users/&lt;handle&gt;. Empty for an unpublished profile. */
+    public Flux<PublicFileResponse> listPublicFiles(String handle) {
+        String normalized = handle == null ? "" : handle.trim().toLowerCase(java.util.Locale.ROOT);
+        return userFileRepository.findSharedByHandle(normalized)
+                .map(file -> new PublicFileResponse(
+                        file.getId(),
+                        file.getFileName(),
+                        file.getUrl(),
+                        file.getContentType(),
+                        file.getSizeBytes(),
+                        file.getCreatedAt()));
     }
 
     // Called before the browser even starts the upload (the client hashes
@@ -138,6 +170,7 @@ public class UserFileService {
                 file.getUrl(),
                 file.getContentType(),
                 file.getSizeBytes(),
+                file.isShared(),
                 file.getCreatedAt()
         );
     }

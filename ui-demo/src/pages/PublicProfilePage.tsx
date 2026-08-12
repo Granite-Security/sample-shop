@@ -4,7 +4,7 @@ import { api } from '../api';
 import { Avatar } from '../components/Avatar';
 import { useAuth } from '../auth';
 import { userManager } from '../oauth';
-import type { PublicProfileResponse } from '../types';
+import type { PublicFile, PublicProfileResponse } from '../types';
 
 const inputStyle =
   'w-full border border-cocoa/20 bg-white/70 px-4 py-3 text-sm text-cocoa placeholder:text-cocoa/40 focus:border-gold focus:outline-none';
@@ -87,7 +87,62 @@ export function PublicProfilePage() {
         </p>
       )}
 
+      <PublicFiles handle={profile.handle} />
+
       <PublicActions profile={profile} />
+    </div>
+  );
+}
+
+function formatSize(bytes: number | null): string {
+  if (bytes == null) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Files the owner published (docs/profile/public-profile.md §11).
+ *
+ * Fetched separately from the profile so the page renders without waiting on it,
+ * and so PublicProfileResponse does not grow a nested list. An empty result is
+ * the common case — it renders nothing rather than an empty heading.
+ */
+function PublicFiles({ handle }: { handle: string }) {
+  const [files, setFiles] = useState<PublicFile[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getPublicFiles(handle)
+      .then((f) => {
+        if (!cancelled) setFiles(f);
+      })
+      .catch(() => {
+        if (!cancelled) setFiles([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [handle]);
+
+  if (files.length === 0) return null;
+
+  return (
+    <div className="mt-10">
+      <h2 className="font-display text-[24px] text-cocoa">Files</h2>
+      <ul className="mt-4 max-w-xl divide-y divide-cocoa/10 border-y border-cocoa/10">
+        {files.map((file) => (
+          <li key={file.id} className="py-4">
+            <a href={file.url} target="_blank" rel="noreferrer" className="text-cocoa hover:text-terracotta">
+              {file.fileName}
+            </a>
+            <p className="mt-1 text-sm text-cocoa/50">
+              {formatSize(file.sizeBytes)} · {new Date(file.createdAt).toLocaleDateString()}
+            </p>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

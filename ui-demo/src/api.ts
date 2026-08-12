@@ -13,6 +13,7 @@ import type {
   AddressRequest,
   ProfileResponse,
   PublicProfileResponse,
+  PublicFile,
   HandleAvailability,
   UpdateProfileRequest,
   MediaItem,
@@ -234,6 +235,10 @@ export const api = {
     request<PublicProfileResponse>(`/api/profiles/public/${encodeURIComponent(handle)}`,
       { skipAuth: true }),
 
+  getPublicFiles: (handle: string) =>
+    request<PublicFile[]>(`/api/profiles/public/${encodeURIComponent(handle)}/files`,
+      { skipAuth: true }),
+
   // Takes a public profile down without touching the account. Also releases the
   // handle. Blocking already unpublishes on its own.
   unpublishUser: (username: string) =>
@@ -427,6 +432,12 @@ export const api = {
   },
 
   deleteFile: (id: number) => request<void>(`/api/profiles/me/files/${id}`, { method: 'DELETE' }),
+
+  // "Publish to profile". A flag on the file, not a URL copied onto the profile,
+  // so deleting the file takes it off the public page by itself.
+  setFileShared: (id: number, shared: boolean) =>
+    request<UserFile>(`/api/profiles/me/files/${id}/share`,
+      { method: 'PUT', body: JSON.stringify({ shared }) }),
 
   // Balance — mirrors ui-shop/src/api/balance.ts. Top-ups go through payment,
   // because balance never talks to Stripe or PayPal itself.

@@ -64,6 +64,13 @@ export default function Files() {
     }
   };
 
+  // Publishing only lists the file on the public profile; it does not change who
+  // can fetch the object (docs/profile/public-profile.md §11).
+  const handleShare = async (file: UserFile) => {
+    const updated = await api.profile.setFileShared(file.id, !file.shared);
+    setFiles(current => current.map(f => (f.id === updated.id ? updated : f)));
+  };
+
   const handleDeleteFile = async (id: number) => {
     await api.profile.deleteFile(id);
     setFiles(prev => prev.filter(f => f.id !== id));
@@ -113,9 +120,13 @@ export default function Files() {
                 <a href={file.url} target="_blank" rel="noreferrer">{file.fileName}</a>
                 <div style={{ fontSize: 12, color: 'var(--muted, #666)' }}>
                   {formatSize(file.sizeBytes)} · {new Date(file.createdAt).toLocaleDateString()}
+                  {file.shared && ' · on your public profile'}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn" onClick={() => handleShare(file)}>
+                  {file.shared ? 'Remove from profile' : 'Publish to profile'}
+                </button>
                 <button className="btn" onClick={() => handleCopyLink(file.url)}>Copy link</button>
                 <button className="btn" onClick={() => handleDeleteFile(file.id)}>Delete</button>
               </div>
