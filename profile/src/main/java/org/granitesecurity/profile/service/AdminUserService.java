@@ -39,6 +39,7 @@ public class AdminUserService {
     private static final String BLOCK = "BLOCK";
     private static final String UNBLOCK = "UNBLOCK";
     private static final String DELETE = "DELETE";
+    private static final String UNPUBLISH = "UNPUBLISH";
     private static final String FAILED = "FAILED";
 
     private final IdentityAdminClient identityAdminClient;
@@ -108,6 +109,12 @@ public class AdminUserService {
         // never even asked" is the property worth keeping true.
         return guardRails(username, actor, BLOCK)
                 .then(Mono.defer(() -> identityAdminClient.block(username, actor)))
+                // A blocked user's public page must stop resolving. Done as a local
+                // write here rather than a block-state lookup on every anonymous page
+                // view, which would put an unauthenticated path in front of auth-server
+                // (docs/profile/public-profile.md D6). Unblocking does not re-publish:
+                // that is the user's decision to make again.
+                .delayUntil(user -> userProfileRepository.unpublish(username))
                 .flatMap(user -> record(actor, BLOCK, username, DeleteUserResult.DONE, null, null)
                         .thenReturn(toView(user, Map.of())))
                 .onErrorResume(recordFailure(actor, BLOCK, username));
@@ -120,6 +127,25 @@ public class AdminUserService {
                 .flatMap(user -> record(actor, UNBLOCK, username, DeleteUserResult.DONE, null, null)
                         .thenReturn(toView(user, Map.of())))
                 .onErrorResume(recordFailure(actor, UNBLOCK, username));
+    }
+
+    /**
+     * Takes a public profile down without touching the account — for a bio or handle
+     * that has to go, where blocking would be disproportionate.
+     *
+     * <p>Clears the handle as well, returning it to the namespace. That is the escape
+     * hatch for the squatting cost of reserving handles globally
+     * (docs/profile/public-profile.md D2/step 9).
+     */
+    public Mono<Void> unpublish(String username, String actor) {
+        return userProfileRepository.findByUsername(username)
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Profile not found: " + username)))
+                .flatMap(profile -> userProfileRepository.unpublish(username)
+                        .then(userProfileRepository.clearHandle(username)))
+                .then(record(actor, UNPUBLISH, username, DeleteUserResult.DONE, null, null))
+                .onErrorResume(recordFailure(actor, UNPUBLISH, username))
+                .then();
     }
 
     /**

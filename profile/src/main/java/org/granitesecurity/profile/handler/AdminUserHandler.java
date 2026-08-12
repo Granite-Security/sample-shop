@@ -40,6 +40,13 @@ public class AdminUserHandler {
                 .flatMap(user -> ServerResponse.ok().bodyValue(user));
     }
 
+    public Mono<ServerResponse> unpublishUser(ServerRequest request) {
+        String username = request.pathVariable("username");
+        return actor(request)
+                .flatMap(a -> adminUserService.unpublish(username, a))
+                .then(ServerResponse.noContent().build());
+    }
+
     public Mono<ServerResponse> deleteUser(ServerRequest request) {
         String username = request.pathVariable("username");
         return actor(request)

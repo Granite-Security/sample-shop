@@ -29,6 +29,17 @@ public class UserProfile {
     @Column("display_name")
     private String displayName;
 
+    // The public URL segment (docs/profile/public-profile.md D1). Separate from
+    // displayName, which is free text and would make a poor path segment. Stored
+    // lowercased; unique across all rows whether published or not (D2).
+    private String handle;
+
+    // Free text the user wrote to be published. Never rendered as HTML.
+    private String bio;
+
+    @Column("public_profile")
+    private boolean publicProfile;
+
     // Which of the two possible pictures wins: UPLOAD, GOOGLE or NONE. The
     // uploaded object survives a switch to GOOGLE so switching back does not
     // mean uploading again (docs/users/user-pic.md D3).

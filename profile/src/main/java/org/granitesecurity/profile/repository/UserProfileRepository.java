@@ -76,6 +76,66 @@ public interface UserProfileRepository extends ReactiveCrudRepository<UserProfil
     Mono<Integer> syncGooglePicture(String username, String googlePictureUrl);
 
     /**
+     * The public profile lookup (docs/profile/public-profile.md step 3).
+     *
+     * <p>{@code public_profile = true} is in the SQL, not in a service-side {@code if},
+     * so there is no variant of this query that can return an unpublished row. A
+     * findByHandle plus a check is one refactor away from leaking one.
+     */
+    @Query("SELECT * FROM user_profile WHERE handle = :handle AND public_profile = true")
+    Mono<UserProfile> findPublishedByHandle(String handle);
+
+    /**
+     * Claims a handle, touching only the column it owns.
+     *
+     * <p>Targeted UPDATE rather than {@code save()} for the reason
+     * {@link #syncGooglePicture} documents: a full-row write races the UserRegistered
+     * consumer and writes back nulls over email/first/last.
+     *
+     * <p>Relies on uq_user_profile_handle to reject a taken handle — the caller maps the
+     * DuplicateKeyException to a 409. A pre-flight SELECT would leave two users racing
+     * for the same handle with a non-deterministic outcome.
+     */
+    @Modifying
+    @Query("UPDATE user_profile SET handle = :handle, updated_at = now() WHERE username = :username")
+    Mono<Integer> updateHandle(String username, String handle);
+
+    /** Publishes or unpublishes. Same targeted-write reasoning as {@link #updateHandle}. */
+    @Modifying
+    @Query("""
+            UPDATE user_profile
+               SET public_profile = :publicProfile, updated_at = now()
+             WHERE username = :username
+            """)
+    Mono<Integer> updateVisibility(String username, boolean publicProfile);
+
+    /**
+     * Admin force-unpublish, and the side effect of blocking a user
+     * (docs/profile/public-profile.md D6). Local write: checking auth-server's block
+     * state on every anonymous page view would put an unauthenticated path in front of
+     * the identity service.
+     */
+    @Modifying
+    @Query("""
+            UPDATE user_profile
+               SET public_profile = false, updated_at = now()
+             WHERE username = :username AND public_profile = true
+            """)
+    Mono<Integer> unpublish(String username);
+
+    /**
+     * Releases a handle. A separate query rather than {@link #updateHandle} with a null
+     * argument, which R2DBC cannot bind — the parameter has no inferrable type.
+     */
+    @Modifying
+    @Query("UPDATE user_profile SET handle = NULL, updated_at = now() WHERE username = :username")
+    Mono<Integer> clearHandle(String username);
+
+    /** Availability check. Counts every row, published or not — the handle is reserved on set (D2). */
+    @Query("SELECT COUNT(*) FROM user_profile WHERE handle = :handle AND username <> :username")
+    Mono<Long> countHandleTakenByOthers(String handle, String username);
+
+    /**
      * Deliberately a Flux: `email` has no UNIQUE constraint and one human can hold
      * two rows — a LOCAL one and a Google-sub one with the same address
      * (docs/users/blocking-users.md §2.1). Callers must pick; see

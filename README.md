@@ -231,6 +231,7 @@ receiving service enforces on the `Bearer` token the caller sends.
 | `/api/payments/webhook/{provider}` | Public (provider signature) | Payment service |
 | `/api/payments/providers` | Public | Payment service |
 | `/api/delivery/**` | JWT required | Delivery service |
+| `/api/profiles/public/{handle}` | **Public** (published profiles only) | Profile service |
 | `/api/profiles/**` | JWT required | Profile service |
 | `/api/balance/**` | JWT required | Balance service |
 | `/api/accounting/**` | JWT required, **ROLE_ADMIN** (manual journals also allow MANAGER) | Accounting service |

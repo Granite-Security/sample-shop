@@ -33,7 +33,18 @@ public class ProfileRoute {
                 // but it is registered first so the exception is visible where the
                 // routes are read.
                 .POST("/api/profiles/contact", contactHandler::submit)
+                // The public profile read (docs/profile/public-profile.md). Registered
+                // before "/api/profiles/{username}" below, since "public" is a legal
+                // value for that wildcard. ProfileSec permits this path by method as
+                // well, and it is the only readable route here without a token.
+                .GET("/api/profiles/public/{handle}", profileHandler::getPublicProfile)
                 .GET("/api/profiles/me", profileHandler::getMe)
+                // Separate from PUT /me, which overwrites every field it is given, and
+                // which has no 409 to report (D5). "handle/available" is registered
+                // before the {id}-shaped routes for the usual shadowing reason.
+                .GET("/api/profiles/me/handle/available", profileHandler::checkHandle)
+                .PUT("/api/profiles/me/handle", profileHandler::setHandle)
+                .PUT("/api/profiles/me/visibility", profileHandler::setVisibility)
                 .PUT("/api/profiles/me", profileHandler::updateMe)
                 .PUT("/api/profiles/me/avatar", avatarHandler::register)
                 .PUT("/api/profiles/me/avatar/source", avatarHandler::setSource)
@@ -70,6 +81,7 @@ public class ProfileRoute {
                 .POST("/api/profiles/admin/users/{username}/unblock", adminUserHandler::unblockUser)
                 .DELETE("/api/profiles/admin/users/{username}", adminUserHandler::deleteUser)
                 .GET("/api/profiles/admin/orphans", adminUserHandler::orphanReport)
+                .POST("/api/profiles/admin/users/{username}/unpublish", adminUserHandler::unpublishUser)
                 // Admin endpoints — registered after the explicit /api/profiles/me*
                 // routes so {username} never shadows "me".
                 .GET("/api/profiles", profileHandler::listAll)

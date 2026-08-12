@@ -2,9 +2,12 @@ package org.granitesecurity.profile.service;
 
 import org.granitesecurity.profile.domain.UserProfile;
 import org.granitesecurity.profile.dto.AvatarSource;
+import org.granitesecurity.profile.dto.HandleAvailability;
+import org.granitesecurity.profile.dto.PublicProfileResponse;
 import org.granitesecurity.profile.dto.ProfileResponse;
 import org.granitesecurity.profile.dto.UpdateProfileRequest;
 import org.granitesecurity.profile.repository.UserProfileRepository;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -12,12 +15,26 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 @Service
 public class ProfileService {
 
     private static final Pattern DISPLAY_NAME_PATTERN = Pattern.compile("^[\\p{L}\\p{N} ._'-]+$");
+
+    // 3-32 chars, lowercase alphanumerics and hyphens, no leading or trailing hyphen
+    // (docs/profile/public-profile.md step 4).
+    private static final Pattern HANDLE_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$");
+
+    // "me" and "admin" are load-bearing: both already shadow the {username} wildcard in
+    // ProfileRoute and ProfileSec. The rest keep future /users/* SPA paths free.
+    private static final Set<String> RESERVED_HANDLES = Set.of(
+            "me", "admin", "contact", "internal", "public", "api", "auth", "users", "new",
+            "edit", "settings", "login", "logout", "register", "null", "undefined");
+
+    private static final int BIO_MAX = 500;
 
     private final UserProfileRepository userProfileRepository;
 
@@ -86,6 +103,7 @@ public class ProfileService {
                     profile.setFirstName(req.firstName());
                     profile.setLastName(req.lastName());
                     profile.setDisplayName(validateDisplayName(req.displayName()));
+                    profile.setBio(validateBio(req.bio()));
                     profile.setUpdatedAt(Instant.now());
                     return userProfileRepository.save(profile);
                 })
@@ -107,6 +125,123 @@ public class ProfileService {
         if (!DISPLAY_NAME_PATTERN.matcher(trimmed).matches()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "displayName contains invalid characters");
+        }
+        return trimmed;
+    }
+
+    /**
+     * The anonymous read behind {@code /users/<handle>}.
+     *
+     * <p>An unknown handle and an unpublished one both answer 404, deliberately: a 403
+     * would confirm the handle exists, turning this into a membership oracle over a
+     * namespace people pick to be memorable (docs/profile/public-profile.md D4).
+     */
+    public Mono<PublicProfileResponse> getPublishedByHandle(String handle) {
+        String normalized = handle == null ? "" : handle.trim().toLowerCase(Locale.ROOT);
+        return userProfileRepository.findPublishedByHandle(normalized)
+                .switchIfEmpty(Mono.error(
+                        new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not available")))
+                .map(ProfileService::toPublicResponse);
+    }
+
+    /**
+     * Sets or changes the caller's handle.
+     *
+     * <p>Conflicts are detected by letting uq_user_profile_handle reject the write, not
+     * by a pre-flight SELECT — two users racing for the same handle then have a
+     * deterministic winner instead of both passing a check.
+     */
+    public Mono<ProfileResponse> setHandle(String username, String rawHandle) {
+        return Mono.defer(() -> {
+            String handle = validateHandle(rawHandle);
+            return findOrCreate(username)
+                    .flatMap(profile -> userProfileRepository.updateHandle(username, handle))
+                    .onErrorMap(DuplicateKeyException.class, e -> new ResponseStatusException(
+                            HttpStatus.CONFLICT, "handle is already taken"))
+                    .then(userProfileRepository.findByUsername(username))
+                    .map(ProfileService::toResponse);
+        });
+    }
+
+    /**
+     * Publishes or unpublishes. A pure boolean flip that cannot conflict, because the
+     * handle was already reserved when it was set (D2).
+     */
+    public Mono<ProfileResponse> setVisibility(String username, Boolean publicProfile) {
+        if (publicProfile == null) {
+            return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "publicProfile is required"));
+        }
+        return findOrCreate(username)
+                .flatMap(profile -> {
+                    if (publicProfile && (profile.getHandle() == null || profile.getHandle().isBlank())) {
+                        return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "Choose a handle before making your profile public"));
+                    }
+                    return userProfileRepository.updateVisibility(username, publicProfile);
+                })
+                .then(userProfileRepository.findByUsername(username))
+                .map(ProfileService::toResponse);
+    }
+
+    /**
+     * Availability for the owner's form. Stays behind authentication — an anonymous
+     * version of this is a free enumeration oracle over the whole namespace.
+     */
+    public Mono<HandleAvailability> checkHandle(String username, String rawHandle) {
+        String normalized = rawHandle == null ? "" : rawHandle.trim().toLowerCase(Locale.ROOT);
+        try {
+            validateHandle(normalized);
+        } catch (ResponseStatusException e) {
+            return Mono.just(new HandleAvailability(normalized, false, e.getReason()));
+        }
+        return userProfileRepository.countHandleTakenByOthers(normalized, username)
+                .map(count -> count == 0
+                        ? new HandleAvailability(normalized, true, null)
+                        : new HandleAvailability(normalized, false, "handle is already taken"));
+    }
+
+    /** Admin force-unpublish, and what blocking a user triggers (D6). */
+    public Mono<Void> unpublish(String username) {
+        return userProfileRepository.unpublish(username).then();
+    }
+
+    private String validateHandle(String raw) {
+        if (raw == null || raw.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "handle is required");
+        }
+        String handle = raw.trim().toLowerCase(Locale.ROOT);
+        if (!HANDLE_PATTERN.matcher(handle).matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "handle must be 3-32 characters: lowercase letters, digits and hyphens, "
+                            + "not starting or ending with a hyphen");
+        }
+        if (RESERVED_HANDLES.contains(handle)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "handle is reserved");
+        }
+        return handle;
+    }
+
+    /**
+     * No HTML sanitising, because no HTML is ever rendered: React escapes by default and
+     * the public page must not use dangerouslySetInnerHTML. Control characters go because
+     * they have no business in a one-paragraph bio.
+     */
+    private String validateBio(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        if (trimmed.length() > BIO_MAX) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "bio must be at most " + BIO_MAX + " characters");
+        }
+        if (trimmed.chars().anyMatch(c -> c < 0x20 && c != '\n' && c != '\r' && c != '\t')) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "bio contains invalid characters");
         }
         return trimmed;
     }
@@ -155,6 +290,17 @@ public class ProfileService {
         };
     }
 
+    public static PublicProfileResponse toPublicResponse(UserProfile profile) {
+        return new PublicProfileResponse(
+                profile.getHandle(),
+                profile.getUsername(),
+                profile.getDisplayName() != null ? profile.getDisplayName() : profile.getHandle(),
+                effectiveAvatarUrl(profile),
+                profile.getBio(),
+                profile.getCreatedAt()
+        );
+    }
+
     public static ProfileResponse toResponse(UserProfile profile) {
         return new ProfileResponse(
                 profile.getId(),
@@ -163,6 +309,9 @@ public class ProfileService {
                 profile.getFirstName(),
                 profile.getLastName(),
                 profile.getDisplayName(),
+                profile.getHandle(),
+                profile.getBio(),
+                profile.isPublicProfile(),
                 effectiveAvatarUrl(profile),
                 AvatarSource.parse(profile.getAvatarSource()).name(),
                 profile.getUploadedAvatarUrl(),

@@ -52,6 +52,15 @@ public class ProfileSec {
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .cors(Customizer.withDefaults())
                 .authorizeExchange(exchange -> exchange
+                        // Public profiles (docs/profile/public-profile.md step 5).
+                        // First, and scoped to GET, for the same reason as the contact
+                        // rule below: "public" is a legal value for the {username}
+                        // wildcard, so the catch-all further down would demand a token
+                        // on the one readable route that exists for people without one.
+                        // Note /api/profiles/me/handle/available is NOT here and must
+                        // not be — an anonymous availability check is a free
+                        // enumeration oracle over the whole handle namespace.
+                        .pathMatchers(HttpMethod.GET, "/api/profiles/public/**").permitAll()
                         // The public contact form (docs/users/messaging.md §11).
                         // Ahead of every rule below, because the catch-all
                         // "/api/profiles/**" would otherwise require a token and this

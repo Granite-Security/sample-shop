@@ -17,3 +17,5 @@ databaseChangeLog:
       file: db/changelog/008-order-notice.sql
   - include:
       file: db/changelog/009-contact-message.sql
+  - include:
+      file: db/changelog/010-public-profile.sql

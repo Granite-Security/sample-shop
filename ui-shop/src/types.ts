@@ -211,6 +211,11 @@ export interface ProfileResponse {
   firstName: string | null;
   lastName: string | null;
   displayName: string | null;
+  // The public profile (docs/profile/public-profile.md). `handle` is reserved as
+  // soon as it is set, so publicProfile is a plain switch that cannot conflict.
+  handle: string | null;
+  bio: string | null;
+  publicProfile: boolean;
   // The effective picture, already resolved from avatarSource server-side —
   // render this one. The other two exist so the profile page can offer a
   // choice without a second round trip (docs/users/user-pic.md §4).
@@ -236,6 +241,30 @@ export interface UpdateProfileRequest {
   firstName?: string;
   lastName?: string;
   displayName?: string;
+  bio?: string;
+}
+
+/**
+ * What /users/<handle> shows an anonymous visitor. Deliberately not a subset of
+ * ProfileResponse — the server sends a different record, so this type must not
+ * grow fields by copying that one (docs/profile/public-profile.md step 2).
+ *
+ * `username` is published on purpose (D3): it is what the Message and Gift
+ * actions on that page pass as `to`.
+ */
+export interface PublicProfileResponse {
+  handle: string;
+  username: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  bio: string | null;
+  memberSince: string;
+}
+
+export interface HandleAvailability {
+  handle: string;
+  available: boolean;
+  reason: string | null;
 }
 
 export interface UserFile {

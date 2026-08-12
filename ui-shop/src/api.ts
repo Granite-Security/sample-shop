@@ -9,6 +9,7 @@ import { ordersApi } from './api/orders';
 import { packagingApi } from './api/packaging';
 import { paymentsApi } from './api/payments';
 import { profileApi } from './api/profile';
+import { publicProfileApi } from './api/publicProfile';
 import { reportsApi } from './api/reports';
 import { shopApi } from './api/shop';
 import { storageApi } from './api/storage';
@@ -24,6 +25,7 @@ export const api = {
   packaging: packagingApi,
   payments: paymentsApi,
   profile: profileApi,
+  publicProfile: publicProfileApi,
   reports: reportsApi,
   delivery: deliveryApi,
   messages: messagesApi,
