@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { api } from '../api';
 import { Avatar } from '../components/Avatar';
-import type { ProfileResponse } from '../types';
+import type { HandleAvailability, ProfileResponse } from '../types';
 
 const inputStyle =
   'w-full border border-cocoa/20 bg-white/70 px-4 py-3 text-sm text-cocoa placeholder:text-cocoa/40 focus:border-gold focus:outline-none';
@@ -25,6 +25,7 @@ function formOf(p: ProfileResponse) {
     firstName: p.firstName ?? '',
     lastName: p.lastName ?? '',
     displayName: p.displayName ?? '',
+    bio: p.bio ?? '',
   };
 }
 
@@ -32,7 +33,7 @@ function formOf(p: ProfileResponse) {
 // Profile page — the form only appears when the customer asks for it.
 function ProfileDetails() {
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
-  const [form, setForm] = useState({ email: '', firstName: '', lastName: '', displayName: '' });
+  const [form, setForm] = useState({ email: '', firstName: '', lastName: '', displayName: '', bio: '' });
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -155,6 +156,20 @@ function ProfileDetails() {
                   className={inputStyle}
                 />
               </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="profile-bio" className="mb-1 block text-xs uppercase tracking-[0.16em] text-cocoa/60">
+                  Bio
+                </label>
+                <textarea
+                  id="profile-bio"
+                  rows={4}
+                  value={form.bio}
+                  onChange={(e) => setForm({ ...form, bio: e.target.value.slice(0, 500) })}
+                  placeholder="Shown on your public profile"
+                  className={inputStyle}
+                />
+                <p className="mt-1 text-right text-[11px] text-cocoa/50">{form.bio.length}/500</p>
+              </div>
               <div className="flex gap-3 sm:col-span-2">
                 <button
                   type="submit"
@@ -182,6 +197,7 @@ function ProfileDetails() {
                   value={[profile.firstName, profile.lastName].filter(Boolean).join(' ') || '—'}
                 />
                 <ProfileRow label="Email" value={profile.email || '—'} />
+                <ProfileRow label="Bio" value={profile.bio || '—'} />
               </dl>
               <button
                 onClick={startEditing}
@@ -191,9 +207,133 @@ function ProfileDetails() {
               </button>
             </>
           )}
+
+          {profile && <PublicProfilePanel profile={profile} onChange={setProfile} />}
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * Handle and visibility (docs/profile/public-profile.md step 8). Ported from
+ * ui-shop's Profile page — same endpoints, this storefront's styling.
+ *
+ * Separate from the details form above because both calls have their own
+ * endpoints and their own failure modes: the handle can 409, and publishing is a
+ * switch rather than a text field.
+ */
+function PublicProfilePanel({ profile, onChange }: {
+  profile: ProfileResponse;
+  onChange: (profile: ProfileResponse) => void;
+}) {
+  const [handle, setHandle] = useState(profile.handle ?? '');
+  const [availability, setAvailability] = useState<HandleAvailability | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const dirty = handle.trim().toLowerCase() !== (profile.handle ?? '');
+
+  // Debounced so typing a handle does not fire a request per keystroke.
+  useEffect(() => {
+    if (!dirty || !handle.trim()) {
+      setAvailability(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      api
+        .checkHandle(handle.trim().toLowerCase())
+        .then(setAvailability)
+        .catch(() => setAvailability(null));
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [handle, dirty]);
+
+  async function run(action: () => Promise<ProfileResponse>) {
+    setBusy(true);
+    setError(null);
+    try {
+      onChange(await action());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const url = profile.handle ? `${window.location.origin}/users/${profile.handle}` : null;
+
+  return (
+    <div className="mt-10 border-t border-cocoa/10 pt-8">
+      <h2 className="font-display text-[24px] text-cocoa">Public profile</h2>
+      <p className="mt-2 max-w-md text-sm text-cocoa/60">
+        Pick a handle, then choose whether anyone can see your profile. Your handle stays
+        yours even while your profile is private.
+      </p>
+
+      <div className="mt-5 flex max-w-md flex-wrap items-center gap-2">
+        <span className="text-sm text-cocoa/50">/users/</span>
+        <input
+          value={handle}
+          onChange={(e) => setHandle(e.target.value.toLowerCase())}
+          placeholder="your-handle"
+          maxLength={32}
+          className={`${inputStyle} flex-1`}
+        />
+        <button
+          type="button"
+          disabled={busy || !dirty || !handle.trim()}
+          onClick={() => run(() => api.setHandle(handle.trim().toLowerCase()))}
+          className="border border-cocoa px-6 py-3 text-xs uppercase tracking-[0.18em] text-cocoa transition-colors hover:bg-cocoa hover:text-ivory disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Save handle
+        </button>
+      </div>
+
+      {dirty && availability && (
+        <p className="mt-2 text-sm text-cocoa/70">
+          {availability.available ? `${availability.handle} is available` : availability.reason}
+        </p>
+      )}
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={busy || !profile.handle}
+          onClick={() => run(() => api.setProfileVisibility(!profile.publicProfile))}
+          title={profile.handle ? undefined : 'Choose a handle first'}
+          className="bg-cocoa px-8 py-3.5 text-xs uppercase tracking-[0.18em] text-ivory transition-colors duration-300 hover:bg-espresso disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {profile.publicProfile ? 'Make my profile private' : 'Make my profile public'}
+        </button>
+        {!profile.handle && (
+          <span className="text-sm text-cocoa/60">Choose a handle first.</span>
+        )}
+      </div>
+
+      {profile.publicProfile && url && (
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <code className="bg-cocoa/5 px-3 py-2 text-sm text-cocoa">{url}</code>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(url);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            }}
+            className={pickerButton}
+          >
+            {copied ? 'Copied' : 'Copy link'}
+          </button>
+          <a href={`/users/${profile.handle}`} target="_blank" rel="noreferrer" className={pickerButton}>
+            View as visitor
+          </a>
+        </div>
+      )}
+
+      {error && <p className="mt-3 text-sm text-terracotta">{error}</p>}
+    </div>
   );
 }
 

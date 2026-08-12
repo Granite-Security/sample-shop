@@ -12,6 +12,8 @@ import type {
   AddressResponse,
   AddressRequest,
   ProfileResponse,
+  PublicProfileResponse,
+  HandleAvailability,
   UpdateProfileRequest,
   MediaItem,
   PresignResponse,
@@ -204,6 +206,39 @@ export const api = {
 
   updateMyProfile: (body: UpdateProfileRequest) =>
     request<ProfileResponse>('/api/profiles/me', { method: 'PUT', body: JSON.stringify(body) }),
+
+  // Public profile (docs/profile/public-profile.md). Handle and visibility are
+  // separate from updateMyProfile for the same reason the avatar is, plus a 409
+  // of their own (D5).
+  setHandle: (handle: string) =>
+    request<ProfileResponse>('/api/profiles/me/handle',
+      { method: 'PUT', body: JSON.stringify({ handle }) }),
+
+  setProfileVisibility: (publicProfile: boolean) =>
+    request<ProfileResponse>('/api/profiles/me/visibility',
+      { method: 'PUT', body: JSON.stringify({ publicProfile }) }),
+
+  // Authenticated on purpose: an anonymous availability check is a free
+  // enumeration oracle over the whole handle namespace.
+  checkHandle: (handle: string) =>
+    request<HandleAvailability>(
+      `/api/profiles/me/handle/available?handle=${encodeURIComponent(handle)}`),
+
+  /**
+   * The one call here that works with no session at all. `skipAuth` is
+   * deliberate: the endpoint is permitAll, so a token buys nothing, and skipping
+   * it keeps the 401-refresh-and-retry path from firing for a visitor who has no
+   * session to refresh. A 404 covers both "no such handle" and "not published".
+   */
+  getPublicProfile: (handle: string) =>
+    request<PublicProfileResponse>(`/api/profiles/public/${encodeURIComponent(handle)}`,
+      { skipAuth: true }),
+
+  // Takes a public profile down without touching the account. Also releases the
+  // handle. Blocking already unpublishes on its own.
+  unpublishUser: (username: string) =>
+    request<void>(`/api/profiles/admin/users/${encodeURIComponent(username)}/unpublish`,
+      { method: 'POST' }),
 
   // Avatar. Deliberately separate from updateMyProfile, which overwrites every
   // field it is given (docs/users/user-pic.md D4).
