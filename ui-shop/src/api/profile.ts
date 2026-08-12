@@ -9,6 +9,7 @@ import type {
   AvatarSource,
   DeleteUserResult,
   DuplicateFileCheckResponse,
+  HandleAvailability,
   ProfileResponse,
   UpdateProfileRequest,
   UserFile,
@@ -50,6 +51,12 @@ export const profileApi = {
 
   // Returns an outcome rather than throwing when the user cannot be deleted:
   // BLOCKED_INSTEAD is a success, and the caller has to say so.
+  // Takes a public profile down without touching the account
+  // (docs/profile/public-profile.md step 9). Also releases the handle.
+  unpublishUser: (username: string) =>
+    request<void>(`/api/profiles/admin/users/${encodeURIComponent(username)}/unpublish`,
+      { method: 'POST' }),
+
   deleteUser: (username: string) =>
     request<DeleteUserResult>(`/api/profiles/admin/users/${encodeURIComponent(username)}`,
       { method: 'DELETE' }),
@@ -65,6 +72,22 @@ export const profileApi = {
 
   updateProfile: (body: UpdateProfileRequest) =>
     request<ProfileResponse>('/api/profiles/me', { method: 'PUT', body: JSON.stringify(body) }),
+
+  // Handle and visibility. Separate from updateProfile for the same reason the
+  // avatar is, plus a 409 of their own (docs/profile/public-profile.md D5).
+  setHandle: (handle: string) =>
+    request<ProfileResponse>('/api/profiles/me/handle',
+      { method: 'PUT', body: JSON.stringify({ handle }) }),
+
+  setVisibility: (publicProfile: boolean) =>
+    request<ProfileResponse>('/api/profiles/me/visibility',
+      { method: 'PUT', body: JSON.stringify({ publicProfile }) }),
+
+  // Authenticated on purpose: an anonymous availability check is a free
+  // enumeration oracle over the whole handle namespace.
+  checkHandle: (handle: string) =>
+    request<HandleAvailability>(
+      `/api/profiles/me/handle/available?handle=${encodeURIComponent(handle)}`),
 
   // Avatar. Deliberately separate from updateProfile, which overwrites every
   // field it is given (docs/users/user-pic.md D4).

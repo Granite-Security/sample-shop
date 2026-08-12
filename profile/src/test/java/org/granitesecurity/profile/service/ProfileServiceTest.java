@@ -69,7 +69,7 @@ class ProfileServiceTest {
         when(userProfileRepository.findByUsername("alice")).thenReturn(Mono.just(alice));
         when(userProfileRepository.save(alice)).thenReturn(Mono.just(alice));
 
-        var req = new UpdateProfileRequest("alice@example.com", "Alice", "Anderson", "Adrian M");
+        var req = new UpdateProfileRequest("alice@example.com", "Alice", "Anderson", "Adrian M", null);
 
         StepVerifier.create(profileService.updateProfile("alice", req))
                 .expectNextMatches(p -> "Adrian M".equals(p.displayName()))
@@ -83,7 +83,7 @@ class ProfileServiceTest {
         when(userProfileRepository.findByUsername("alice")).thenReturn(Mono.just(alice));
         when(userProfileRepository.save(alice)).thenReturn(Mono.just(alice));
 
-        var req = new UpdateProfileRequest("alice@example.com", "Alice", "Anderson", "   ");
+        var req = new UpdateProfileRequest("alice@example.com", "Alice", "Anderson", "   ", null);
 
         StepVerifier.create(profileService.updateProfile("alice", req))
                 .expectNextMatches(p -> p.displayName() == null)
@@ -96,7 +96,7 @@ class ProfileServiceTest {
         alice.setId(1L);
         when(userProfileRepository.findByUsername("alice")).thenReturn(Mono.just(alice));
 
-        var req = new UpdateProfileRequest("alice@example.com", "Alice", "Anderson", "a");
+        var req = new UpdateProfileRequest("alice@example.com", "Alice", "Anderson", "a", null);
 
         StepVerifier.create(profileService.updateProfile("alice", req))
                 .expectErrorMatches(e -> e instanceof ResponseStatusException rse

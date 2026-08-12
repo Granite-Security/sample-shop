@@ -6,6 +6,11 @@ Goal: give a logged-in user a real "cabinet" — a profile page where they can
 upload and manage files, set a display name, and change their password, with a
 Resend-delivered email notification whenever the password changes.
 
+> **Follow-up:** publishing a profile to the open web at `/users/<handle>` is designed
+> separately in [`../profile/public-profile.md`](../profile/public-profile.md). The
+> `display_name` decision below still holds — the public URL uses a distinct `handle`
+> column, not the display name.
+
 ---
 
 ## Decisions taken up front

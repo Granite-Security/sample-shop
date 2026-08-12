@@ -28,6 +28,7 @@ import Balance from './pages/Balance'
 import Revenues from './pages/Revenues'
 import Treasury from './pages/Treasury'
 import Profile from './pages/Profile'
+import PublicProfile from './pages/PublicProfile'
 import Password from './pages/Password'
 import Files from './pages/Files'
 
@@ -41,6 +42,10 @@ export default function App() {
         <Route path="cart" element={<Cart />} />
         {/* Public on purpose — signed out is the case it exists for. */}
         <Route path="contact" element={<Contact />} />
+        {/* Public profiles (docs/profile/public-profile.md). Must stay outside
+            RequireAuth and AccountLayout — an anonymous visitor is the whole
+            point of the feature. */}
+        <Route path="users/:handle" element={<PublicProfile />} />
         <Route path="checkout" element={<Checkout />} />
         <Route path="orders/:id/pay" element={<RetryPayment />} />
         <Route element={<RequireAuth />}>

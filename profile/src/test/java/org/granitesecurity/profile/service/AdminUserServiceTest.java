@@ -64,6 +64,8 @@ class AdminUserServiceTest {
                 .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
         when(deliveryAddressRepository.findByUsername(anyString())).thenReturn(Flux.empty());
         when(userProfileRepository.findByUsername(anyString())).thenReturn(Mono.empty());
+        // Blocking also unpublishes the public profile (docs/profile/public-profile.md D6).
+        when(userProfileRepository.unpublish(anyString())).thenReturn(Mono.just(1));
         when(userFileRepository.findByUsernameOrderByCreatedAtDesc(anyString())).thenReturn(Flux.empty());
         when(storageClient.delete(anyString())).thenReturn(Mono.empty());
     }
