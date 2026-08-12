@@ -44,6 +44,13 @@ upload cap (`MAX_FILES_PER_USER = 50`) bounds it in practice, so the response ca
 away today — but the bound is incidental, not chosen. A 10–20 file cap, or pagination,
 is the deliberate version.
 
+### 6. Egress and disk from published video
+
+Video uploads are capped at 500 MB each, but the per-user file cap is 50 and nothing
+bounds total published bytes per account or egress from `media.granite-security.org`. On
+a single Hetzner VPS that is worth a ceiling — a Garage bucket quota, or a per-user total
+— before anyone treats the profile as a video host.
+
 ## Public profile, general
 
 ### 4. Rate limit on the anonymous read

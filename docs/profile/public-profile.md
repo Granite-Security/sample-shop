@@ -190,6 +190,20 @@ profile by itself.
 - `PublicFileResponse` is its own record — never `objectKey`, never `contentHash`.
 - Both frontends: a *Publish to profile* / *Remove from profile* button per row on My
   Files, and a Files section on the public page that renders nothing when empty.
+- Video (`video/mp4`, `video/webm`) plays inline with `controls` and
+  `preload="metadata"`, so a profile with several clips does not pull all of them on
+  load. The media host answers range requests (verified: `206` + `accept-ranges: bytes`),
+  so seeking works with no streaming server and no storage change. `.mov` is refused at
+  file-pick time — it uploads happily and then fails to play for most visitors — matching
+  the product-media scope in `StorageService`.
+- Video is capped at **500 MB** (`MAX_VIDEO_SIZE_BYTES`), well under the 5 GB S3
+  single-PUT ceiling that bounds other files: 50 files × 5 GB would fill the node's disk
+  on its own. Raise it deliberately if real clips need more.
+- Large uploads are **not de-duplicated**. The browser hashes a file by reading it whole
+  into memory (`crypto.subtle.digest` has no streaming form), which a large video would
+  not survive, so the client skips the hash above 100 MB and sends null. Migration 004
+  already made null hashes non-colliding in the unique index, so this needed no schema
+  change — only relaxing the `contentHash is required` check in `UserFileService`.
 - Images preview as thumbnails, gated on an explicit
   `image/jpeg | image/png | image/webp` allow-list rather than an `image/*` prefix test,
   so adding SVG to uploads cannot silently start inlining script-capable files

@@ -38,8 +38,10 @@ public class StorageService {
             // than refusing it at the point the admin picks the file.
             "products", Set.of("image/jpeg", "image/png", "image/webp",
                     "video/mp4", "video/webm"),
+            // Same two video formats as "products" above, for the same reason:
+            // .mov uploads happily and then fails to play for most visitors.
             USER_FILES_SCOPE, Set.of("image/jpeg", "image/png", "image/webp",
-                    "application/pdf", "text/plain"),
+                    "application/pdf", "text/plain", "video/mp4", "video/webm"),
             // Its own scope rather than a corner of user-files: an avatar in the
             // file cabinet would be a stray image counting against the 50-file
             // limit, and would inherit application/pdf and a 5 GB ceiling

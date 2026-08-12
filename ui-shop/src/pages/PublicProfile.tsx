@@ -82,6 +82,13 @@ export default function PublicProfile() {
  */
 const PREVIEWABLE = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
+/**
+ * Same reasoning as PREVIEWABLE, and the same two formats the upload path
+ * accepts. The media host answers range requests (verified: 206 + accept-ranges),
+ * so seeking works without any streaming server.
+ */
+const PLAYABLE = new Set(['video/mp4', 'video/webm']);
+
 function formatSize(bytes: number | null): string {
   if (bytes == null) return '';
   if (bytes < 1024) return `${bytes} B`;
@@ -114,6 +121,17 @@ function PublicFiles({ handle }: { handle: string }) {
             display: 'flex', alignItems: 'center', gap: 12,
             padding: 8, border: '1px solid var(--border)', borderRadius: 4,
           }}>
+            {PLAYABLE.has(file.contentType) && (
+              <video
+                src={file.url}
+                controls
+                playsInline
+                // metadata only: a profile with several clips must not pull the
+                // whole of each one on page load.
+                preload="metadata"
+                style={{ width: 160, borderRadius: 4, display: 'block', flexShrink: 0 }}
+              />
+            )}
             {PREVIEWABLE.has(file.contentType) && (
               <a href={file.url} target="_blank" rel="noreferrer" style={{ flexShrink: 0 }}>
                 <img

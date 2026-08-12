@@ -21,7 +21,20 @@ import java.util.Set;
 public class UserFileService {
 
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
-            "image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain");
+            "image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain",
+            // Only the two formats every current browser plays natively, matching
+            // the "products" scope in StorageService. QuickTime .mov is
+            // deliberately absent: it uploads happily and then fails to play for
+            // most visitors, which is worse than refusing it at file-pick time.
+            "video/mp4", "video/webm");
+
+    private static final Set<String> VIDEO_CONTENT_TYPES = Set.of("video/mp4", "video/webm");
+
+    // A showcase clip, not an archive. The 5 GB ceiling below is the S3 protocol
+    // limit, not a considered size for something 50 of which can sit on one
+    // account: 50 x 5 GB would fill the node's disk on its own. Raise this
+    // deliberately if real clips need more.
+    private static final long MAX_VIDEO_SIZE_BYTES = 500_000_000L;
 
     // S3 (and Garage, which implements the same API) rejects a single PUT
     // above 5 GiB — anything larger needs multipart upload, which this
@@ -112,9 +125,19 @@ public class UserFileService {
             return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "sizeBytes must not exceed " + MAX_SIZE_BYTES));
         }
-        if (req.contentHash() == null || req.contentHash().isBlank()) {
-            return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, "contentHash is required"));
+        if (VIDEO_CONTENT_TYPES.contains(req.contentType())
+                && req.sizeBytes() != null && req.sizeBytes() > MAX_VIDEO_SIZE_BYTES) {
+            return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "video must not exceed " + (MAX_VIDEO_SIZE_BYTES / 1_000_000) + " MB"));
         }
+        // contentHash is optional, and null is a supported state rather than a
+        // gap: the browser computes it by reading the whole file into memory
+        // (crypto.subtle.digest has no streaming form), which a large video would
+        // not survive, so the client skips it above a size threshold. Migration
+        // 004 already anticipated null hashes — Postgres treats NULLs as distinct
+        // in the unique index, so unhashed rows never collide with each other.
+        // The only cost is that such a file is not de-duplicated.
+        boolean hashed = req.contentHash() != null && !req.contentHash().isBlank();
         return userFileRepository.countByUsername(username)
                 .flatMap(count -> {
                     if (count >= MAX_FILES_PER_USER) {
@@ -133,6 +156,9 @@ public class UserFileService {
                     // index on (username, content_hash) is the real backstop, this
                     // just turns that into a friendly 409 instead of a raw
                     // constraint-violation 500.
+                    if (!hashed) {
+                        return Mono.just(false);
+                    }
                     return userFileRepository.findByUsernameAndContentHash(username, req.contentHash())
                             .flatMap(dup -> Mono.<Boolean>error(new ResponseStatusException(
                                     HttpStatus.CONFLICT, "This file has already been uploaded.")))
@@ -146,7 +172,7 @@ public class UserFileService {
                     file.setUrl(publicBaseUrl + "/" + req.key());
                     file.setContentType(req.contentType());
                     file.setSizeBytes(req.sizeBytes());
-                    file.setContentHash(req.contentHash());
+                    file.setContentHash(hashed ? req.contentHash() : null);
                     file.setCreatedAt(Instant.now());
                     return userFileRepository.save(file);
                 })
