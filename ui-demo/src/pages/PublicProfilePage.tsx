@@ -94,6 +94,17 @@ export function PublicProfilePage() {
   );
 }
 
+/**
+ * An explicit allow-list, not a `contentType.startsWith('image/')` check.
+ *
+ * These are exactly the image types the upload path accepts today
+ * (UserFileService.ALLOWED_CONTENT_TYPES). A prefix test would start inlining
+ * `image/svg+xml` the day SVG is added to that list — and an SVG executes script,
+ * which is the whole point of guardrail 1 in docs/todo/guardrails.md. Adding a
+ * type here has to be a decision, not a side effect.
+ */
+const PREVIEWABLE = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
 function formatSize(bytes: number | null): string {
   if (bytes == null) return '';
   if (bytes < 1024) return `${bytes} B`;
@@ -133,13 +144,30 @@ function PublicFiles({ handle }: { handle: string }) {
       <h2 className="font-display text-[24px] text-cocoa">Files</h2>
       <ul className="mt-4 max-w-xl divide-y divide-cocoa/10 border-y border-cocoa/10">
         {files.map((file) => (
-          <li key={file.id} className="py-4">
-            <a href={file.url} target="_blank" rel="noreferrer" className="text-cocoa hover:text-terracotta">
-              {file.fileName}
-            </a>
-            <p className="mt-1 text-sm text-cocoa/50">
-              {formatSize(file.sizeBytes)} · {new Date(file.createdAt).toLocaleDateString()}
-            </p>
+          <li key={file.id} className="flex items-center gap-4 py-4">
+            {PREVIEWABLE.has(file.contentType) && (
+              <a href={file.url} target="_blank" rel="noreferrer" className="shrink-0">
+                <img
+                  src={file.url}
+                  alt={file.fileName}
+                  loading="lazy"
+                  className="h-16 w-16 object-cover"
+                  // A published file can be deleted from storage while the row
+                  // lives on; a broken-image icon is worse than no thumbnail.
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              </a>
+            )}
+            <div className="min-w-0">
+              <a href={file.url} target="_blank" rel="noreferrer" className="text-cocoa hover:text-terracotta">
+                {file.fileName}
+              </a>
+              <p className="mt-1 text-sm text-cocoa/50">
+                {formatSize(file.sizeBytes)} · {new Date(file.createdAt).toLocaleDateString()}
+              </p>
+            </div>
           </li>
         ))}
       </ul>

@@ -71,6 +71,17 @@ export default function PublicProfile() {
   );
 }
 
+/**
+ * An explicit allow-list, not a `contentType.startsWith('image/')` check.
+ *
+ * These are exactly the image types the upload path accepts today
+ * (UserFileService.ALLOWED_CONTENT_TYPES). A prefix test would start inlining
+ * `image/svg+xml` the day SVG is added to that list — and an SVG executes script,
+ * which is the whole point of guardrail 1 in docs/todo/guardrails.md. Adding a
+ * type here has to be a decision, not a side effect.
+ */
+const PREVIEWABLE = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
 function formatSize(bytes: number | null): string {
   if (bytes == null) return '';
   if (bytes < 1024) return `${bytes} B`;
@@ -100,9 +111,25 @@ function PublicFiles({ handle }: { handle: string }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
         {files.map(file => (
           <div key={file.id} style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            display: 'flex', alignItems: 'center', gap: 12,
             padding: 8, border: '1px solid var(--border)', borderRadius: 4,
           }}>
+            {PREVIEWABLE.has(file.contentType) && (
+              <a href={file.url} target="_blank" rel="noreferrer" style={{ flexShrink: 0 }}>
+                <img
+                  src={file.url}
+                  alt={file.fileName}
+                  loading="lazy"
+                  style={{
+                    width: 64, height: 64, objectFit: 'cover',
+                    borderRadius: 4, display: 'block',
+                  }}
+                  // A published file can be deleted from storage while the row
+                  // lives on; a broken-image icon is worse than no thumbnail.
+                  onError={e => { e.currentTarget.style.display = 'none'; }}
+                />
+              </a>
+            )}
             <div>
               <a href={file.url} target="_blank" rel="noreferrer">{file.fileName}</a>
               <div style={{ fontSize: 12, opacity: 0.6 }}>
