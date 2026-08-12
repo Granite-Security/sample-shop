@@ -188,5 +188,7 @@ gifts. No handle-change redirects. No rate limit on the public read.
 ## Open
 
 1. Pre-fill the handle suggestion from `username`? (Now harmless — D3 publishes it anyway.)
-2. Port to `ui-demo` (messaging did, in #80)?
+2. ~~Port to `ui-demo`?~~ **Done** — same endpoints, that storefront's styling, as messaging
+   did in #80. The opt-in panel, `/users/:handle`, the `returnTo` callback and the admin
+   Unpublish button are all present in both frontends.
 3. On user delete, release the handle immediately or tombstone it?

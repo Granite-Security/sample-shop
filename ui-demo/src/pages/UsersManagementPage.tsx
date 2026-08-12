@@ -193,6 +193,20 @@ export function UsersManagementPage() {
                       </button>
                     )}
 
+                    {/* Takes a public profile down without touching the account —
+                        for a bio or handle that has to go, where blocking would be
+                        disproportionate (docs/profile/public-profile.md step 9).
+                        Also releases the handle. Blocking already unpublishes on
+                        its own, so this is the standalone case. */}
+                    <button
+                      disabled={working}
+                      onClick={() => run(u.username, () => api.unpublishUser(u.username),
+                        `${u.username}'s public profile was taken down.`)}
+                      className="text-xs uppercase tracking-[0.14em] text-cocoa underline underline-offset-4 hover:text-terracotta disabled:opacity-40"
+                    >
+                      {working ? 'Working…' : 'Unpublish'}
+                    </button>
+
                     <button
                       disabled={isSelf || working}
                       title={isSelf ? 'You cannot delete your own account.' : undefined}

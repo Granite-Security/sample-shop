@@ -21,6 +21,7 @@ import { DeliveriesPage } from './pages/DeliveriesPage';
 import { UserProfileViewPage } from './pages/UserProfileViewPage';
 import { CheckoutPage } from './pages/CheckoutPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { PublicProfilePage } from './pages/PublicProfilePage';
 import { PasswordPage } from './pages/PasswordPage';
 import { FilesPage } from './pages/FilesPage';
 import { AddressesPage } from './pages/AddressesPage';
@@ -72,6 +73,10 @@ export default function App() {
               <Route path="our-story" element={<OurStoryPage />} />
               <Route path="gifts" element={<GiftsPage />} />
               <Route path="contact" element={<ContactPage />} />
+              {/* Public profiles (docs/profile/public-profile.md). Must stay
+                  outside RequireAuth and AccountLayout — an anonymous visitor is
+                  the whole point of the feature. */}
+              <Route path="users/:handle" element={<PublicProfilePage />} />
               <Route path="products/:id" element={<ProductPage />} />
               <Route path="admin" element={<AdminPage />} />
               <Route path="admin/users" element={<UsersManagementPage />} />
