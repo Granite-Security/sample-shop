@@ -70,7 +70,7 @@ images:
     newTag: 871dbfd3d61429a67d0ca3decd627666dc5d0afe
   - name: granite-ui-demo
     newName: docker.io/moldovean/granite-ui-demo
-    newTag: 1458bba023e17aa081881a9f3d9d50591c3a5cd3
+    newTag: 1ca855a6b7047afb99d0bf950f9ba6706d6c88a5
   - name: granite-storage
     newName: docker.io/moldovean/granite-storage
     newTag: 697a210a31584e78b9286619ced01bd902344118
