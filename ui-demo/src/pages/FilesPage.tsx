@@ -64,6 +64,11 @@ export function FilesPage() {
     }
   };
 
+  const handleShare = async (file: UserFile) => {
+    const updated = await api.setFileShared(file.id, !file.shared);
+    setFiles((current) => current.map((f) => (f.id === updated.id ? updated : f)));
+  };
+
   const handleDeleteFile = async (id: number) => {
     await api.deleteFile(id);
     setFiles((prev) => prev.filter((f) => f.id !== id));
@@ -152,9 +157,16 @@ export function FilesPage() {
                   </a>
                   <p className="mt-1 text-sm text-cocoa/50">
                     {formatSize(file.sizeBytes)} · {new Date(file.createdAt).toLocaleDateString()}
+                    {file.shared && ' · on your public profile'}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-4">
+                  <button
+                    onClick={() => handleShare(file)}
+                    className="text-xs uppercase tracking-[0.14em] text-cocoa underline decoration-gold underline-offset-4 hover:text-terracotta"
+                  >
+                    {file.shared ? 'Remove from profile' : 'Publish to profile'}
+                  </button>
                   <button
                     onClick={() => handleCopyLink(file.url)}
                     className="text-xs uppercase tracking-[0.14em] text-cocoa underline decoration-gold underline-offset-4 hover:text-terracotta"

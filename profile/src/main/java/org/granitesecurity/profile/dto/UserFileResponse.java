@@ -8,5 +8,6 @@ public record UserFileResponse(
         String url,
         String contentType,
         Long sizeBytes,
+        boolean shared,
         Instant createdAt
 ) {}

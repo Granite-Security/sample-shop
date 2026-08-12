@@ -40,6 +40,21 @@ public class UserFileHandler {
                 .flatMap(response -> ServerResponse.ok().bodyValue(response));
     }
 
+    public Mono<ServerResponse> setShared(ServerRequest request) {
+        Long id = Long.valueOf(request.pathVariable("id"));
+        return request.bodyToMono(org.granitesecurity.profile.dto.ShareFileRequest.class)
+                .zipWith(getUsername(request))
+                .flatMap(tuple -> userFileService.setShared(tuple.getT2(), id, tuple.getT1().shared()))
+                .flatMap(file -> ServerResponse.ok().bodyValue(file));
+    }
+
+    /** Anonymous — reads no principal, and must not start. */
+    public Mono<ServerResponse> listPublicFiles(ServerRequest request) {
+        return ServerResponse.ok().body(
+                userFileService.listPublicFiles(request.pathVariable("handle")),
+                org.granitesecurity.profile.dto.PublicFileResponse.class);
+    }
+
     public Mono<ServerResponse> delete(ServerRequest request) {
         Long id = Long.valueOf(request.pathVariable("id"));
         return getUsername(request)

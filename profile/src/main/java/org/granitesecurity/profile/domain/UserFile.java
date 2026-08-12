@@ -35,6 +35,11 @@ public class UserFile {
     @Column("size_bytes")
     private Long sizeBytes;
 
+    // Whether the owner published this file to their public profile. Only ever
+    // visible to a stranger when the profile itself is published, since the
+    // public query joins on that (docs/profile/public-profile.md §11).
+    private boolean shared;
+
     @Column("created_at")
     private Instant createdAt;
 

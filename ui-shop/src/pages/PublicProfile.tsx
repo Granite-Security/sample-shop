@@ -5,7 +5,7 @@ import { ApiError } from '../api/client';
 import { useAuth } from '../auth';
 import { userManager } from '../oauth';
 import Avatar from '../components/Avatar';
-import type { PublicProfileResponse } from '../types';
+import type { PublicFile, PublicProfileResponse } from '../types';
 
 /**
  * The public profile at /users/<handle> (docs/profile/public-profile.md).
@@ -64,7 +64,54 @@ export default function PublicProfile() {
         <p style={{ marginTop: 20, whiteSpace: 'pre-wrap' }}>{profile.bio}</p>
       )}
 
+      <PublicFiles handle={profile.handle} />
+
       <PublicActions profile={profile} />
+    </div>
+  );
+}
+
+function formatSize(bytes: number | null): string {
+  if (bytes == null) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Files the owner published (docs/profile/public-profile.md §11).
+ *
+ * Fetched separately from the profile so the page renders without waiting on it,
+ * and so PublicProfileResponse does not grow a nested list. An empty result is
+ * the common case — it renders nothing rather than an empty heading.
+ */
+function PublicFiles({ handle }: { handle: string }) {
+  const [files, setFiles] = useState<PublicFile[]>([]);
+
+  useEffect(() => {
+    api.publicProfile.files(handle).then(setFiles).catch(() => setFiles([]));
+  }, [handle]);
+
+  if (files.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 28 }}>
+      <h2 style={{ fontSize: 18 }}>Files</h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+        {files.map(file => (
+          <div key={file.id} style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            padding: 8, border: '1px solid var(--border)', borderRadius: 4,
+          }}>
+            <div>
+              <a href={file.url} target="_blank" rel="noreferrer">{file.fileName}</a>
+              <div style={{ fontSize: 12, opacity: 0.6 }}>
+                {formatSize(file.sizeBytes)} · {new Date(file.createdAt).toLocaleDateString()}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

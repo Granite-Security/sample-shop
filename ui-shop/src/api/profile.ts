@@ -175,4 +175,10 @@ export const profileApi = {
 
   deleteFile: (id: number) =>
     request<void>(`/api/profiles/me/files/${id}`, { method: 'DELETE' }),
+
+  // "Publish to profile". A flag on the file, not a URL copied onto the profile,
+  // so deleting the file takes it off the public page by itself.
+  setFileShared: (id: number, shared: boolean) =>
+    request<UserFile>(`/api/profiles/me/files/${id}/share`,
+      { method: 'PUT', body: JSON.stringify({ shared }) }),
 };

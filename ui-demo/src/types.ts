@@ -333,6 +333,19 @@ export interface UserFile {
   url: string;
   contentType: string;
   sizeBytes: number | null;
+  // Published to the owner's public profile. Only reaches a stranger when the
+  // profile itself is published (docs/profile/public-profile.md §11).
+  shared: boolean;
+  createdAt: string;
+}
+
+/** A file on someone's public profile. Owner-only fields are absent by design. */
+export interface PublicFile {
+  id: number;
+  fileName: string;
+  url: string;
+  contentType: string;
+  sizeBytes: number | null;
   createdAt: string;
 }
 

@@ -38,6 +38,9 @@ public class ProfileRoute {
                 // value for that wildcard. ProfileSec permits this path by method as
                 // well, and it is the only readable route here without a token.
                 .GET("/api/profiles/public/{handle}", profileHandler::getPublicProfile)
+                // Files the owner published to that profile (§11). Same permitAll
+                // rule covers it: ProfileSec permits GET /api/profiles/public/**.
+                .GET("/api/profiles/public/{handle}/files", userFileHandler::listPublicFiles)
                 .GET("/api/profiles/me", profileHandler::getMe)
                 // Separate from PUT /me, which overwrites every field it is given, and
                 // which has no 409 to report (D5). "handle/available" is registered
@@ -56,6 +59,7 @@ public class ProfileRoute {
                 .GET("/api/profiles/me/files", userFileHandler::listFiles)
                 .GET("/api/profiles/me/files/duplicate", userFileHandler::checkDuplicate)
                 .POST("/api/profiles/me/files", userFileHandler::register)
+                .PUT("/api/profiles/me/files/{id}/share", userFileHandler::setShared)
                 .DELETE("/api/profiles/me/files/{id}", userFileHandler::delete)
                 // Messaging (docs/users/messaging.md). "recipients" and "unread-count"
                 // are registered before the {id} routes — otherwise they parse as a

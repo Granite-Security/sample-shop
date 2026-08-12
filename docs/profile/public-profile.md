@@ -161,6 +161,36 @@ submit `bio` alongside the existing fields — `PUT /me` overwrites what it's gi
 
 `README.md` profile endpoint table; pointer from `docs/users/user-profile.md`.
 
+## 11. Published files
+
+A file the owner published shows on their public profile. Shipped without the guardrails
+proposed alongside it — they are recorded in [`../todo/guardrails.md`](../todo/guardrails.md).
+
+**Publishing changes discoverability, not access.** Every user file is already
+anonymously readable by URL — verified against production: an untouched file URL returns
+200 and the full PDF to a caller with no token. Bucket listing is off, so the protection
+today is an unguessable URL, which is the trade-off `docs/users/user-profile.md` records
+under Security notes. The button is called *Publish to profile* rather than *make public*
+for exactly this reason: it lists the file, it does not expose it.
+
+**A flag on the file, not a URL copied onto the profile.** Copying the URL would make a
+second copy that goes stale — deleting the file would leave a dead link on the public
+page and need a cleanup path. One flag on one row means deletion removes it from the
+profile by itself.
+
+- `011-user-file-shared.sql` — `shared BOOLEAN NOT NULL DEFAULT FALSE`, partial index
+  `(username) WHERE shared`.
+- `PUT /api/profiles/me/files/{id}/share` — scoped by username in the UPDATE, so one user
+  cannot publish another's file.
+- `GET /api/profiles/public/{handle}/files` — **joins `user_profile` on
+  `public_profile = true`**. That join is the safety property: unpublishing your profile
+  hides the files with no second switch to keep in sync, and the block-unpublishes-you
+  path (D6) covers blocked users for free. Covered by the existing
+  `GET /api/profiles/public/**` permitAll rule.
+- `PublicFileResponse` is its own record — never `objectKey`, never `contentHash`.
+- Both frontends: a *Publish to profile* / *Remove from profile* button per row on My
+  Files, and a Files section on the public page that renders nothing when empty.
+
 ## Verification
 
 Unit tests only for the pure bits in `ProfileServiceTest` (handle regex, reserved list, bio
@@ -174,6 +204,9 @@ curl -i  https://<domain>/api/profiles/public/<private-handle>   # 404, not 403
 curl -i  https://<domain>/api/profiles/public                    # 404 from routing, not 401
 curl -i  "https://<domain>/api/profiles/me/handle/available?handle=adrian"  # 401
 curl -s -H "Authorization: Bearer $TOKEN" https://<domain>/api/profiles/me | jq
+
+# published files: listed for a published profile, empty once it goes private
+curl -s https://<domain>/api/profiles/public/adrian/files | jq
 ```
 
 Browser, private window: `/users/<handle>` renders without bouncing to login; a bio
