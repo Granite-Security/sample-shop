@@ -105,6 +105,12 @@ export function OrderDetailPage() {
             <p className="mt-4 text-sm text-cocoa/60">
               Placed {new Date(order.createdAt).toLocaleString()}
             </p>
+            {Number(order.discountTotal ?? 0) > 0 && (
+              <p className="mt-1 text-sm text-cocoa/60">
+                Voucher {order.voucherCode} ({order.discountPercent}% off)
+                {' '}−{formatPrice(Number(order.discountTotal))}
+              </p>
+            )}
             <p className="mt-1 font-display text-xl text-cocoa">{formatPrice(order.total)}</p>
 
             {order.address && (

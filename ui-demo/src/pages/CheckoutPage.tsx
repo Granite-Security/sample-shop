@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api';
+import VoucherField from '../components/VoucherField';
 import { useAuth } from '../auth';
 import { formatPrice, useShop } from '../store';
 import type {
-  AddressResponse, DeliveryAddress, OrderResponse, PackagingQuote, ProviderPayload,
+  AddressResponse, DeliveryAddress, OrderResponse, PackagingChoice, PackagingQuote,
+  ProviderPayload, VoucherPreview,
 } from '../types';
 import { ChocolateArt, variantFor } from '../components/ChocolateArt';
 import PaymentWidget from '../components/payment/PaymentWidget';
@@ -63,6 +65,9 @@ export function CheckoutPage() {
   const [packagingState, setPackagingState] = useState<
     { key: string; quote: PackagingQuote | null } | null>(null);
   const [packagingChoice, setPackagingChoice] = useState<Record<number, number>>({});
+  // The applied voucher as the server priced it. Only its code is sent on placement —
+  // the amount is repriced there, because a preview is not a reservation.
+  const [voucher, setVoucher] = useState<VoucherPreview | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { providers, selected: selectedProvider, setSelected: setSelectedProvider, find } =
@@ -251,6 +256,35 @@ export function CheckoutPage() {
   const needsPackagingChoice = Boolean(packaging?.packagingRequired)
     && packaging!.groups.some((g) => !packagingChoice[g.groupId]);
 
+  // What placement will be sent, and what the voucher preview has to price against —
+  // the discount excludes boxes but the chargeable minimum does not.
+  const packagingChoices: PackagingChoice[] = useMemo(
+    () =>
+      packaging?.packagingRequired
+        ? Object.entries(packagingChoice).map(([groupId, optionId]) => ({
+            groupId: Number(groupId),
+            optionId,
+          }))
+        : [],
+    [packaging, packagingChoice],
+  );
+
+  // The orderable lines only, matching what placement sends — fallback pieces
+  // (negative ids) exist client-side and can never be discounted.
+  const orderableItems = useMemo(
+    () => cart.filter((l) => l.product.id > 0)
+      .map((l) => ({ productId: l.product.id, quantity: l.quantity })),
+    [cart],
+  );
+
+  // Read off the preview the server sent, never computed here.
+  const discountTotal = voucher?.discountTotal ?? 0;
+  // Keyed on cart and boxes together: either moves the subtotal the percentage
+  // applies to, or the minimum the payable total is checked against.
+  const voucherCartKey = `${orderableKey}|${packagingChoices
+    .map((c) => `${c.groupId}:${c.optionId}`)
+    .join(',')}`;
+
   const placeOrder = async () => {
     if (!address.recipientName || !address.addressLine1 || !address.city || !address.zipCode || !address.country) {
       setError('Please complete the delivery address.');
@@ -287,6 +321,9 @@ export function CheckoutPage() {
               optionId,
             }))
           : undefined,
+        // The code only. What it is worth is decided server-side at placement, so a
+        // tampered or stale preview cannot change what is charged.
+        voucherCode: voucher?.code,
       });
       setOrder(result);
       clearCart();
@@ -452,9 +489,17 @@ export function CheckoutPage() {
                   <span>{formatPrice(packagingTotal)}</span>
                 </p>
               )}
+              <VoucherField
+                items={orderableItems}
+                packaging={packagingChoices}
+                cartKey={voucherCartKey}
+                disabled={step === 'placing' || packagingLoading}
+                formatPrice={formatPrice}
+                onChange={setVoucher}
+              />
               <p className="mt-4 flex justify-between font-display text-xl text-cocoa">
                 <span>Total</span>
-                <span>{formatPrice(cartTotal + packagingTotal)}</span>
+                <span>{formatPrice(cartTotal - discountTotal + packagingTotal)}</span>
               </p>
               {fallbackItems.length > 0 && (
                 <p className="mt-3 text-sm text-terracotta">
@@ -656,7 +701,7 @@ export function CheckoutPage() {
             >
               {step === 'placing'
                 ? 'Placing Order…'
-                : `Place Order — ${formatPrice(cartTotal + packagingTotal)}`}
+                : `Place Order — ${formatPrice(cartTotal - discountTotal + packagingTotal)}`}
             </button>
           </div>
         )}

@@ -12,6 +12,7 @@ import Orders from './pages/Orders'
 import OrderDetail from './pages/OrderDetail'
 import RetryPayment from './pages/RetryPayment'
 import Admin from './pages/Admin'
+import VouchersManagement from './pages/VouchersManagement'
 import ProductsManagement from './pages/ProductsManagement'
 import ProductForm from './pages/ProductForm'
 import DeliveryManagement from './pages/DeliveryManagement'
@@ -68,6 +69,7 @@ export default function App() {
         <Route path="admin/products/:id/edit" element={<ProductForm />} />
         <Route path="admin/deliveries" element={<DeliveryManagement />} />
         <Route path="admin/users" element={<UsersManagement />} />
+        <Route path="admin/vouchers" element={<VouchersManagement />} />
         <Route path="admin/users/:username" element={<UserProfileView />} />
         <Route path="login" element={<Login />} />
         <Route path="register" element={<Register />} />

@@ -58,6 +58,7 @@ public class OrderService {
     private final OrderPackagingRepository orderPackagingRepository;
     private final PackagingGroupRepository packagingGroupRepository;
     private final PackagingOptionRepository packagingOptionRepository;
+    private final VoucherService voucherService;
 
     /**
      * The currency new orders are priced in. Must match payment's shop-currency —
@@ -73,7 +74,8 @@ public class OrderService {
                         PackagingService packagingService,
                         OrderPackagingRepository orderPackagingRepository,
                         PackagingGroupRepository packagingGroupRepository,
-                        PackagingOptionRepository packagingOptionRepository) {
+                        PackagingOptionRepository packagingOptionRepository,
+                        VoucherService voucherService) {
         this.customerOrderRepository = customerOrderRepository;
         this.orderItemRepository = orderItemRepository;
         this.productRepository = productRepository;
@@ -82,6 +84,7 @@ public class OrderService {
         this.orderPackagingRepository = orderPackagingRepository;
         this.packagingGroupRepository = packagingGroupRepository;
         this.packagingOptionRepository = packagingOptionRepository;
+        this.voucherService = voucherService;
     }
 
     @Transactional
@@ -149,14 +152,48 @@ public class OrderService {
         // needs a box yields an empty plan and a zero total, and any choices sent with
         // it are ignored.
         return packagingService.plan(productMap, request.items(), packagingChoices(request))
-                .map(plan -> {
-                    CustomerOrder order = new CustomerOrder(username, OrderStatus.PENDING.name(),
-                            itemsTotal.add(plan.packagingTotal()), shopCurrency,
-                            addr.recipientName(), addr.addressLine1(), addrLine2, addr.city(), state,
-                            addr.zipCode(), addr.country());
-                    order.setPackagingTotal(plan.packagingTotal());
-                    return new OrderContext(order, items, productMap, request.provider(), plan);
-                });
+                .flatMap(plan -> applyVoucher(username, request, itemsTotal, plan.packagingTotal())
+                        .map(applied -> {
+                            // total is items - discount + packaging: the discount comes off
+                            // the goods only (vouchers.md V7), boxes are charged in full, and
+                            // what lands in `total` is still exactly the amount payable (V4).
+                            CustomerOrder order = new CustomerOrder(username, OrderStatus.PENDING.name(),
+                                    itemsTotal.subtract(applied.discountTotal()).add(plan.packagingTotal()),
+                                    shopCurrency,
+                                    addr.recipientName(), addr.addressLine1(), addrLine2, addr.city(), state,
+                                    addr.zipCode(), addr.country());
+                            order.setPackagingTotal(plan.packagingTotal());
+                            order.setDiscountTotal(applied.discountTotal());
+                            if (applied.applied()) {
+                                order.setVoucherCode(applied.voucher().getCode());
+                                order.setDiscountPercent(applied.voucher().getPercentOff());
+                            }
+                            return new OrderContext(order, items, productMap, request.provider(), plan,
+                                    applied.applied() ? applied.voucher().getId() : null);
+                        }));
+    }
+
+    /**
+     * The voucher, priced against this cart, or a 400 naming why it was refused.
+     *
+     * <p>Repriced from scratch even when the shopper previewed it a moment ago: a
+     * preview is not a reservation (vouchers.md V11), and between the two the code can
+     * expire, be revoked, or be spent by the shopper's other tab. The refusal reason
+     * the preview endpoint hands to the UI becomes an error message here, because at
+     * placement there is nothing left to choose.
+     *
+     * <p>An order with no code takes the zero outcome and never touches the voucher
+     * tables — which is every order placed before this feature existed.
+     */
+    private Mono<VoucherOutcome> applyVoucher(String username, PlaceOrderRequest request,
+                                              BigDecimal itemsTotal, BigDecimal packagingTotal) {
+        if (VoucherService.isBlank(request.voucherCode())) {
+            return Mono.just(VoucherOutcome.none());
+        }
+        return voucherService.evaluate(request.voucherCode(), username, itemsTotal, packagingTotal)
+                .flatMap(outcome -> outcome.refused()
+                        ? Mono.error(new ShopException(outcome.refusal().message()))
+                        : Mono.just(outcome));
     }
 
     /**
@@ -222,10 +259,23 @@ public class OrderService {
             // not critical" is handled by it being an outbox row — if Kafka is down
             // the relay keeps retrying and nothing blocks checkout.
             OutboxEvent notice = createOrderNoticeEvent(co);
-            return outboxRepository.save(outbox)
+            // The voucher is claimed here, in the same transaction as the order it
+            // discounted (vouchers.md V8). Two consequences, both wanted: a placement
+            // that rolls back never consumes the code, and a second checkout racing
+            // this one loses on the primary key rather than on a check that already
+            // passed. It runs before the outbox rows so a duplicate aborts the
+            // transaction before anything is announced.
+            return claimVoucher(ctx, co)
+                    .then(outboxRepository.save(outbox))
                     .then(outboxRepository.save(notice))
                     .flatMap(saved -> buildOrderResponse(co, itemsWithOrderId, null));
         });
+    }
+
+    private Mono<Void> claimVoucher(OrderContext ctx, CustomerOrder order) {
+        return ctx.voucherId() == null
+                ? Mono.empty()
+                : voucherService.redeem(ctx.voucherId(), order.getUsername(), order.getId());
     }
 
     private OutboxEvent createOutboxEvent(CustomerOrder order, List<OrderItem> items, String provider,
@@ -322,6 +372,17 @@ public class OrderService {
                 .toList();
         payload.put("packaging", packagingList);
         payload.put("packagingTotal", order.getPackagingTotal());
+        // Facts, not journal instructions (D24), frozen at emit time (D26). accounting
+        // needs discountTotal to gross revenue back up at delivery — it credits 4000
+        // with total + discount and debits 4300 with the discount, so the sale stays
+        // visible at its list price and the discount is a line rather than an absence
+        // (docs/finance/vouchers.md §3.2). Zero and null for an order with no voucher,
+        // which posts exactly the journal it always did.
+        payload.put("voucherCode", order.getVoucherCode());
+        payload.put("discountPercent", order.getDiscountPercent());
+        payload.put("discountTotal", order.getDiscountTotal());
+        // Unchanged in meaning: what is payable, already net of the discount above.
+        // This is why payment, balance and delivery needed no changes at all (V4).
         payload.put("total", order.getTotal());
         // Currency travels with the amount: payment must charge what shop priced, not
         // whatever its own config currently says.
@@ -421,6 +482,12 @@ public class OrderService {
             payload.put("eventType", "RefundRequested");
             payload.put("orderId", order.getId());
             payload.put("total", order.getTotal());
+            // Carried so accounting can reverse the voucher leg in the same proportion
+            // it recognised it (vouchers.md §3.4). Without it a refunded discounted
+            // order would leave contra-revenue standing against a sale that no longer
+            // exists — the same trap the gift leg already avoids. Absent on events
+            // emitted before vouchers existed, which read as zero.
+            payload.put("discountTotal", order.getDiscountTotal());
             payload.put("username", order.getUsername());
             String json = OBJECT_MAPPER.writeValueAsString(payload);
             return new OutboxEvent("order", String.valueOf(order.getId()), "RefundRequested", json, "PENDING");
@@ -583,7 +650,13 @@ public class OrderService {
                         order.getCountry()
                 ),
                 order.getPackagingTotal() != null ? order.getPackagingTotal() : BigDecimal.ZERO,
-                packaging
+                packaging,
+                // Null-safe for the same reason packagingTotal is: rows written before
+                // the column existed read as an order placed without a voucher, which
+                // is what they are.
+                order.getVoucherCode(),
+                order.getDiscountPercent(),
+                order.getDiscountTotal() != null ? order.getDiscountTotal() : BigDecimal.ZERO
         );
     }
 
@@ -593,7 +666,12 @@ public class OrderService {
      *                 the order row: it is an instruction to payment, and payment owns
      *                 which provider a payment ended up on.
      */
+    /**
+     * @param voucherId the voucher to claim once the order has an id, or null. Only the
+     *                  id travels: what the order was charged is already snapshotted
+     *                  onto {@code order} (V5), so nothing later re-reads the row.
+     */
     private record OrderContext(CustomerOrder order, List<OrderItem> items,
                                 Map<Long, Product> productMap, String provider,
-                                PackagingPlan packaging) {}
+                                PackagingPlan packaging, Long voucherId) {}
 }

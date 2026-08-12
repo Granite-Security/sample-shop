@@ -49,6 +49,7 @@ export default function Admin() {
             <Link to="/admin/deliveries" className="btn" style={{ textDecoration: 'none' }}>Deliveries</Link>
           )}
           <Link to="/admin/users" className="btn" style={{ textDecoration: 'none' }}>Users</Link>
+          <Link to="/admin/vouchers" className="btn" style={{ textDecoration: 'none' }}>Vouchers</Link>
         </div>
       </section>
 

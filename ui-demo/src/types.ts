@@ -84,6 +84,12 @@ export interface OrderResponse {
   packagingTotal?: number;
   /** What the order was packed in — the frozen prices, not today's. */
   packaging?: OrderPackagingResponse[];
+  /** The voucher applied at placement, snapshotted. Null when none was used. */
+  voucherCode?: string | null;
+  /** The voucher's percentage — a label for `discountTotal`, never used to recompute it. */
+  discountPercent?: number | null;
+  /** What the voucher took off. Already subtracted from `total`. */
+  discountTotal?: number;
 }
 
 export interface OrderPackagingResponse {
@@ -195,6 +201,30 @@ export interface PlaceOrderRequest {
    * box and names none.
    */
   packaging?: PackagingChoice[];
+  /** Optional. Revalidated and repriced server-side — a preview is not a reservation. */
+  voucherCode?: string;
+}
+
+/**
+ * What a voucher code is worth on a cart, or why it is worth nothing.
+ *
+ * A refused code comes back as a 200 with `valid: false` — the request was fine and
+ * the answer is something checkout has to render, not an error.
+ */
+export interface VoucherPreview {
+  code: string;
+  valid: boolean;
+  /** NOT_FOUND | NOT_YET_VALID | EXPIRED | REVOKED | ALREADY_USED | BELOW_MINIMUM */
+  reason?: string | null;
+  /** Wording for `reason`, ready to show. */
+  message?: string | null;
+  percentOff?: number | null;
+  validUntil?: string | null;
+  itemsTotal: number;
+  discountTotal: number;
+  packagingTotal: number;
+  payableTotal: number;
+  currency: string;
 }
 
 export interface CreatePaymentIntentResponse {
@@ -577,6 +607,7 @@ export interface AccrualReport {
     revenueGrossMinor: number;
     contraGiftMinor: number;
     contraReturnsMinor: number;
+    contraVoucherMinor: number;
     netRevenueMinor: number;
     deliveredCount: number;
   };
@@ -589,6 +620,8 @@ export interface AccrualBucket {
   revenueGrossMinor: number;
   contraGiftMinor: number;
   contraReturnsMinor: number;
+  /** Voucher discounts (4300). Gross less all three contras is net revenue. */
+  contraVoucherMinor: number;
   netRevenueMinor: number;
   deliveredCount: number;
 }

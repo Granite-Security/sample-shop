@@ -140,6 +140,12 @@ export default function OrderDetail() {
         </p>
       )}
       <p>Placed: {new Date(order.createdAt).toLocaleString()}</p>
+      {Number(order.discountTotal ?? 0) > 0 && (
+        <p style={{ color: 'var(--text-secondary)' }}>
+          Voucher <strong>{order.voucherCode}</strong> ({order.discountPercent}% off):
+          {' '}−${Number(order.discountTotal).toFixed(2)}
+        </p>
+      )}
       <p>Total: <strong>${Number(order.total).toFixed(2)}</strong></p>
 
       {order.address && (

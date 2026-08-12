@@ -30,6 +30,15 @@ public final class Accounts {
     /** Gifted credit redeemed: consideration payable to a customer (§2.4). */
     public static final String CONTRA_GIFT = "4100";
     public static final String CONTRA_RETURNS = "4200";
+    /**
+     * Voucher discounts (docs/finance/vouchers.md §3.2).
+     *
+     * <p>Unlike {@link #CONTRA_GIFT} this is a presentation gross-up, not a
+     * measurement position: a voucher reduces the transaction price at inception
+     * (IFRS 15.47), so revenue is the net amount either way. Booking it keeps the
+     * discount visible, which netting would destroy irrecoverably.
+     */
+    public static final String CONTRA_VOUCHER = "4300";
 
     public static final String COGS = "5000";
     public static final String PROCESSOR_FEES = "6100";

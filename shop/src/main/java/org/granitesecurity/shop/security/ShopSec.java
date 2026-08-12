@@ -74,6 +74,19 @@ public class ShopSec {
                         // above: repricing a box changes what every future shopper is
                         // charged, and retiring the wrong one takes a group of products
                         // off sale. Reading a report does neither.
+                        // Vouchers, for the same reason and with more at stake: a
+                        // voucher decides what every future shopper is charged, and
+                        // without these two lines POST and DELETE fall through to
+                        // anyExchange().authenticated() below — any logged-in user
+                        // could mint themselves 100% off. The GET rule above already
+                        // covers listing them for ADMIN and MANAGER.
+                        .pathMatchers(HttpMethod.POST, "/api/shop/admin/vouchers/**",
+                                "/api/shop/admin/vouchers").hasRole("ADMIN")
+                        .pathMatchers(HttpMethod.DELETE, "/api/shop/admin/vouchers/**").hasRole("ADMIN")
+                        // Pricing a code is a checkout step, like the packaging quote:
+                        // authenticated, because the cart is the shopper's and the
+                        // once-per-user rule needs to know who is asking.
+                        .pathMatchers(HttpMethod.POST, "/api/shop/vouchers/preview").authenticated()
                         .pathMatchers(HttpMethod.POST, "/api/shop/admin/packaging/**").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.PUT, "/api/shop/admin/packaging/**").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.DELETE, "/api/shop/admin/packaging/**").hasRole("ADMIN")

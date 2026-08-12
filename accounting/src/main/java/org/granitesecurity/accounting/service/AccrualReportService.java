@@ -87,13 +87,14 @@ public class AccrualReportService {
                                    List<LocalDate> starts, Map<LocalDate, AccrualRow> rows,
                                    Map<String, String> periodStatus, EclReport creditLoss) {
         List<AccrualBucket> buckets = new ArrayList<>(starts.size());
-        long gross = 0, gift = 0, returns = 0, delivered = 0;
+        long gross = 0, gift = 0, returns = 0, voucher = 0, delivered = 0;
 
         for (LocalDate start : starts) {
             AccrualRow row = rows.get(start);
             long bGross = row == null ? 0 : row.revenueGrossMinor();
             long bGift = row == null ? 0 : row.contraGiftMinor();
             long bReturns = row == null ? 0 : row.contraReturnsMinor();
+            long bVoucher = row == null ? 0 : row.contraVoucherMinor();
             long bDelivered = row == null ? 0 : row.deliveredCount();
 
             buckets.add(new AccrualBucket(start, granularity.label(start),
@@ -101,17 +102,20 @@ public class AccrualReportService {
                     // it starts in. Weeks and years can straddle; saying CLOSED when half of
                     // it is open would be worse than saying which month it belongs to.
                     periodStatus.getOrDefault(PERIOD.format(start), "OPEN"),
-                    bGross, bGift, bReturns, bGross - bGift - bReturns, bDelivered));
+                    bGross, bGift, bReturns, bVoucher,
+                    bGross - bGift - bReturns - bVoucher, bDelivered));
 
             gross += bGross;
             gift += bGift;
             returns += bReturns;
+            voucher += bVoucher;
             delivered += bDelivered;
         }
 
         return new AccrualReport(granularity.sqlUnit, "CHF", periodService.booksOpenOn(),
                 from, to, buckets, creditLoss,
-                new AccrualTotals(gross, gift, returns, gross - gift - returns, delivered));
+                new AccrualTotals(gross, gift, returns, voucher,
+                        gross - gift - returns - voucher, delivered));
     }
 
     private static LocalDate date(String raw, String field, LocalDate fallback) {
@@ -126,15 +130,21 @@ public class AccrualReportService {
         }
     }
 
-    /** @param periodStatus OPEN or CLOSED — the page marks frozen buckets */
+    /**
+     * @param periodStatus       OPEN or CLOSED — the page marks frozen buckets
+     * @param contraVoucherMinor voucher discounts (4300). Gross less all three contras
+     *                           is net revenue, which is the IFRS figure; the gross-up
+     *                           exists so the discount is visible rather than absent
+     *                           (docs/finance/vouchers.md §3.2).
+     */
     public record AccrualBucket(LocalDate bucket, String label, String periodStatus,
                                 long revenueGrossMinor, long contraGiftMinor,
-                                long contraReturnsMinor, long netRevenueMinor,
-                                long deliveredCount) {}
+                                long contraReturnsMinor, long contraVoucherMinor,
+                                long netRevenueMinor, long deliveredCount) {}
 
     public record AccrualTotals(long revenueGrossMinor, long contraGiftMinor,
-                                long contraReturnsMinor, long netRevenueMinor,
-                                long deliveredCount) {}
+                                long contraReturnsMinor, long contraVoucherMinor,
+                                long netRevenueMinor, long deliveredCount) {}
 
     /**
      * @param booksOpenedOn before this date there are no books at all; the page says "not yet

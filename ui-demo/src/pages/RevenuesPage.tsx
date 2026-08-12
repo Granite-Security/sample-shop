@@ -168,12 +168,12 @@ export function RevenuesPage() {
       {accrual && (
         <Section
           title="Earned — accrual"
-          note="What we earned, as booked: recognised on delivery, not on payment. Gifted credit and
-                expected returns are shown as deductions rather than netted away, so the discount
-                stays visible."
+          note="What we earned, as booked: recognised on delivery, not on payment. Gifted credit,
+                voucher discounts and expected returns are shown as deductions rather than netted
+                away, so every discount stays visible. Net is the IFRS figure."
         >
           <Table
-            head={['Period', 'Revenue (gross)', 'Gift credit', 'Expected returns', 'Net', 'Delivered']}
+            head={['Period', 'Revenue (gross)', 'Gift credit', 'Vouchers', 'Expected returns', 'Net', 'Delivered']}
           >
             {accrualBuckets.map((b, i) => {
               const beforeBooks = b.bucket < accrual.booksOpenedOn;
@@ -192,13 +192,14 @@ export function RevenuesPage() {
                     )}
                   </Td>
                   {beforeBooks ? (
-                    <td colSpan={5} className="py-3 pr-4 text-sm italic text-cocoa/50">
+                    <td colSpan={6} className="py-3 pr-4 text-sm italic text-cocoa/50">
                       not yet booked — the books open on {accrual.booksOpenedOn}
                     </td>
                   ) : (
                     <>
                       <Td>{chf(b.revenueGrossMinor)}</Td>
                       <Td>{b.contraGiftMinor ? `−${chf(b.contraGiftMinor)}` : '—'}</Td>
+                      <Td>{b.contraVoucherMinor ? `−${chf(b.contraVoucherMinor)}` : '—'}</Td>
                       <Td>{b.contraReturnsMinor ? `−${chf(b.contraReturnsMinor)}` : '—'}</Td>
                       <Td className="font-semibold">{chf(b.netRevenueMinor)}</Td>
                       <Td>{b.deliveredCount}</Td>
@@ -212,6 +213,7 @@ export function RevenuesPage() {
                 'Total',
                 chf(accrual.totals.revenueGrossMinor),
                 chf(accrual.totals.contraGiftMinor),
+                chf(accrual.totals.contraVoucherMinor),
                 chf(accrual.totals.contraReturnsMinor),
                 chf(accrual.totals.netRevenueMinor),
                 accrual.totals.deliveredCount,

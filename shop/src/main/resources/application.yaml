@@ -62,6 +62,13 @@ shop:
   # cannot reinterpret history. Must match payment's shop-currency (STRIPE_CURRENCY).
   currency: ${SHOP_CURRENCY:CHF}
 
+  # The smallest total we can actually charge (docs/finance/vouchers.md §6.1).
+  # A 100% voucher on a cart of bars — which need no box — prices the order at zero,
+  # and no provider will take it: Stripe and PayPal both reject amounts below roughly
+  # CHF 0.50, and a zero-amount balance spend moves nothing. The order is refused with
+  # a reason the shopper can act on rather than failing later at the provider.
+  minimum-payable-total: ${SHOP_MINIMUM_PAYABLE_TOTAL:0.50}
+
 app:
   outbox:
     poll-interval: 5000

@@ -96,21 +96,30 @@ public class PostingRules {
      * the reversal is of revenue, and it must reverse <em>both</em> legs — gross revenue and
      * the gift contra — or a refunded gift-funded order would leave contra-revenue standing
      * against a sale that no longer exists. Before delivery nothing was recognised, so what
-     * unwinds is the deferred revenue.
+     * unwinds is the deferred revenue — and, before delivery, no voucher discount was
+     * booked either, so there is none to give back (vouchers.md §3.4).
      */
     private Mono<PostingOutcome> refundRequested(Fact fact, Map<String, Object> payload) {
-        long gross = Money.fromDecimal(payload.get("total"));
-        if (gross <= 0) {
+        long charged = Money.fromDecimal(payload.get("total"));
+        long discount = Money.fromDecimal(payload.get("discountTotal"));
+        if (charged + discount <= 0) {
             return Mono.just(new Ignore("nothing to reverse"));
         }
         return giftFundedOn(fact.getAggregateId()).flatMap(gift ->
                 wasDelivered(fact.getAggregateId()).map(delivered -> {
-                    long net = gross - gift;
+                    long net = charged - gift;
                     List<PostingLine> lines = new ArrayList<>();
                     if (delivered) {
-                        lines.add(PostingLine.debit(Accounts.REVENUE, gross));
+                        // Reverses what delivery recognised, leg for leg: revenue at the
+                        // list price, and both contras in the proportion they were
+                        // booked. Reversing only the revenue would leave a discount
+                        // standing against a sale that no longer exists.
+                        lines.add(PostingLine.debit(Accounts.REVENUE, charged + discount));
                         if (gift > 0) {
                             lines.add(PostingLine.credit(Accounts.CONTRA_GIFT, gift));
+                        }
+                        if (discount > 0) {
+                            lines.add(PostingLine.credit(Accounts.CONTRA_VOUCHER, discount));
                         }
                         if (net > 0) {
                             lines.add(PostingLine.credit(Accounts.REFUND_LIABILITY, net));
@@ -270,6 +279,12 @@ public class PostingRules {
      * <p>Revenue is credited gross and the gifted part is debited to contra-revenue, so the
      * discount stays visible instead of being netted away. Deferred revenue only ever
      * received the net amount, because gifted credit never entered the books at all (§4.5).
+     *
+     * <p>A voucher discount is grossed up the same way, on 4300 (vouchers.md §3.2) — with
+     * one difference worth keeping straight: gifted credit is consideration payable to a
+     * customer and its contra is required by IFRS 15.70; a voucher simply reduced the
+     * transaction price, so measured revenue is the net figure either way and 4300 is
+     * presentation. Both net against 4000 to the same answer.
      */
     private Mono<PostingOutcome> delivery(Fact fact, Map<String, Object> payload) {
         String status = string(payload.get("status"));
@@ -281,11 +296,18 @@ public class PostingRules {
         return factRepository.findByAggregateAndType(orderId, "OrderPlaced").next()
                 .map(this::parseFact)
                 .flatMap(orderPayload -> giftFundedOn(orderId).map(gift -> {
-                    long gross = Money.fromDecimal(orderPayload.get("total"));
-                    if (gross <= 0) {
+                    // charged is what the shopper actually owed, already net of any
+                    // voucher; listPrice adds the discount back so revenue is credited
+                    // at what the goods were priced at. Zero discount — every order
+                    // before vouchers, and most after — makes the two equal and posts
+                    // exactly the journal this rule always posted.
+                    long charged = Money.fromDecimal(orderPayload.get("total"));
+                    long discount = Money.fromDecimal(orderPayload.get("discountTotal"));
+                    long listPrice = charged + discount;
+                    if (listPrice <= 0) {
                         return (PostingOutcome) new Ignore("order has no value to recognise");
                     }
-                    long net = gross - gift;
+                    long net = charged - gift;
                     List<PostingLine> lines = new ArrayList<>();
                     if (net > 0) {
                         lines.add(PostingLine.debit(Accounts.DEFERRED_REVENUE, net));
@@ -293,7 +315,10 @@ public class PostingRules {
                     if (gift > 0) {
                         lines.add(PostingLine.debit(Accounts.CONTRA_GIFT, gift));
                     }
-                    lines.add(PostingLine.credit(Accounts.REVENUE, gross));
+                    if (discount > 0) {
+                        lines.add(PostingLine.debit(Accounts.CONTRA_VOUCHER, discount));
+                    }
+                    lines.add(PostingLine.credit(Accounts.REVENUE, listPrice));
 
                     // The cost side rides the same entry, so the whole cost of a sale sits
                     // in the period of its revenue — which is the point of recognising both

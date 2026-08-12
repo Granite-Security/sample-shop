@@ -43,8 +43,8 @@ commit while the order rolls back would announce an order that does not exist.
 
 | Topic | Direction | Event | Fields that matter |
 |-------|-----------|-------|--------------------|
-| `orders.events` | out | `OrderPlaced` | `eventType`, `orderId` (also the Kafka key), `provider` — which payment provider must handle it, never null; `packaging[]` + `packagingTotal` (empty when nothing needed a box) |
-| `orders.events` | out | `RefundRequested` | `orderId`, `eventType` |
+| `orders.events` | out | `OrderPlaced` | `eventType`, `orderId` (also the Kafka key), `provider` — which payment provider must handle it, never null; `packaging[]` + `packagingTotal` (empty when nothing needed a box); `voucherCode` + `discountPercent` + `discountTotal` (null/zero when no voucher) |
+| `orders.events` | out | `RefundRequested` | `orderId`, `eventType`, `discountTotal` |
 | `orders.events` | out | `OrdersPurged` | `orderIds` (plural), `eventType`; keyed by **username**, not order id |
 | `shop.notifications` | out | `OrderPlacedNotice` | `username` — that is the whole point of it; `orderId` and `occurredAt` are for profile's dedupe and staleness guard, not for display |
 | `payments.events` | in | — | `orderId`, `status` → `SUCCEEDED`→PAID, `FAILED`→PAYMENT_FAILED, `REFUNDED`→REIMBURSED |
@@ -62,6 +62,15 @@ carries frozen `unitPrice` and `unitCost` per box (`docs/packaging/packaging.md`
 D42). Codes because an event outlives the row it points at, and the cost because
 a free box still costs us something — delivery is where accounting expenses it,
 and asking shop later would make the report depend on a live service.
+
+`total` on `OrderPlaced` is what is **payable**, already net of any voucher
+discount — which is why adding vouchers changed nothing in payment, balance or
+delivery (`docs/finance/vouchers.md` V4). `discountTotal` is carried alongside so
+accounting can credit revenue at the list price and debit the discount to `4300`,
+keeping the sale visible at what it was priced at rather than at what was paid.
+`RefundRequested` carries it for the same reason: the reversal has to unwind that
+leg too, or a refunded discounted order leaves contra-revenue standing against a
+sale that no longer exists.
 
 `OrdersPurged` is keyed by username while everything else is keyed by order id,
 so it is not ordered against that user's own `OrderPlaced`.

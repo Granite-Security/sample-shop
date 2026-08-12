@@ -91,6 +91,29 @@ public class CustomerOrder {
     @Column("storefront_origin")
     private String storefrontOrigin;
 
+    /**
+     * The voucher applied at placement, snapshotted (docs/finance/vouchers.md V5).
+     *
+     * <p>The code and percent are copies, not a foreign key: revoking or editing a
+     * voucher must never reach back into an order that was already priced, exactly as
+     * repricing a box must not (D26).
+     *
+     * <p>{@code discountTotal} is the stored truth and {@code discountPercent} is a
+     * label. Nothing recomputes {@code items x percent} later — the HALF_UP rounding
+     * happened once, at placement — so the order reconciles exactly:
+     * {@code items + packaging - discount = total}.
+     *
+     * <p>{@code total} keeps meaning <em>the amount payable</em>, which is why payment,
+     * balance and delivery needed no changes at all (V4). Null code and zero discount
+     * is an order placed without a voucher, which is what every order before this was.
+     */
+    @Column("voucher_code")
+    private String voucherCode;
+    @Column("discount_percent")
+    private Short discountPercent;
+    @Column("discount_total")
+    private BigDecimal discountTotal;
+
     public CustomerOrder() {}
 
     public CustomerOrder(String username, String status, BigDecimal total, String currency,
@@ -101,6 +124,7 @@ public class CustomerOrder {
         this.total = total;
         this.currency = currency;
         this.packagingTotal = BigDecimal.ZERO;
+        this.discountTotal = BigDecimal.ZERO;
         this.recipientName = recipientName;
         this.addressLine1 = addressLine1;
         this.addressLine2 = addressLine2;

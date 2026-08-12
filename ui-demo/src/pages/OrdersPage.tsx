@@ -70,6 +70,9 @@ export function OrdersPage() {
                   </p>
                   <p className="mt-1 text-sm text-cocoa/50">
                     {new Date(order.createdAt).toLocaleDateString()} · {formatPrice(order.total)}
+                    {Number(order.discountTotal ?? 0) > 0 && (
+                      <span className="text-cocoa/40"> · {order.voucherCode}</span>
+                    )}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-4">
