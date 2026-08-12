@@ -3,7 +3,13 @@ import { api } from '../api';
 import { DuplicateFileError } from '../api/profile';
 import type { UserFile } from '../types';
 
-const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'text/plain'];
+// Video is limited to the two formats every current browser plays natively,
+// matching the products scope in StorageService. QuickTime .mov is deliberately
+// absent: it uploads happily and then fails to play for most visitors.
+const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'text/plain',
+  'video/mp4', 'video/webm'];
+// A showcase clip, not an archive — mirrors MAX_VIDEO_SIZE_BYTES in UserFileService.
+const MAX_VIDEO_SIZE = 500_000_000;
 // S3 (and Garage, which implements the same API) rejects a single PUT above
 // 5 GiB — anything larger needs multipart upload, which this presign-based
 // flow doesn't support. Stay comfortably under that hard ceiling, matching
@@ -40,6 +46,10 @@ export default function Files() {
 
     setFileError(null);
     setDuplicateFile(null);
+    if (file.type.startsWith('video/') && file.size > MAX_VIDEO_SIZE) {
+      setFileError(`Videos must be under ${MAX_VIDEO_SIZE / 1_000_000} MB.`);
+      return;
+    }
     if (!ALLOWED_FILE_TYPES.includes(file.type)) {
       setFileError(`Unsupported file type: ${file.type || 'unknown'}`);
       return;

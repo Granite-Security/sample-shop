@@ -150,6 +150,11 @@ export class DuplicateFileError extends Error {
 // Hashed locally so a duplicate can be detected — and the upload skipped
 // entirely — before any bytes are sent, rather than discovering it only
 // after uploading a full copy. Mirrors ui-shop/src/api/profile.ts.
+// Above this, the duplicate check is skipped rather than risking the tab on a
+// whole-file ArrayBuffer. 100 MB hashes in well under a second on a laptop and
+// is far below what a phone will choke on.
+const HASHABLE_MAX_BYTES = 100_000_000;
+
 async function sha256Hex(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   const digest = await crypto.subtle.digest('SHA-256', buffer);
@@ -398,18 +403,26 @@ export const api = {
     request<DuplicateFileCheckResponse>(`/api/profiles/me/files/duplicate?hash=${encodeURIComponent(contentHash)}`),
 
   registerFile: (body: {
-    key: string; url: string; fileName: string; contentType: string; sizeBytes: number; contentHash: string;
+    key: string; url: string; fileName: string; contentType: string; sizeBytes: number;
+    contentHash: string | null;
   }) => request<UserFile>('/api/profiles/me/files', { method: 'POST', body: JSON.stringify(body) }),
 
   // Upload goes straight to storage (same pattern as uploadProductImage above)
   // rather than through a profile-brokered presign — profile only records
   // ownership afterward via registerFile.
   uploadFile: async (file: File): Promise<UserFile> => {
-    const contentHash = await sha256Hex(file);
+    // sha256Hex reads the whole file into memory — crypto.subtle.digest has no
+    // streaming form — so hashing a large video would hang or crash the tab.
+    // Above the threshold the file goes up unhashed and simply is not
+    // de-duplicated; the backend accepts a null hash, and migration 004 already
+    // made null hashes non-colliding in the unique index.
+    const contentHash = file.size > HASHABLE_MAX_BYTES ? null : await sha256Hex(file);
 
-    const dup = await api.checkDuplicateFile(contentHash);
-    if (dup.duplicate && dup.existingFile) {
-      throw new DuplicateFileError(dup.existingFile);
+    if (contentHash) {
+      const dup = await api.checkDuplicateFile(contentHash);
+      if (dup.duplicate && dup.existingFile) {
+        throw new DuplicateFileError(dup.existingFile);
+      }
     }
 
     const presigned = await api.presignUpload(file.name, file.type, 'user-files');
