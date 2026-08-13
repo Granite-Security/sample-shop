@@ -53,7 +53,14 @@ export default function Orders() {
                   ) : (
                     <span style={{ color: 'var(--text-secondary)' }}>—</span>
                   )}</td>
-                  <td>${Number(o.total).toFixed(2)}</td>
+                  <td>
+                    ${Number(o.total).toFixed(2)}
+                    {Number(o.discountTotal ?? 0) > 0 && (
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.85em' }}>
+                        {' '}({o.voucherCode})
+                      </span>
+                    )}
+                  </td>
                   <td>{new Date(o.createdAt).toLocaleDateString()}</td>
                   <td><Link to={`/orders/${o.id}`}>View</Link></td>
                 </tr>

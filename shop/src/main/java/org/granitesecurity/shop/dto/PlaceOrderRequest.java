@@ -16,8 +16,23 @@ public record PlaceOrderRequest(
         // box: an order whose packaging was never chosen is one nobody can pack.
         @Schema(description = "Chosen box per packaging group, from POST /api/shop/packaging/quote. "
                 + "Required when the cart contains anything that needs packaging.")
-        List<PackagingChoice> packaging
+        List<PackagingChoice> packaging,
+        // Optional. Validated and repriced here from scratch — a preview is not a
+        // reservation (docs/finance/vouchers.md V11), and between the two the code can
+        // expire or be revoked. Case and surrounding space are normalised away (V12).
+        @Schema(description = "Voucher code to apply, from POST /api/shop/vouchers/preview. "
+                + "Optional; an unknown, expired, revoked or already-used code is a 400.",
+                example = "SPRING25") String voucherCode
 ) {
+
+    /**
+     * The shape before vouchers existed — see the packaging constructor below for why
+     * adding a component keeps every current caller working.
+     */
+    public PlaceOrderRequest(List<LineItem> items, DeliveryAddress address, String provider,
+                             List<PackagingChoice> packaging) {
+        this(items, address, provider, packaging, null);
+    }
 
     /**
      * The shape before packaging existed.
@@ -29,7 +44,7 @@ public record PlaceOrderRequest(
      * OrderService.
      */
     public PlaceOrderRequest(List<LineItem> items, DeliveryAddress address, String provider) {
-        this(items, address, provider, null);
+        this(items, address, provider, null, null);
     }
     @Schema(description = "Product and quantity pair")
     public record LineItem(

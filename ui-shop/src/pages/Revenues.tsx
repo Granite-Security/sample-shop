@@ -160,15 +160,15 @@ export default function Revenues() {
       {accrual && (
         <Section
           title="Earned — accrual"
-          note="What we earned, as booked: recognised on delivery, not on payment. Gifted credit and
-                expected returns are shown as deductions rather than netted away, so the discount
-                stays visible."
+          note="What we earned, as booked: recognised on delivery, not on payment. Gifted credit,
+                voucher discounts and expected returns are shown as deductions rather than netted
+                away, so every discount stays visible. Net is the IFRS figure."
         >
           <table className="orders-table" style={{ width: '100%' }}>
             <thead>
               <tr>
                 <th>Bucket</th><th>Revenue (gross)</th><th>Gift credit</th>
-                <th>Expected returns</th><th>Net</th><th>Delivered</th>
+                <th>Vouchers</th><th>Expected returns</th><th>Net</th><th>Delivered</th>
               </tr>
             </thead>
             <tbody>
@@ -187,13 +187,14 @@ export default function Revenues() {
                       )}
                     </td>
                     {beforeBooks ? (
-                      <td colSpan={5} style={{ fontStyle: 'italic', color: 'var(--text-secondary)' }}>
+                      <td colSpan={6} style={{ fontStyle: 'italic', color: 'var(--text-secondary)' }}>
                         not yet booked — the books open on {accrual.booksOpenedOn}
                       </td>
                     ) : (
                       <>
                         <td>{chf(b.revenueGrossMinor)}</td>
                         <td>{b.contraGiftMinor ? `−${chf(b.contraGiftMinor)}` : '—'}</td>
+                        <td>{b.contraVoucherMinor ? `−${chf(b.contraVoucherMinor)}` : '—'}</td>
                         <td>{b.contraReturnsMinor ? `−${chf(b.contraReturnsMinor)}` : '—'}</td>
                         <td style={{ fontWeight: 600 }}>{chf(b.netRevenueMinor)}</td>
                         <td>{b.deliveredCount}</td>
@@ -208,6 +209,7 @@ export default function Revenues() {
                 <td>Total</td>
                 <td>{chf(accrual.totals.revenueGrossMinor)}</td>
                 <td>{chf(accrual.totals.contraGiftMinor)}</td>
+                <td>{chf(accrual.totals.contraVoucherMinor)}</td>
                 <td>{chf(accrual.totals.contraReturnsMinor)}</td>
                 <td>{chf(accrual.totals.netRevenueMinor)}</td>
                 <td>{accrual.totals.deliveredCount}</td>

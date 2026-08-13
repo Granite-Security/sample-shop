@@ -7,6 +7,8 @@ import type {
   DeliveryResponse,
   PlaceOrderRequest,
   PackagingQuote,
+  PackagingChoice,
+  VoucherPreview,
   CreatePaymentIntentResponse,
   PaymentProviderInfo,
   AddressResponse,
@@ -192,6 +194,19 @@ export const api = {
     request<PackagingQuote>('/api/shop/packaging/quote', {
       method: 'POST',
       body: JSON.stringify({ items }),
+    }),
+
+  // Prices a voucher code against a cart. Read-only and non-binding: nothing is
+  // stored and the code is not reserved, so placement validates it again and can
+  // still refuse it.
+  previewVoucher: (
+    code: string,
+    items: { productId: number; quantity: number }[],
+    packaging?: PackagingChoice[],
+  ) =>
+    request<VoucherPreview>('/api/shop/vouchers/preview', {
+      method: 'POST',
+      body: JSON.stringify({ code, items, packaging }),
     }),
 
   getOrders: (page = 0, size = 20) =>

@@ -84,7 +84,7 @@ public interface JournalLineRepository extends ReactiveCrudRepository<JournalLin
     Mono<Long> netCreditBalance(String accountCode);
 
     /**
-     * The accrual view, bucketed (§10). Revenue is credited gross and the two contra
+     * The accrual view, bucketed (§10). Revenue is credited gross and the three contra
      * accounts are debited, so each is summed on its own side and none of them is netted
      * here — netting is what the caller decides to display, not what the books record.
      *
@@ -99,18 +99,20 @@ public interface JournalLineRepository extends ReactiveCrudRepository<JournalLin
                      - COALESCE(SUM(l.credit_minor) FILTER (WHERE l.account_code = '4100'), 0) AS contra_gift_minor,
                    COALESCE(SUM(l.debit_minor) FILTER (WHERE l.account_code = '4200'), 0)
                      - COALESCE(SUM(l.credit_minor) FILTER (WHERE l.account_code = '4200'), 0) AS contra_returns_minor,
+                   COALESCE(SUM(l.debit_minor) FILTER (WHERE l.account_code = '4300'), 0)
+                     - COALESCE(SUM(l.credit_minor) FILTER (WHERE l.account_code = '4300'), 0) AS contra_voucher_minor,
                    COUNT(DISTINCT j.id) FILTER (WHERE j.event_type = 'DeliveryDelivered')      AS delivered_count
               FROM journal j
               JOIN journal_line l ON l.journal_id = j.id
              WHERE j.occurred_at >= :from AND j.occurred_at < :to
-               AND l.account_code IN ('4000', '4100', '4200')
+               AND l.account_code IN ('4000', '4100', '4200', '4300')
              GROUP BY 1
              ORDER BY 1
             """)
     Flux<AccrualRow> accrualByBucket(String trunc, java.time.Instant from, java.time.Instant to);
 
     record AccrualRow(java.time.LocalDateTime bucket, long revenueGrossMinor, long contraGiftMinor,
-                      long contraReturnsMinor, long deliveredCount) {}
+                      long contraReturnsMinor, long contraVoucherMinor, long deliveredCount) {}
 
     record TrialBalanceRow(String accountCode, String accountName, String accountType,
                            long debitMinor, long creditMinor) {}

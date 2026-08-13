@@ -13,6 +13,8 @@ import org.granitesecurity.shop.handler.GreetingsHandler;
 import org.granitesecurity.shop.handler.OrderHandler;
 import org.granitesecurity.shop.handler.PackagingAdminHandler;
 import org.granitesecurity.shop.handler.PackagingHandler;
+import org.granitesecurity.shop.handler.VoucherAdminHandler;
+import org.granitesecurity.shop.handler.VoucherHandler;
 import org.granitesecurity.shop.handler.UserOrderHandler;
 import org.springdoc.core.annotations.RouterOperation;
 import org.springdoc.core.annotations.RouterOperations;
@@ -172,6 +174,30 @@ public class ShopRoute {
             beanClass = UserOrderHandler.class,
             beanMethod = "getOrdersByUsername"
         ),
+        @RouterOperation(
+            path = "/api/shop/vouchers/preview",
+            method = RequestMethod.POST,
+            beanClass = VoucherHandler.class,
+            beanMethod = "preview",
+            operation = @Operation(
+                requestBody = @RequestBody(content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE))
+            )
+        ),
+        @RouterOperation(
+            path = "/api/shop/admin/vouchers",
+            method = RequestMethod.GET,
+            beanClass = VoucherAdminHandler.class,
+            beanMethod = "list"
+        ),
+        @RouterOperation(
+            path = "/api/shop/admin/vouchers",
+            method = RequestMethod.POST,
+            beanClass = VoucherAdminHandler.class,
+            beanMethod = "create",
+            operation = @Operation(
+                requestBody = @RequestBody(content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE))
+            )
+        ),
     })
     public RouterFunction<ServerResponse> shopRoutes(
             GreetingsHandler greetingsHandler,
@@ -180,7 +206,9 @@ public class ShopRoute {
             UserOrderHandler userOrderHandler,
             AdminRevenueHandler adminRevenueHandler,
             PackagingHandler packagingHandler,
-            PackagingAdminHandler packagingAdminHandler) {
+            PackagingAdminHandler packagingAdminHandler,
+            VoucherHandler voucherHandler,
+            VoucherAdminHandler voucherAdminHandler) {
         return RouterFunctions.route()
                 .GET("/api/shop/greetings", greetingsHandler::respondWithGreeting)
 
@@ -212,6 +240,11 @@ public class ShopRoute {
                 // prices boxes for a cart that may never become an order.
                 .POST("/api/shop/packaging/quote", packagingHandler::quote)
 
+                // Vouchers — authenticated, and a POST for the same reason the
+                // packaging quote is one: the cart is the question. Nothing is stored
+                // and the code is not reserved (docs/finance/vouchers.md V11).
+                .POST("/api/shop/vouchers/preview", voucherHandler::preview)
+
                 // Admin — reports. Read-only: nothing under /admin/revenue has a side
                 // effect (docs/finance/accounting.md D20). The packaging routes below
                 // do write, which is why the read-only rule is stated per-subtree here
@@ -232,6 +265,15 @@ public class ShopRoute {
                 .PUT("/api/shop/admin/packaging/groups/{id}/options", packagingAdminHandler::setCapacity)
                 .DELETE("/api/shop/admin/packaging/groups/{id}/options/{optionId}",
                         packagingAdminHandler::removeCapacity)
+
+                // Admin — vouchers (docs/finance/vouchers.md §8.3). These write, so
+                // ShopSec guards POST and DELETE for ADMIN alone: adding a route here
+                // protects nothing by itself, and a voucher endpoint that fell through
+                // to "any logged-in user" would let anyone mint 100% off.
+                .GET("/api/shop/admin/vouchers", voucherAdminHandler::list)
+                .POST("/api/shop/admin/vouchers", voucherAdminHandler::create)
+                .GET("/api/shop/admin/vouchers/{id}", voucherAdminHandler::get)
+                .DELETE("/api/shop/admin/vouchers/{id}", voucherAdminHandler::revoke)
 
                 // Admin — products
                 .POST("/api/shop/products", catalogHandler::createProduct)

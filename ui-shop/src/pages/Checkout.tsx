@@ -5,9 +5,11 @@ import { useAuth } from '../auth';
 import { api } from '../api';
 import type {
   OrderResponse, AddressResponse, DeliveryAddress, ProviderPayload, PackagingQuote,
+  PackagingChoice, VoucherPreview,
 } from '../types';
 import ErrorBoundary from '../components/ErrorBoundary';
 import PackagingPicker from '../components/packaging/PackagingPicker';
+import VoucherField from '../components/voucher/VoucherField';
 import PaymentWidget from '../components/payment/PaymentWidget';
 import ProviderSelector from '../components/payment/ProviderSelector';
 import { usePaymentProviders } from '../components/payment/usePaymentProviders';
@@ -38,6 +40,9 @@ function CheckoutInner() {
   const [packagingState, setPackagingState] = useState<
     { key: string; quote: PackagingQuote | null; error: string } | null>(null);
   const [packagingSelection, setPackagingSelection] = useState<Record<number, number>>({});
+  // The applied voucher as the server priced it. Only its code is sent on placement —
+  // the amount is repriced there from scratch, because a preview is not a reservation.
+  const [voucher, setVoucher] = useState<VoucherPreview | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { providers, selected: selectedProvider, setSelected: setSelectedProvider, find } =
     usePaymentProviders();
@@ -222,6 +227,24 @@ function CheckoutInner() {
   const needsPackagingChoice = Boolean(packagingQuote?.packagingRequired)
     && packagingQuote!.groups.some(g => !packagingSelection[g.groupId]);
 
+  // What placement will be sent, and what the voucher preview has to price against —
+  // the discount excludes boxes but the chargeable minimum does not.
+  const packagingChoices: PackagingChoice[] = useMemo(() =>
+    packagingQuote?.packagingRequired
+      ? Object.entries(packagingSelection).map(([groupId, optionId]) => ({
+          groupId: Number(groupId), optionId,
+        }))
+      : [],
+    [packagingQuote, packagingSelection]);
+
+  // Read off the preview the server sent, never computed here — the same rule the
+  // packaging total follows, and the order response's total stays authoritative for
+  // what was actually charged.
+  const discountTotal = voucher?.discountTotal ?? 0;
+  // Keyed on the cart and the boxes together: changing either moves the subtotal the
+  // percentage applies to, or the minimum the payable total is checked against.
+  const voucherCartKey = `${cartKey}|${packagingChoices.map(c => `${c.groupId}:${c.optionId}`).join(',')}`;
+
   const handlePlaceOrder = async () => {
     if (!selectedAddress) {
       setError('Please select a delivery address');
@@ -250,6 +273,9 @@ function CheckoutInner() {
               groupId: Number(groupId), optionId,
             }))
           : undefined,
+        // The code only. What it is worth is decided server-side at placement, so a
+        // tampered or stale preview cannot change what is charged.
+        voucherCode: voucher?.code,
       });
       setOrder(result);
       clearCart();
@@ -445,12 +471,21 @@ function CheckoutInner() {
                   setPackagingSelection(prev => ({ ...prev, [groupId]: optionId }))}
                 disabled={step === 'placing'}
               />
-              {packagingTotal > 0 && (
+              <VoucherField
+                items={items.map(i => ({ productId: i.product.id, quantity: i.quantity }))}
+                packaging={packagingChoices}
+                cartKey={voucherCartKey}
+                disabled={step === 'placing' || packagingLoading}
+                onChange={setVoucher}
+              />
+              {(packagingTotal > 0 || discountTotal > 0) && (
                 <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: '4px 0' }}>
-                  Items ${total.toFixed(2)} + packaging ${packagingTotal.toFixed(2)}
+                  Items ${total.toFixed(2)}
+                  {discountTotal > 0 && ` − voucher $${discountTotal.toFixed(2)}`}
+                  {packagingTotal > 0 && ` + packaging $${packagingTotal.toFixed(2)}`}
                 </p>
               )}
-              <h2>Total: ${(total + packagingTotal).toFixed(2)}</h2>
+              <h2>Total: ${(total - discountTotal + packagingTotal).toFixed(2)}</h2>
               <ProviderSelector
                 providers={providers}
                 selected={selectedProvider}
