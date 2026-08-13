@@ -266,10 +266,10 @@ public class ShopRoute {
                 .DELETE("/api/shop/admin/packaging/groups/{id}/options/{optionId}",
                         packagingAdminHandler::removeCapacity)
 
-                // Admin — vouchers (docs/finance/vouchers.md §8.3). These write, so
-                // ShopSec guards POST and DELETE for ADMIN alone: adding a route here
-                // protects nothing by itself, and a voucher endpoint that fell through
-                // to "any logged-in user" would let anyone mint 100% off.
+                // Admin — vouchers (docs/finance/vouchers.md §8.3). ADMIN + MANAGER,
+                // create and revoke included. ShopSec is what enforces that: adding a
+                // route here protects nothing by itself, and a voucher endpoint that
+                // fell through to "any logged-in user" would let anyone mint 100% off.
                 .GET("/api/shop/admin/vouchers", voucherAdminHandler::list)
                 .POST("/api/shop/admin/vouchers", voucherAdminHandler::create)
                 .GET("/api/shop/admin/vouchers/{id}", voucherAdminHandler::get)

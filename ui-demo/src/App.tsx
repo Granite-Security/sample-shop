@@ -17,6 +17,7 @@ import { ContactPage } from './pages/ContactPage';
 import { ProductPage } from './pages/ProductPage';
 import { AdminPage } from './pages/AdminPage';
 import { UsersManagementPage } from './pages/UsersManagementPage';
+import VouchersPage from './pages/VouchersPage';
 import { DeliveriesPage } from './pages/DeliveriesPage';
 import { UserProfileViewPage } from './pages/UserProfileViewPage';
 import { CheckoutPage } from './pages/CheckoutPage';
@@ -80,6 +81,7 @@ export default function App() {
               <Route path="products/:id" element={<ProductPage />} />
               <Route path="admin" element={<AdminPage />} />
               <Route path="admin/users" element={<UsersManagementPage />} />
+              <Route path="admin/vouchers" element={<VouchersPage />} />
               <Route path="admin/deliveries" element={<DeliveriesPage />} />
               <Route path="admin/users/:username" element={<UserProfileViewPage />} />
               <Route path="checkout" element={<CheckoutPage />} />

@@ -209,6 +209,7 @@ part; it recovers the discount from the same place (§9). No new event, no new c
 | V6 | **Expiry is evaluated at placement only.** An order placed one second before expiry keeps its discount however late it is paid, and a `RetryPayment` never re-prices. A placed order's total does not move. |
 | V7 | **The discount applies to the items subtotal, not to packaging** (§6). Boxes are charged in full. |
 | V8 | **One redemption per user per voucher**, enforced by a primary key, not by a check-then-act (§7). |
+| V16 | **ADMIN *and* MANAGER may create and revoke vouchers** (§8.3), and both back offices have a page for it (§11.1). |
 | V9 | **A refund does not return the redemption** (§3.4). |
 | V10 | **`valid_until` is mandatory.** A voucher without an expiry is a permanent price cut wearing a code, and nothing in the system would ever retire it. |
 | V11 | **The server prices; the SPA displays.** The preview endpoint is authoritative and non-binding; placement re-validates and re-prices from scratch (§8.1). |
@@ -374,13 +375,18 @@ concurrent double-submit, which surfaces as **409**.
 |---|---|---|
 | `GET` | `/api/shop/admin/vouchers` | ADMIN + MANAGER |
 | `GET` | `/api/shop/admin/vouchers/{id}` | ADMIN + MANAGER (includes redemption count and who) |
-| `POST` | `/api/shop/admin/vouchers` | **ADMIN only** |
-| `DELETE` | `/api/shop/admin/vouchers/{id}` | **ADMIN only** — revokes (V13) |
+| `POST` | `/api/shop/admin/vouchers` | ADMIN + MANAGER |
+| `DELETE` | `/api/shop/admin/vouchers/{id}` | ADMIN + MANAGER — revokes (V13) |
 
-The split matches packaging maintenance in `ShopSec` and for the same stated reason: creating a
-voucher changes what every future shopper is charged; reading the list does not.
+**Deliberately looser than packaging maintenance, which stays ADMIN-only.** Running a discount
+campaign is the manager's job, and the objection that creating a voucher decides what future
+shoppers are charged proves less than it looks: a manager can already refund an order in full,
+so they can already give money away. A percentage off is the smaller power, revoking is instant,
+and a placed order keeps the discount it was charged (V5).
 
-> **`ShopSec` must gain explicit `POST` and `DELETE` rules for `/api/shop/admin/vouchers/**`.**
+Retiring a box is not comparable — it takes a whole group of products off sale.
+
+> **`ShopSec` must carry explicit `POST` and `DELETE` rules for `/api/shop/admin/vouchers/**`.**
 > The existing admin rule is `GET`-only; without new rules these fall through to
 > `anyExchange().authenticated()` and **any logged-in user could mint a 100% voucher**. This is
 > the single highest-risk line in the whole change — CLAUDE.md's warning that a gateway route
@@ -447,6 +453,7 @@ Shopper-facing work is therefore done **twice**, in parallel files:
 
 | Concern | `ui-shop` | `ui-demo` |
 |---|---|---|
+| Voucher admin page | `pages/VouchersManagement.tsx` | `pages/VouchersPage.tsx` |
 | Code field, preview call, discount line | `pages/Checkout.tsx` | `pages/CheckoutPage.tsx` |
 | Discount on the order list | `pages/Orders.tsx` | `pages/OrdersPage.tsx` |
 | Discount on the order detail | `pages/OrderDetail.tsx` | `pages/OrderDetailPage.tsx` |
@@ -464,15 +471,22 @@ Rules that hold in both:
 - **The accrual table gains one column** between gift credit and expected returns, so gross,
   the three contra lines and net read left to right in the order they net.
 
-### 11.1 Admin management lands in `ui-shop` only
+### 11.1 Admin management, in both back offices
 
-Creating and revoking vouchers is built as a page in `ui-shop`'s `Admin.tsx` and **not** in
-`ui-demo`'s `AdminPage.tsx`. The precedent is packaging: `/api/shop/admin/packaging/**` has no UI
-in *either* SPA and is driven by API alone. One back-office is enough, and `ui-demo`'s admin
-surface is deliberately the slimmer one (products and orders).
+A Vouchers page in each SPA — `ui-shop/pages/VouchersManagement.tsx` and
+`ui-demo/pages/VouchersPage.tsx`, both routed at `/admin/vouchers`. It was ui-shop-only at
+first, on the argument that one back office is enough; that was wrong in practice, because
+whoever runs sichocolate.com's campaigns works in sichocolate.com's admin panel.
 
-The API is the contract, so this is a presentation choice that costs nothing to reverse — if
-sichocolate.com ever needs its own back-office, the endpoints are already there.
+**The link cannot live only on the admin panel.** Both panels are gated on `isAdmin`, so a link
+inside one is invisible to exactly the MANAGERs the role rule was widened for. Vouchers is
+therefore also in each `AccountNav` under `isAdmin || isManager` — the one back-office screen a
+manager can reach. The panels themselves stay ADMIN-only; widening them would change who sees
+products, orders and customers, which is a much larger authorization decision than this one.
+
+Renders in both: create (code, percent, expiry, description) with a warning above 90% (§6.1),
+and a list of every voucher including expired and revoked ones, with redemption counts and a
+Withdraw button.
 
 ## 12. Implementation steps
 
@@ -493,6 +507,7 @@ Each step is independently deployable and leaves the system working.
 | 11 | Admin vouchers page (§11.1) | ui-shop |
 | 12 | Checkout field + order views, in the parallel files | ui-demo |
 | 13 | The `4300` line on `RevenuesPage` | ui-demo |
+| 14 | Admin vouchers page + the `AccountNav` link managers reach it by (§11.1) | ui-demo, ui-shop |
 
 Steps 10–13 are two passes over the same ground, one per storefront (§11). Steps 1–6 ship a working feature on their own: orders are discounted and charged correctly, and
 the books simply record the net sale until step 7 lands. Steps 7–9 are what make the discount
@@ -545,6 +560,5 @@ is nothing to accrue — §2.2) · a promotions service (§2.3).
   guess at the strictest provider minimum, not a measured number** — worth checking against
   Stripe's and PayPal's actual CHF minimums before a campaign goes above 90%.
 - **Rate-limiting `preview`** (§7) is unbuilt and probably unnecessary until a code is public.
-- **Whether MANAGER should be able to create vouchers.** Currently ADMIN-only by analogy with
-  packaging; the counter-argument is that a manager who can already refund an order can already
-  give money away.
+- ~~Whether MANAGER should be able to create vouchers.~~ **Decided: yes** (§8.3). The
+  counter-argument won — a manager who can already refund an order can already give money away.

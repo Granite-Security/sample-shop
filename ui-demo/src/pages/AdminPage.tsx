@@ -248,7 +248,7 @@ export function AdminPage() {
           Signed in as <span className="text-cocoa">{user?.name}</span> with admin access.
           {!live && ' The shop backend is unreachable — changes cannot be saved right now.'}
         </p>
-        <BackOfHouseNav canManageShipments={isAdmin || isManager} />
+        <BackOfHouseNav canManageShipments={isAdmin || isManager} canManageVouchers={isAdmin || isManager} />
 
         {message && (
           <p
@@ -550,7 +550,10 @@ export function AdminPage() {
  * that to find them. Tiles render identically either way, since the difference is
  * an implementation detail of where a screen happens to be mounted.
  */
-function BackOfHouseNav({ canManageShipments }: { canManageShipments: boolean }) {
+function BackOfHouseNav({ canManageShipments, canManageVouchers }: {
+  canManageShipments: boolean;
+  canManageVouchers: boolean;
+}) {
   const scrollTo = (id: string) => () =>
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
@@ -562,6 +565,9 @@ function BackOfHouseNav({ canManageShipments }: { canManageShipments: boolean })
         <Tile label="Shipments" hint="Dispatch, deliver, or record a failure" to="/admin/deliveries" />
       )}
       <Tile label="Customers" hint="Block, delete and gift balance" to="/admin/users" />
+      {canManageVouchers && (
+        <Tile label="Vouchers" hint="Percentage discount codes, and when they expire" to="/admin/vouchers" />
+      )}
       <Tile label="Revenues" hint="Cash, accrual and money created" to="/profile/revenues" />
       <Tile label="Treasury" hint="The ledger, and whether it balances" to="/profile/treasury" />
     </nav>
