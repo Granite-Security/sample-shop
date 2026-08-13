@@ -17,6 +17,16 @@ metadata:
   name: postgres-auth
 spec:
   replicas: 1
+  # Recreate, not RollingUpdate: this is a single-replica Deployment on a
+  # one-node cluster whose CPU requests sit near capacity. The default
+  # rollingUpdate surges one extra pod before retiring the old one, and when
+  # there is no room for both the new pod stays Pending forever while the old
+  # one keeps serving — a deploy that reports a new image tag and silently runs
+  # the old code, migrations and all. Terminating first costs a few seconds of
+  # downtime; with one replica the rolling strategy could never avoid that
+  # anyway, it could only fail to complete.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: postgres-auth
@@ -73,6 +83,16 @@ metadata:
   name: postgres-shop
 spec:
   replicas: 1
+  # Recreate, not RollingUpdate: this is a single-replica Deployment on a
+  # one-node cluster whose CPU requests sit near capacity. The default
+  # rollingUpdate surges one extra pod before retiring the old one, and when
+  # there is no room for both the new pod stays Pending forever while the old
+  # one keeps serving — a deploy that reports a new image tag and silently runs
+  # the old code, migrations and all. Terminating first costs a few seconds of
+  # downtime; with one replica the rolling strategy could never avoid that
+  # anyway, it could only fail to complete.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: postgres-shop
@@ -129,6 +149,16 @@ metadata:
   name: postgres-payment
 spec:
   replicas: 1
+  # Recreate, not RollingUpdate: this is a single-replica Deployment on a
+  # one-node cluster whose CPU requests sit near capacity. The default
+  # rollingUpdate surges one extra pod before retiring the old one, and when
+  # there is no room for both the new pod stays Pending forever while the old
+  # one keeps serving — a deploy that reports a new image tag and silently runs
+  # the old code, migrations and all. Terminating first costs a few seconds of
+  # downtime; with one replica the rolling strategy could never avoid that
+  # anyway, it could only fail to complete.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: postgres-payment
@@ -185,6 +215,16 @@ metadata:
   name: postgres-delivery
 spec:
   replicas: 1
+  # Recreate, not RollingUpdate: this is a single-replica Deployment on a
+  # one-node cluster whose CPU requests sit near capacity. The default
+  # rollingUpdate surges one extra pod before retiring the old one, and when
+  # there is no room for both the new pod stays Pending forever while the old
+  # one keeps serving — a deploy that reports a new image tag and silently runs
+  # the old code, migrations and all. Terminating first costs a few seconds of
+  # downtime; with one replica the rolling strategy could never avoid that
+  # anyway, it could only fail to complete.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: postgres-delivery
@@ -241,6 +281,16 @@ metadata:
   name: postgres-profile
 spec:
   replicas: 1
+  # Recreate, not RollingUpdate: this is a single-replica Deployment on a
+  # one-node cluster whose CPU requests sit near capacity. The default
+  # rollingUpdate surges one extra pod before retiring the old one, and when
+  # there is no room for both the new pod stays Pending forever while the old
+  # one keeps serving — a deploy that reports a new image tag and silently runs
+  # the old code, migrations and all. Terminating first costs a few seconds of
+  # downtime; with one replica the rolling strategy could never avoid that
+  # anyway, it could only fail to complete.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: postgres-profile
@@ -296,6 +346,16 @@ metadata:
   name: postgres-notification
 spec:
   replicas: 1
+  # Recreate, not RollingUpdate: this is a single-replica Deployment on a
+  # one-node cluster whose CPU requests sit near capacity. The default
+  # rollingUpdate surges one extra pod before retiring the old one, and when
+  # there is no room for both the new pod stays Pending forever while the old
+  # one keeps serving — a deploy that reports a new image tag and silently runs
+  # the old code, migrations and all. Terminating first costs a few seconds of
+  # downtime; with one replica the rolling strategy could never avoid that
+  # anyway, it could only fail to complete.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: postgres-notification
@@ -351,6 +411,16 @@ metadata:
   name: postgres-balance
 spec:
   replicas: 1
+  # Recreate, not RollingUpdate: this is a single-replica Deployment on a
+  # one-node cluster whose CPU requests sit near capacity. The default
+  # rollingUpdate surges one extra pod before retiring the old one, and when
+  # there is no room for both the new pod stays Pending forever while the old
+  # one keeps serving — a deploy that reports a new image tag and silently runs
+  # the old code, migrations and all. Terminating first costs a few seconds of
+  # downtime; with one replica the rolling strategy could never avoid that
+  # anyway, it could only fail to complete.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: postgres-balance
@@ -406,6 +476,16 @@ metadata:
   name: postgres-accounting
 spec:
   replicas: 1
+  # Recreate, not RollingUpdate: this is a single-replica Deployment on a
+  # one-node cluster whose CPU requests sit near capacity. The default
+  # rollingUpdate surges one extra pod before retiring the old one, and when
+  # there is no room for both the new pod stays Pending forever while the old
+  # one keeps serving — a deploy that reports a new image tag and silently runs
+  # the old code, migrations and all. Terminating first costs a few seconds of
+  # downtime; with one replica the rolling strategy could never avoid that
+  # anyway, it could only fail to complete.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: postgres-accounting
