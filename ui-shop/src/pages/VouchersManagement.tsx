@@ -20,12 +20,16 @@ function defaultExpiry(): string {
 /**
  * Voucher maintenance (docs/finance/vouchers.md §8.3).
  *
- * ADMIN only, because creating a code decides what every future shopper is charged.
+ * ADMIN or MANAGER, unlike the rest of the admin panel: running a discount campaign is
+ * the manager's job, and a manager who can already refund an order in full can already
+ * give money away. The server enforces it; this only decides what is worth rendering.
+ *
  * Revoking never deletes: placed orders reference the voucher, and what they were
  * charged is snapshotted onto the order anyway, so withdrawing one leaves history alone.
  */
 export default function VouchersManagement() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isManager } = useAuth();
+  const canManage = isAdmin || isManager;
   const [vouchers, setVouchers] = useState<VoucherAdmin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -43,13 +47,15 @@ export default function VouchersManagement() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, []);
+  // Guarded: a signed-in shopper landing here must not fire a request that can
+  // only come back 403.
+  useEffect(() => { if (canManage) load(); }, [canManage]);
 
-  if (!isAdmin) {
+  if (!canManage) {
     return (
       <div className="page">
         <h1>Access Denied</h1>
-        <p>You do not have admin privileges.</p>
+        <p>You do not have permission to manage vouchers.</p>
       </div>
     );
   }

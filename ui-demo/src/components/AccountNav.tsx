@@ -12,14 +12,22 @@ const LINKS = [
 ];
 
 export function AccountNav() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isManager } = useAuth();
   // Treasury shows every user's balance, so it is admin-only. The server
   // enforces that too — this only decides what is worth rendering.
+  // Vouchers is the one back-office screen a MANAGER can reach, which is why it
+  // is here and not only on the admin panel: that panel is admin-gated, so a
+  // link inside it is invisible to exactly the people this rule was widened for.
+  // ADMIN + MANAGER matches ShopSec (docs/finance/vouchers.md §8.3) — the server
+  // enforces it; this only decides what is worth rendering.
+  const withVouchers = isAdmin || isManager
+    ? [...LINKS, { to: '/admin/vouchers', label: 'Vouchers', end: false }]
+    : LINKS;
   const links = isAdmin
-    ? [...LINKS,
+    ? [...withVouchers,
        { to: '/profile/treasury', label: 'Treasury', end: false },
        { to: '/profile/revenues', label: 'Revenues', end: false }]
-    : LINKS;
+    : withVouchers;
 
   return (
     <nav className="w-full shrink-0 lg:w-48">

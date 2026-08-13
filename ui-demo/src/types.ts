@@ -227,6 +227,30 @@ export interface VoucherPreview {
   currency: string;
 }
 
+/** A voucher as the back-of-house list shows it. */
+export interface VoucherAdmin {
+  id: number;
+  code: string;
+  percentOff: number;
+  validFrom: string;
+  validUntil: string;
+  revokedAt?: string | null;
+  description?: string | null;
+  createdBy: string;
+  createdAt: string;
+  redemptions: number;
+  /** Derived server-side: ACTIVE | SCHEDULED | EXPIRED | REVOKED. */
+  status: string;
+}
+
+export interface CreateVoucherRequest {
+  code: string;
+  percentOff: number;
+  validFrom?: string;
+  validUntil: string;
+  description?: string;
+}
+
 export interface CreatePaymentIntentResponse {
   id: string;
   orderId: number;

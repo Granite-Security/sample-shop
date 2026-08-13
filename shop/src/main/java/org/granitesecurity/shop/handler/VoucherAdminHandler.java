@@ -16,9 +16,13 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
 /**
- * Voucher maintenance. Guarded in {@code ShopSec} — GET for ADMIN and MANAGER,
- * POST and DELETE for ADMIN alone, because creating a code changes what every
- * future shopper is charged and reading the list does not.
+ * Voucher maintenance. Guarded in {@code ShopSec} — ADMIN and MANAGER throughout,
+ * including create and revoke: running a discount campaign is the manager's job, and
+ * a manager who can already refund an order in full can already give money away.
+ *
+ * <p>Note this is <em>looser</em> than packaging maintenance, which stays ADMIN-only.
+ * Retiring a box takes a group of products off sale; a voucher only discounts one,
+ * revoking it is instant, and a placed order keeps what it was charged.
  */
 @Service
 public class VoucherAdminHandler {
@@ -54,7 +58,7 @@ public class VoucherAdminHandler {
     }
 
     @Operation(operationId = "createVoucher", summary = "Create a voucher",
-            description = "ADMIN only. An expiry date is required.")
+            description = "ADMIN or MANAGER. An expiry date is required.")
     @SecurityRequirement(name = "bearer-jwt")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Created"),
@@ -70,7 +74,7 @@ public class VoucherAdminHandler {
     }
 
     @Operation(operationId = "revokeVoucher", summary = "Withdraw a voucher",
-            description = "ADMIN only. Marks it revoked rather than deleting it: orders reference "
+            description = "ADMIN or MANAGER. Marks it revoked rather than deleting it: orders reference "
                     + "it, and placed orders keep the discount they were already charged.")
     @SecurityRequirement(name = "bearer-jwt")
     @ApiResponses({

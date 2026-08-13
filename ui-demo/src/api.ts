@@ -9,6 +9,8 @@ import type {
   PackagingQuote,
   PackagingChoice,
   VoucherPreview,
+  VoucherAdmin,
+  CreateVoucherRequest,
   CreatePaymentIntentResponse,
   PaymentProviderInfo,
   AddressResponse,
@@ -208,6 +210,21 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ code, items, packaging }),
     }),
+
+  // Back-of-house voucher maintenance. ADMIN or MANAGER — running a discount
+  // campaign is the manager's job, and a manager who can already refund an order
+  // in full can already give money away.
+  listVouchers: () => request<VoucherAdmin[]>('/api/shop/admin/vouchers'),
+
+  createVoucher: (body: CreateVoucherRequest) =>
+    request<VoucherAdmin>('/api/shop/admin/vouchers', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** Withdraws it. Never a hard delete — placed orders reference it. */
+  revokeVoucher: (id: number) =>
+    request<VoucherAdmin>(`/api/shop/admin/vouchers/${id}`, { method: 'DELETE' }),
 
   getOrders: (page = 0, size = 20) =>
     request<PagedResult<OrderResponse>>(`/api/shop/orders?page=${page}&size=${size}`),
