@@ -34,7 +34,7 @@ patches:
 images:
   - name: granite-auth-server
     newName: docker.io/moldovean/granite-auth-server
-    newTag: d04d3afc647c567b4dd0ac4ccfcd30dc0dced40b
+    newTag: bd5b10dd278df0b316d5c97886e4448e01192e81
   - name: granite-gateway
     newName: docker.io/moldovean/granite-gateway
     newTag: 45998e945d7afde5494d9e42ca2a2aa25a1f136b
@@ -43,28 +43,28 @@ images:
     newTag: 1a5adfc68460b38bc7039115dbf11271744f2c86
   - name: granite-shop
     newName: docker.io/moldovean/granite-shop
-    newTag: 66c9e543a2a6f89aa23727660f2d23b9b65ef68a
+    newTag: bd5b10dd278df0b316d5c97886e4448e01192e81
   - name: granite-payment
     newName: docker.io/moldovean/granite-payment
-    newTag: 02281b84c24a3e5e150faf92fe680912fc304d7c
+    newTag: bd5b10dd278df0b316d5c97886e4448e01192e81
   - name: granite-notification
     newName: docker.io/moldovean/granite-notification
-    newTag: e2ec7ca971ac69aee5f029ce928910fabf0a655b
+    newTag: bd5b10dd278df0b316d5c97886e4448e01192e81
   # newTag here is the bootstrap placeholder: no CI build has pushed this image
   # yet, so update-gitops has nothing to overwrite it with until the first push
   # to main touches accounting/.
   - name: granite-accounting
     newName: docker.io/moldovean/granite-accounting
-    newTag: 0a2c02148f259e98c1acd33c3d8f00f4bd21063c
+    newTag: bd5b10dd278df0b316d5c97886e4448e01192e81
   - name: granite-balance
     newName: docker.io/moldovean/granite-balance
-    newTag: 742ef4635db673fcbd47b16480e5ce8de64e7c12
+    newTag: bd5b10dd278df0b316d5c97886e4448e01192e81
   - name: granite-profile
     newName: docker.io/moldovean/granite-profile
-    newTag: da163bc79a8ce27a5f4d1dd14ce51fc3a792f369
+    newTag: bd5b10dd278df0b316d5c97886e4448e01192e81
   - name: granite-delivery
     newName: docker.io/moldovean/granite-delivery
-    newTag: e74b286a0bdc54496d1094144c0edee62c9978e0
+    newTag: bd5b10dd278df0b316d5c97886e4448e01192e81
   - name: granite-ui-shop
     newName: docker.io/moldovean/granite-ui-shop
     newTag: 66c9e543a2a6f89aa23727660f2d23b9b65ef68a
@@ -73,4 +73,4 @@ images:
     newTag: 66c9e543a2a6f89aa23727660f2d23b9b65ef68a
   - name: granite-storage
     newName: docker.io/moldovean/granite-storage
-    newTag: da163bc79a8ce27a5f4d1dd14ce51fc3a792f369
+    newTag: bd5b10dd278df0b316d5c97886e4448e01192e81
