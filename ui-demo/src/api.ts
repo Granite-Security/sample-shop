@@ -1,4 +1,5 @@
 import type {
+  DeliveryQuery,
   PagedResult,
   Product,
   Category,
@@ -328,10 +329,29 @@ export const api = {
   getAllOrders: (page = 0, size = 50) =>
     request<PagedResult<OrderResponse>>(`/api/shop/orders/all?page=${page}&size=${size}`),
 
-  // Every shipment, newest handled first by the page. The delivery service
-  // only requires an authenticated caller here, but the status update below is
-  // ROLE_ADMIN/ROLE_MANAGER — so the page gates on the same roles.
-  getDeliveries: () => request<DeliveryResponse[]>('/api/delivery'),
+  // One page of shipments. The delivery service only requires an authenticated
+  // caller here, but the status update below is ROLE_ADMIN/ROLE_MANAGER — so the
+  // page gates on the same roles.
+  //
+  // Filters, sort and paging are all applied server-side: filtering a page in the
+  // browser filters only the rows that page happens to hold, which reads as data
+  // going missing rather than as a filter.
+  getDeliveries: (query: DeliveryQuery = {}) => {
+    const params = new URLSearchParams();
+    if (query.status) params.set('status', query.status);
+    if (query.paymentStatus) params.set('paymentStatus', query.paymentStatus);
+    // The picker gives a day; the server takes instants and the window is
+    // half-open, so `to` is the following midnight.
+    if (query.from) params.set('from', new Date(query.from).toISOString());
+    if (query.to) {
+      params.set('to', new Date(new Date(query.to).getTime() + 86_400_000).toISOString());
+    }
+    params.set('sort', query.sort ?? 'orderId');
+    params.set('dir', query.dir ?? 'desc');
+    params.set('page', String(query.page ?? 0));
+    params.set('size', String(query.size ?? 20));
+    return request<PagedResult<DeliveryResponse>>(`/api/delivery?${params.toString()}`);
+  },
 
   updateDeliveryStatus: (orderId: number, status: string, description: string) =>
     request<DeliveryResponse>(`/api/delivery/${orderId}/status`, {

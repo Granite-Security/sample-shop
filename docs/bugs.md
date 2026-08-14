@@ -1,9 +1,10 @@
 # Known Bugs
 
-## `GET /api/delivery`: no pagination (the N+1 is gone; indexes added)
+## `GET /api/delivery` was slow — closed
 
-Status: **partly fixed.** The N+1 was already gone before this entry was
-revisited; the missing indexes are now added. Pagination remains.
+Status: **fixed.** The N+1 was already gone before this entry was revisited; the
+missing indexes and pagination have since landed. Kept as a record of what was
+actually wrong, because two of the three original claims were not.
 
 **History.** This entry originally described three compounding issues in
 `delivery/src/main/java/org/granitesecurity/delivery/service/DeliveryService.java`:
@@ -36,14 +37,29 @@ Expect no measurable win at current table sizes — the planner will still choos
 a sequential scan on a small table. The index is the cheap half of the fix and
 earns its keep as the table grows, not today.
 
-### 3. No pagination — **still open**
+### 3. No pagination — **fixed**
 
-`DeliveryRepository` exposes only unbounded `findAll`/`findByStatus`/
-`findByPaymentStatus`/`findByStatusAndPaymentStatus` (all `Flux`, no
-`Pageable`/`LIMIT`). With no filter params, `getDeliveries` fetches every row in
-the table unconditionally. This is now the actual cost of the endpoint, and
-fixing it changes the API contract and both back offices — size it as its own
-piece of work.
+`DeliveryRepository` exposed only unbounded finders (all `Flux`, no
+`Pageable`/`LIMIT`), so `getDeliveries` fetched every row in the table
+unconditionally. This was the real cost of the endpoint — the N+1 never was.
+
+`GET /api/delivery` now takes `page`/`size` (size clamped to 100) and returns a
+`PagedResult`, matching what `shop` already does for orders and the catalog.
+`DeliveryQueryRepository` builds the query over an `R2dbcEntityTemplate` because
+both the filters and the sort are chosen per request, and `ORDER BY` cannot be a
+bind parameter — the sort column comes from an allow-list, never from the caller's
+string.
+
+**The filters had to move with it.** Both back offices filtered by status and
+date and sorted in the browser, over "every row in the table". Paginate without
+moving those server-side and each one silently starts filtering one page — which
+reads as data going missing, not as a filter. `status`, `paymentStatus`, a
+half-open `from`/`to` window and `sort`/`dir` are all server-side now, and
+`delivery.created_at` is indexed for the range scan
+(`005-index-delivery-created-at.sql`).
+
+The response shape changed from `DeliveryResponse[]` to `PagedResult`, so both
+SPAs must deploy alongside the service.
 
 Not the cause of anything here: no blocking or synchronous I/O exists anywhere
 in the reactive chain (no `RestTemplate`, `.block()` or `Thread.sleep`), so this

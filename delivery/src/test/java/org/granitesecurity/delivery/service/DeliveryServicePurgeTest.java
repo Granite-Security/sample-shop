@@ -2,6 +2,7 @@ package org.granitesecurity.delivery.service;
 
 import org.granitesecurity.delivery.domain.Delivery;
 import org.granitesecurity.delivery.repository.DeliveryEventRepository;
+import org.granitesecurity.delivery.repository.DeliveryQueryRepository;
 import org.granitesecurity.delivery.repository.DeliveryRepository;
 import org.granitesecurity.delivery.repository.DeliveryTrackingRepository;
 import org.junit.jupiter.api.Test;
@@ -37,9 +38,13 @@ class DeliveryServicePurgeTest {
     @Mock
     private DeliveryEventRepository eventRepository;
 
+    // Unused by the purge path; present because the constructor takes it.
+    @Mock
+    private DeliveryQueryRepository deliveryQueryRepository;
+
     private DeliveryService service() {
-        return new DeliveryService(deliveryRepository, trackingRepository, eventRepository,
-                new ObjectMapper());
+        return new DeliveryService(deliveryRepository, deliveryQueryRepository, trackingRepository,
+                eventRepository, new ObjectMapper());
     }
 
     private Delivery delivery(UUID id, Long orderId) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api';
 import { useAuth } from '../auth';
@@ -8,6 +8,8 @@ type SortKey = 'orderId' | 'createdAt';
 type SortDir = 'asc' | 'desc';
 
 const STATUSES = ['PENDING', 'DISPATCHED', 'DELIVERED', 'FAILED'] as const;
+
+const PAGE_SIZE = 20;
 
 const STATUS_STYLES: Record<string, string> = {
   PENDING: 'border-gold text-cocoa',
@@ -30,6 +32,8 @@ const selectStyle =
 export function DeliveriesPage() {
   const { isAdmin, isManager, loading: authLoading } = useAuth();
   const [deliveries, setDeliveries] = useState<DeliveryResponse[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
@@ -40,45 +44,43 @@ export function DeliveriesPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const canManage = isAdmin || isManager;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
     api
-      .getDeliveries()
-      .then(setDeliveries)
+      .getDeliveries({
+        status: filterStatus || undefined,
+        from: dateFrom || undefined,
+        to: dateTo || undefined,
+        sort: sortKey,
+        dir: sortDir,
+        page,
+        size: PAGE_SIZE,
+      })
+      .then((result) => {
+        setDeliveries(result.items);
+        setTotal(result.total);
+      })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [filterStatus, dateFrom, dateTo, sortKey, sortDir, page]);
 
   useEffect(() => {
     if (canManage) load();
   }, [canManage, load]);
 
-  const filtered = useMemo(() => {
-    let result = deliveries;
-
-    if (filterStatus) {
-      result = result.filter((d) => d.status === filterStatus);
-    }
-    if (dateFrom) {
-      const from = new Date(dateFrom).getTime();
-      result = result.filter((d) => new Date(d.createdAt).getTime() >= from);
-    }
-    if (dateTo) {
-      // The picker gives a date, not an instant: include the whole day.
-      const to = new Date(dateTo).getTime() + 86_400_000;
-      result = result.filter((d) => new Date(d.createdAt).getTime() < to);
-    }
-
-    return [...result].sort((a, b) => {
-      const cmp =
-        sortKey === 'orderId'
-          ? a.orderId - b.orderId
-          : new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-  }, [deliveries, filterStatus, dateFrom, dateTo, sortKey, sortDir]);
+  /**
+   * Any change to what is being asked for sends the reader back to page 0. Page 3
+   * of the old filter is rarely page 3 of the new one, and can be past the end.
+   */
+  const applyFilter =
+    <T,>(set: (value: T) => void) =>
+    (value: T) => {
+      set(value);
+      setPage(0);
+    };
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -87,6 +89,7 @@ export function DeliveriesPage() {
       setSortKey(key);
       setSortDir('asc');
     }
+    setPage(0);
   };
 
   const updateStatus = (orderId: number, status: string, description: string) => {
@@ -148,7 +151,7 @@ export function DeliveriesPage() {
             <span className="text-xs uppercase tracking-[0.16em] text-cocoa/60">Status</span>
             <select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
+              onChange={(e) => applyFilter(setFilterStatus)(e.target.value)}
               className={selectStyle}
             >
               <option value="">All</option>
@@ -165,7 +168,7 @@ export function DeliveriesPage() {
             <input
               type="date"
               value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
+              onChange={(e) => applyFilter(setDateFrom)(e.target.value)}
               className={selectStyle}
             />
           </label>
@@ -175,7 +178,7 @@ export function DeliveriesPage() {
             <input
               type="date"
               value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
+              onChange={(e) => applyFilter(setDateTo)(e.target.value)}
               className={selectStyle}
             />
           </label>
@@ -203,7 +206,7 @@ export function DeliveriesPage() {
             Date {sortKey === 'createdAt' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
           </button>
           <span className="normal-case tracking-normal text-cocoa/50">
-            {filtered.length} of {deliveries.length}
+            {total} shipment{total === 1 ? '' : 's'}
           </span>
         </div>
 
@@ -218,15 +221,15 @@ export function DeliveriesPage() {
 
         {loading ? (
           <p className="mt-10 text-sm text-cocoa/50">Loading shipments…</p>
-        ) : filtered.length === 0 ? (
+        ) : deliveries.length === 0 ? (
           <p className="mt-10 text-sm text-cocoa/50">
-            {deliveries.length === 0
-              ? 'No shipments yet — none of the boutique’s orders have reached the delivery service.'
-              : 'No shipments match these filters.'}
+            {filterStatus || dateFrom || dateTo
+              ? 'No shipments match these filters.'
+              : 'No shipments yet — none of the boutique’s orders have reached the delivery service.'}
           </p>
         ) : (
           <ul className="mt-10 divide-y divide-cocoa/10 border-y border-cocoa/10">
-            {filtered.map((d) => {
+            {deliveries.map((d) => {
               const working = busy === d.orderId;
               return (
                 <li key={d.id} className="py-6">
@@ -296,6 +299,28 @@ export function DeliveriesPage() {
               );
             })}
           </ul>
+        )}
+
+        {total > PAGE_SIZE && (
+          <div className="mt-10 flex items-center gap-6 text-xs uppercase tracking-[0.14em] text-cocoa/60">
+            <button
+              disabled={page === 0 || loading}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              className="text-cocoa underline decoration-gold underline-offset-4 hover:text-terracotta disabled:opacity-40 disabled:no-underline"
+            >
+              Previous
+            </button>
+            <span className="normal-case tracking-normal text-cocoa/50">
+              Page {page + 1} of {totalPages}
+            </span>
+            <button
+              disabled={page + 1 >= totalPages || loading}
+              onClick={() => setPage((p) => p + 1)}
+              className="text-cocoa underline decoration-gold underline-offset-4 hover:text-terracotta disabled:opacity-40 disabled:no-underline"
+            >
+              Next
+            </button>
+          </div>
         )}
       </div>
     </div>

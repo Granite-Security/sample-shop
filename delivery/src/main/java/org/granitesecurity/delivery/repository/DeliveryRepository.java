@@ -17,7 +17,4 @@ public interface DeliveryRepository extends R2dbcRepository<Delivery, UUID> {
     // Orphan sweep (docs/users/blocking-users.md §8 Phase 6).
     @org.springframework.data.r2dbc.repository.Query("SELECT DISTINCT order_id FROM delivery")
     Flux<Long> findDistinctOrderIds();
-    Flux<Delivery> findByStatus(String status);
-    Flux<Delivery> findByPaymentStatus(String paymentStatus);
-    Flux<Delivery> findByStatusAndPaymentStatus(String status, String paymentStatus);
 }
