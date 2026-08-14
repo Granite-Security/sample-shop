@@ -6,31 +6,40 @@ import org.granitesecurity.delivery.domain.DeliveryEvent;
 import org.granitesecurity.delivery.domain.DeliveryStatus;
 import org.granitesecurity.delivery.domain.DeliveryTracking;
 import org.granitesecurity.delivery.dto.DeliveryResponse;
+import org.granitesecurity.delivery.dto.PagedResult;
 import org.granitesecurity.delivery.dto.TrackingDetailResponse;
 import org.granitesecurity.delivery.dto.TrackingDetailResponse.TrackingEvent;
 import org.granitesecurity.delivery.repository.DeliveryEventRepository;
+import org.granitesecurity.delivery.repository.DeliveryQueryRepository;
+import org.granitesecurity.delivery.repository.DeliveryQueryRepository.SortKey;
 import org.granitesecurity.delivery.repository.DeliveryRepository;
 import org.granitesecurity.delivery.repository.DeliveryTrackingRepository;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
 @Service
 public class DeliveryService {
 
+    /** Page size ceiling — see {@link #getDeliveries}. */
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final DeliveryRepository deliveryRepository;
+    private final DeliveryQueryRepository deliveryQueryRepository;
     private final DeliveryTrackingRepository trackingRepository;
     private final DeliveryEventRepository eventRepository;
     private final ObjectMapper objectMapper;
 
     public DeliveryService(DeliveryRepository deliveryRepository,
+                           DeliveryQueryRepository deliveryQueryRepository,
                            DeliveryTrackingRepository trackingRepository,
                            DeliveryEventRepository eventRepository,
                            ObjectMapper objectMapper) {
         this.deliveryRepository = deliveryRepository;
+        this.deliveryQueryRepository = deliveryQueryRepository;
         this.trackingRepository = trackingRepository;
         this.eventRepository = eventRepository;
         this.objectMapper = objectMapper;
@@ -82,18 +91,35 @@ public class DeliveryService {
                 .map(this::toResponse);
     }
 
-    public Flux<DeliveryResponse> getDeliveries(String status, String paymentStatus) {
-        Flux<Delivery> stream;
-        if (status != null && paymentStatus != null) {
-            stream = deliveryRepository.findByStatusAndPaymentStatus(status, paymentStatus);
-        } else if (status != null) {
-            stream = deliveryRepository.findByStatus(status);
-        } else if (paymentStatus != null) {
-            stream = deliveryRepository.findByPaymentStatus(paymentStatus);
-        } else {
-            stream = deliveryRepository.findAll();
-        }
-        return stream.map(this::toResponse);
+    /**
+     * One page of shipments, filtered and sorted in Postgres.
+     *
+     * <p>Every filter and sort the back offices offer is applied here rather than in
+     * the browser. That is not a refactor for its own sake: filtering a page in the
+     * client filters only the rows that page happens to hold, which reads as data
+     * silently going missing. The two are a single change, and neither half is
+     * correct alone.
+     *
+     * <p>{@code size} is clamped to {@value #MAX_PAGE_SIZE}. Without a ceiling
+     * {@code ?size=1000000} restores exactly the unbounded fetch pagination replaced,
+     * and does it on request from outside.
+     */
+    public Mono<PagedResult<DeliveryResponse>> getDeliveries(String status, String paymentStatus,
+                                                             Instant from, Instant to,
+                                                             String sort, boolean ascending,
+                                                             int page, int size) {
+        int limit = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        int pageNumber = Math.max(page, 0);
+        long offset = (long) pageNumber * limit;
+        SortKey sortKey = SortKey.from(sort);
+
+        Mono<Long> total = deliveryQueryRepository.count(status, paymentStatus, from, to);
+        Mono<List<DeliveryResponse>> items = deliveryQueryRepository
+                .findPage(status, paymentStatus, from, to, sortKey, ascending, limit, offset)
+                .map(this::toResponse)
+                .collectList();
+        return total.zipWith(items)
+                .map(t -> new PagedResult<>(t.getT2(), t.getT1(), pageNumber, limit));
     }
 
     public Mono<TrackingDetailResponse> getTrackingDetail(Long orderId) {
