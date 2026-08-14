@@ -87,9 +87,15 @@ class StorageServiceTest {
         verifyNoInteractions(s3Presigner);
     }
 
+    /**
+     * The scope is an allow-list, so an unrecognised one is refused before anything
+     * is signed. This named "avatars" until avatars became a real scope, at which
+     * point it started asserting a rejection that no longer happens — hence a scope
+     * that cannot become legitimate by a later feature landing.
+     */
     @Test
-    void presignShouldRejectDisallowedScope() {
-        StepVerifier.create(storageService.presign("hero.jpg", "image/jpeg", "avatars", ADMIN, "admin"))
+    void presignShouldRejectUnknownScope() {
+        StepVerifier.create(storageService.presign("hero.jpg", "image/jpeg", "not-a-scope", ADMIN, "admin"))
                 .expectErrorMatches(ex -> ex instanceof StorageException)
                 .verify();
 

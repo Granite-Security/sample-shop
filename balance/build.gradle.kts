@@ -38,7 +38,6 @@ dependencies {
     annotationProcessor("org.projectlombok:lombok")
     testImplementation("org.springframework.boot:spring-boot-starter-data-r2dbc-test")
     testImplementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server-test")
-    testImplementation("org.springframework.boot:spring-boot-starter-kafka-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webflux-test")
     testCompileOnly("org.projectlombok:lombok")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

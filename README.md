@@ -162,12 +162,14 @@ Swagger UI is proxied through the gateway at [http://localhost:8080/swagger-ui/i
 ## Testing
 
 ```bash
-# Run a service's full test suite (requires Docker for DB-backed tests)
+# Run a service's full test suite — no Docker, no database, no other service required
 cd shop && ./gradlew test
-
-# Repository tests use Testcontainers and require Docker
-# Service/core tests use mocks and run without Docker
 ```
+
+Every test here is a unit test. Tests that needed a live Postgres, Kafka, Garage or auth-server
+were removed on purpose: CI's build step is `./gradlew build -x test`, so they gated nothing
+while failing for anyone whose Docker daemon was not running. Behaviour that genuinely needs
+infrastructure is verified by hand against the deployed cluster instead.
 
 ## Event-driven flows
 
