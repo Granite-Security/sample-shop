@@ -164,7 +164,7 @@ export function ProductPage() {
                 <div>
                   <dt className="font-medium text-cocoa">Shipping</dt>
                   <dd className="text-cocoa/60">
-                    Complimentary over $75. Cold-packed in summer so it arrives with a perfect snap.
+                    Complimentary over €75. Cold-packed in summer so it arrives with a perfect snap.
                   </dd>
                 </div>
               </div>

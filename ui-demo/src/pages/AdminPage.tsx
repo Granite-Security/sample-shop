@@ -300,7 +300,7 @@ export function AdminPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="admin-price" className="mb-1 block text-xs uppercase tracking-[0.16em] text-cocoa/60">
-                    Price (USD)
+                    Price (EUR)
                   </label>
                   <input
                     id="admin-price"

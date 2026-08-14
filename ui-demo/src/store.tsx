@@ -152,5 +152,18 @@ export function useShop(): ShopState {
   return ctx;
 }
 
+/**
+ * Storefront prices are shown in euros.
+ *
+ * <p>Note this is a display choice only, and a knowingly inexact one: the shop
+ * charges CHF, and the payment step will say so. The two are close enough that
+ * the boutique is happy to show €, but nothing here converts anything — the same
+ * number is simply labelled differently, so a price shown as €75 is charged as
+ * CHF 75. Balance, treasury and revenue figures are money movements rather than
+ * prices, and stay in CHF.
+ *
+ * <p>The locale stays en-US so the copy's number format is unchanged (€75.00,
+ * not 75,00 €) — only the symbol moves.
+ */
 export const formatPrice = (value: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(value);
