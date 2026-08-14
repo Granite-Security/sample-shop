@@ -5,3 +5,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/003-refactor-delivery.sql
       relativeToChangelogFile: false
+  - include:
+      file: db/changelog/004-index-delivery-status.sql
+      relativeToChangelogFile: false
