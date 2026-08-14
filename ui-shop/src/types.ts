@@ -206,6 +206,20 @@ export interface CreatePaymentIntentResponse {
   clientSecret: string;
 }
 
+/** Query for the paginated shipment list — every field is applied server-side. */
+export interface DeliveryQuery {
+  status?: string;
+  paymentStatus?: string;
+  /** A date picker's `YYYY-MM-DD`; the client turns it into an instant. */
+  from?: string;
+  /** Inclusive to the reader, exclusive on the wire: the client sends the next midnight. */
+  to?: string;
+  sort?: 'orderId' | 'createdAt';
+  dir?: 'asc' | 'desc';
+  page?: number;
+  size?: number;
+}
+
 export interface PagedResult<T> {
   items: T[];
   total: number;
