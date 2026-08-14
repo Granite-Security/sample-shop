@@ -6,6 +6,7 @@ import org.granitesecurity.profile.dto.RegisterFileRequest;
 import org.granitesecurity.profile.repository.UserFileRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -15,8 +16,10 @@ import reactor.test.StepVerifier;
 
 import java.time.Instant;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -81,18 +84,41 @@ class UserFileServiceTest {
         verifyNoInteractions(userFileRepository);
     }
 
+    /**
+     * A missing hash is a supported state, not a bad request. The browser computes it
+     * by reading the whole file into memory, so the client skips it above a size
+     * threshold — rejecting here would make large videos unuploadable.
+     *
+     * <p>This test asserted the opposite until the video work landed. It is kept
+     * pointing the other way rather than deleted, because "unhashed is allowed" is
+     * exactly the rule a later dedupe change is most likely to break by accident.
+     */
     @Test
-    void registerRejectsMissingContentHash() {
+    void registerAcceptsBlankContentHashAndStoresItAsNull() {
         userFileService = newService();
+        when(userFileRepository.countByUsername("alice")).thenReturn(Mono.just(1L));
+        when(userFileRepository.existsByObjectKey("user-files/abc/note.pdf")).thenReturn(Mono.just(false));
+        when(userFileRepository.save(any(UserFile.class))).thenAnswer(inv -> {
+            UserFile saved = inv.getArgument(0);
+            saved.setId(1L);
+            saved.setCreatedAt(Instant.now());
+            return Mono.just(saved);
+        });
+
         var req = new RegisterFileRequest(
                 "user-files/abc/note.pdf", "http://public", "note.pdf", "application/pdf", 100L, "   ");
 
         StepVerifier.create(userFileService.register("alice", req))
-                .expectErrorMatches(e -> e instanceof ResponseStatusException rse
-                        && rse.getStatusCode() == HttpStatus.BAD_REQUEST)
-                .verify();
+                .expectNextCount(1)
+                .verifyComplete();
 
-        verifyNoInteractions(userFileRepository);
+        ArgumentCaptor<UserFile> saved = ArgumentCaptor.forClass(UserFile.class);
+        verify(userFileRepository).save(saved.capture());
+        assertThat(saved.getValue().getContentHash()).isNull();
+
+        // The dedupe lookup is skipped entirely: with no hash there is nothing to
+        // match on, and Postgres treats NULLs as distinct in the unique index.
+        verify(userFileRepository, never()).findByUsernameAndContentHash(anyString(), anyString());
     }
 
     @Test

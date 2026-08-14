@@ -34,12 +34,18 @@ All commands run from a service's own directory.
 ```bash
 # JVM services (auth-server, gateway, greetings, shop, payment, delivery, profile, notification, demo-kot)
 ./gradlew build -x test     # CI's build step — compile without running tests
-./gradlew test              # full test suite; repository tests use Testcontainers and need Docker
+./gradlew test              # full test suite; runs anywhere, no Docker or database needed
 ./gradlew bootRun           # run the service locally
 
 ```
 
-Service/core tests use mocks and run without Docker; repository-layer tests use Testcontainers and require Docker to be running.
+Every test in this repo is a unit test that runs with no external infrastructure — mock-based
+(Mockito + `StepVerifier`), plus a handful of `@SpringBootTest` context loads for services whose
+context starts without a database. Tests needing a live Postgres, Kafka, Garage or auth-server were
+deleted deliberately, not lost: CI runs `build -x test`, so they gated nothing while failing for
+anyone without Docker running. **Do not add Testcontainers, `@EmbeddedKafka`, or a `@SpringBootTest`
+that reaches a real database back.** Verification of infrastructure-dependent behaviour happens
+manually against the deployed cluster.
 
 CI (`.github/workflows/ci.yml`) only builds/pushes services whose directory changed in the last commit (diffs `HEAD^` vs `HEAD`), building each in a matrix and pushing `moldovean/granite-<service>:latest` + `:<sha>` to Docker Hub. `demo-kot` is built but never dockerized/deployed (no Dockerfile).
 
