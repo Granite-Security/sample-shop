@@ -3,13 +3,9 @@ import { formatPrice, useShop } from '../store';
 import { ChocolateArt, variantFor } from './ChocolateArt';
 import { CloseIcon } from './icons';
 
-const FREE_SHIPPING_THRESHOLD = 75;
-
 export function CartDrawer() {
   const { cart, cartTotal, cartOpen, setCartOpen, setQuantity, removeFromCart, live } = useShop();
   const navigate = useNavigate();
-
-  const remaining = FREE_SHIPPING_THRESHOLD - cartTotal;
 
   return (
     <div
@@ -99,14 +95,12 @@ export function CartDrawer() {
               ))}
             </ul>
 
+            {/* No shipping line here. Shipping is not priced anywhere in the system
+                (docs/finance/accounting.md §2.10) — the order total is items plus
+                packaging less any voucher — so the cart has nothing truthful to say
+                about it, and a free-shipping promise would have to be withdrawn the
+                day shipping is charged for. */}
             <div className="border-t border-cocoa/10 px-6 py-5 space-y-4">
-              {remaining > 0 ? (
-                <p className="text-xs text-cocoa/60 tracking-wide">
-                  You're {formatPrice(remaining)} away from complimentary shipping.
-                </p>
-              ) : (
-                <p className="text-xs text-sage tracking-wide">Complimentary shipping unlocked.</p>
-              )}
               <div className="flex justify-between font-display text-xl text-cocoa">
                 <span>Subtotal</span>
                 <span>{formatPrice(cartTotal)}</span>
