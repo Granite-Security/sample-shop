@@ -167,13 +167,26 @@ jobs:
 
   update-gitops:
     name: Bump image tags in app-multi
-    needs: [detect-changes, docker-jvm, docker-ui]
+    needs: [detect-changes, build-jvm, build-ui, docker-jvm, docker-ui]
+    # The build jobs are guarded as well as the docker ones. A failed build leaves
+    # its docker job *skipped*, not failed, so a guard that only excludes 'failure'
+    # let the bump run and write a tag for an image that was never pushed — which is
+    # how ui-shop and ui-demo came to point at 0c8adc55, a tag that does not exist on
+    # Docker Hub. Nothing is bumped unless everything that had to build, built.
     if: |
       always() &&
       (needs.detect-changes.outputs.jvm != '[]' || needs.detect-changes.outputs.ui != '[]') &&
+      needs.build-jvm.result != 'failure' &&
+      needs.build-ui.result != 'failure' &&
       needs.docker-jvm.result != 'failure' &&
       needs.docker-ui.result != 'failure'
     runs-on: ubuntu-latest
+    # Two merges landing close together produce two runs whose bump jobs both commit
+    # to main; without this the loser's push is rejected and the run fails. Queued,
+    # not cancelled: every merged SHA still gets its tags written.
+    concurrency:
+      group: gitops-bump
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -210,4 +223,16 @@ jobs:
             exit 0
           fi
           git commit -m "chore(gitops): bump image tags to ${SHA} [skip ci]"
+
+          # main may have moved since checkout — another run's bump, or a merge that
+          # landed while the images were building. Rebase onto it and retry rather
+          # than failing: this commit touches one file that no human edits, so a
+          # rebase here cannot conflict with anything but another bump.
+          for attempt in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            echo "push rejected (attempt $attempt) — rebasing onto origin/main"
+            git pull --rebase origin main
+          done
           git push
