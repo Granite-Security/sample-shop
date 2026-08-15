@@ -9,17 +9,21 @@ export default function Orders() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      api.orders.getOrders().then(r => r.items),
-      api.delivery.getDeliveries().then(ds => {
+    // Deliveries are fetched one per displayed order rather than by listing every
+    // delivery in the system and picking ours out of it. The list endpoint is
+    // paginated now, so the old bulk call would have quietly covered only the first
+    // page — and it was always the wrong shape for this page, which needs exactly
+    // the orders it is showing and nothing else.
+    api.orders.getOrders()
+      .then(r => r.items)
+      .then(async userOrders => {
+        setOrders(userOrders);
+        const found = await Promise.all(userOrders.map(o => api.delivery.getDelivery(o.id)));
         const map: Record<number, DeliveryResponse> = {};
-        ds.forEach(d => { map[d.orderId] = d; });
-        return map;
-      }),
-    ]).then(([o, dm]) => {
-      setOrders(o);
-      setDeliveryMap(dm);
-    }).finally(() => setLoading(false));
+        found.forEach(d => { if (d) map[d.orderId] = d; });
+        setDeliveryMap(map);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <p>Loading...</p>;
