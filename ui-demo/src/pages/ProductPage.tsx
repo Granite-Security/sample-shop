@@ -8,6 +8,19 @@ import { ArrowIcon, HeartIcon, LeafIcon, StarIcon, TruckIcon } from '../componen
 import { Reveal } from '../components/Reveal';
 import { ProductGallery } from '../components/ProductGallery';
 import { getDefaultMedia } from '../utils/media';
+import { SHIPPING_COUNTRIES } from '../utils/countries';
+
+/**
+ * Read off the same constant the checkout and saved-address forms validate
+ * against, so the promise on the product page cannot drift from the rule that is
+ * actually enforced. A shopper in an unlisted country is currently turned away at
+ * the end of checkout, having already filled in an address.
+ */
+/** Country names that take a definite article in running prose. */
+const TAKES_ARTICLE = new Set(['United Kingdom', 'Netherlands', 'United States']);
+
+const SHIPS_TO = new Intl.ListFormat('en', { style: 'long', type: 'conjunction' })
+  .format(SHIPPING_COUNTRIES.map(c => (TAKES_ARTICLE.has(c) ? `the ${c}` : c)));
 
 /** Same deterministic pseudo-rating used by the bestseller cards. */
 const ratingFor = (id: number) => 4.6 + (Math.abs(id * 7) % 4) / 10;
@@ -164,7 +177,8 @@ export function ProductPage() {
                 <div>
                   <dt className="font-medium text-cocoa">Shipping</dt>
                   <dd className="text-cocoa/60">
-                    Cold-packed in summer so it arrives with a perfect snap.
+                    We deliver to {SHIPS_TO}. Cold-packed in summer so it arrives with a
+                    perfect snap.
                   </dd>
                 </div>
               </div>
