@@ -46,3 +46,19 @@ kotlin {
 tasks.withType<Test> {
     useJUnitPlatform()
 }
+
+// demo-kot carries scratch files under dev/ that each have their own main().
+// Pin the boot entrypoint so bootJar/bootRun don't try to pick between them...
+springBoot {
+    mainClass = "org.granitesecurity.demokot.DemoKotApplicationKt"
+}
+
+// ...and run a scratch file with: ./gradlew runDev -Pmain=dev.Dp1Kt
+tasks.register<JavaExec>("runDev") {
+    group = "application"
+    description = "Runs a standalone main() from src/main/kotlin, e.g. -Pmain=dev.Dp1Kt"
+    // deliberately not sourceSets["main"].runtimeClasspath: that pulls in the
+    // GraalVM plugin's processAot task, which boots the whole Spring app first.
+    classpath = sourceSets["main"].output + configurations.runtimeClasspath.get()
+    mainClass = "org.granitesecurity.demokot." + (project.findProperty("main") as String? ?: "dev.Dp1Kt")
+}
