@@ -251,6 +251,10 @@ h3 { font-size: 1.1rem; }
 .message-detail-head { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; }
 .message-detail-who { flex: 1; min-width: 0; }
 .message-detail-who strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The counterparty's name and @handle link to their public profile when they have
+   published one. Inherits the surrounding size — the @handle line is smaller than the
+   name — and takes the link colour so it reads as clickable. */
+.message-profile-link { color: var(--primary); font: inherit; }
 .message-detail-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
 /* Long words and pasted URLs must wrap rather than force a sideways scroll. */
 .message-body { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }

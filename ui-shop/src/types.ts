@@ -497,6 +497,11 @@ export interface MessageResponse {
   counterpartyUsername: string | null;
   counterpartyDisplayName: string;
   counterpartyAvatarUrl: string | null;
+  // The counterparty's public-profile handle, or null when there is no published
+  // profile to link to — an unpublished one, the `system` sender behind order
+  // notices, a contact-form visitor, or a user deleted since. Null means render the
+  // name as text: there is no /users/<handle> page to send anyone to.
+  counterpartyHandle: string | null;
   // Optional: null when the sender did not write one, in which case the
   // list falls back to `preview`.
   subject: string | null;

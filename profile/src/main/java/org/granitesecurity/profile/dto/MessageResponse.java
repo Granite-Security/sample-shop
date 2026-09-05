@@ -13,6 +13,12 @@ import java.time.Instant;
  * (docs/users/messaging.md §5.1). It is the same untrusted text as {@code body}, just
  * shorter, and is escaped by React like anything else.
  *
+ * <p>{@code counterpartyHandle} is the other party's public-profile handle, and is set
+ * <em>only</em> when that profile is published. Null means there is nothing to link to:
+ * no profile row at all (the {@code system} sender, a contact-form visitor, a counterparty
+ * deleted since), or a profile whose owner has not published it. A handle that exists but
+ * is unpublished is private (docs/profile/public-profile.md D2) and must never appear here.
+ *
  * <p>{@code senderUsername} and {@code counterpartyUsername} are null for a contact-form
  * message sent by someone who was not signed in (§11). Clients must treat a null
  * counterparty as "there is no profile to link to and no inbox to reply into" — that is
@@ -26,6 +32,7 @@ public record MessageResponse(
         String counterpartyUsername,
         String counterpartyDisplayName,
         String counterpartyAvatarUrl,
+        String counterpartyHandle,
         String subject,
         String body,
         String preview,

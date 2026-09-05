@@ -15,6 +15,12 @@ public class BinaryTree {
         Node n = addRecursive(this.root, value);
     }
 
+    public boolean containsNode(int value) {
+        return containsNodeRecursive(root, value);
+    }
+
+
+
     private Node addRecursive(Node current, int value) {
         if (current == null) {
             current = new Node(value);
@@ -26,5 +32,11 @@ public class BinaryTree {
         return addRecursive(root.getLeft(), value);
     }
 
+    private boolean containsNodeRecursive(Node current, int value) {
+        if (current == null) return false;
+        if (current.getData() == value) return true;
+        if (value > current.getData()) return containsNodeRecursive(current.getRight(), value);
+        return containsNodeRecursive(current.getLeft(), value);
+    }
 
 }
