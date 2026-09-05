@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router';
 import { api } from '../api';
 import Avatar from '../components/Avatar';
 import { useMessages } from '../contexts/MessagesContext';
@@ -160,16 +161,38 @@ function MessageDetail({ message, onClose, onDelete, onReply }: {
   // inbox, no @handle. Their email is the only way back to them (§11).
   const guest = !message.counterpartyUsername;
 
+  // A different question from `guest`: a real user with an unpublished profile has an
+  // inbox to reply into but no page to visit, so the name stays plain text. The server
+  // only sends a handle when the profile is published
+  // (docs/profile-messaging-upgrade.md D1) — nothing to check here beyond its presence.
+  const profileUrl = message.counterpartyHandle
+    ? `/users/${encodeURIComponent(message.counterpartyHandle)}`
+    : null;
+
   return (
     <div className="message-panel">
       <div className="message-detail-head">
-        <Avatar src={message.counterpartyAvatarUrl} name={message.counterpartyDisplayName} size={40} />
+        {profileUrl ? (
+          <Link to={profileUrl} aria-label={`View ${message.counterpartyDisplayName}'s profile`}>
+            <Avatar src={message.counterpartyAvatarUrl} name={message.counterpartyDisplayName} size={40} />
+          </Link>
+        ) : (
+          <Avatar src={message.counterpartyAvatarUrl} name={message.counterpartyDisplayName} size={40} />
+        )}
         <div className="message-detail-who">
-          <strong>{message.outgoing ? 'To: ' : 'From: '}{message.counterpartyDisplayName}</strong>
+          <strong>
+            {message.outgoing ? 'To: ' : 'From: '}
+            {/* Still a JSX child, so React still escapes it — a link changes nothing there. */}
+            {profileUrl
+              ? <Link to={profileUrl} className="message-profile-link">{message.counterpartyDisplayName}</Link>
+              : message.counterpartyDisplayName}
+          </strong>
           <span className="message-time">
             {guest
               ? `${message.senderEmail ?? 'no address given'} · via the contact form`
-              : `@${message.counterpartyUsername}`}
+              : profileUrl
+                ? <Link to={profileUrl} className="message-profile-link">@{message.counterpartyUsername}</Link>
+                : `@${message.counterpartyUsername}`}
             {' · '}{new Date(message.createdAt).toLocaleString()}
           </span>
         </div>

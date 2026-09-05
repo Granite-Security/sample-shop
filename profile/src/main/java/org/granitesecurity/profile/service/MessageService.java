@@ -305,6 +305,7 @@ public class MessageService {
                 counterpartyUsername,
                 counterparty != null ? displayNameOf(counterparty) : displayNameOfGuest(message, counterpartyUsername),
                 counterparty != null ? ProfileService.effectiveAvatarUrl(counterparty) : null,
+                publishedHandleOf(counterparty),
                 message.getSubject(),
                 message.getBody(),
                 preview(message.getBody()),
@@ -312,6 +313,22 @@ public class MessageService {
                 message.getReadAt(),
                 outgoing,
                 message.getCreatedAt());
+    }
+
+    /**
+     * The counterparty's handle, but only when their profile is published — that is what
+     * makes it a link the inbox can offer (docs/profile-messaging-upgrade.md D1).
+     *
+     * <p>Reading {@code getHandle()} alone would hand out the handle of an unpublished
+     * profile, which is reserved-but-private (docs/profile/public-profile.md D2), and the
+     * link it produced would 404 anyway.
+     */
+    private static String publishedHandleOf(UserProfile profile) {
+        if (profile == null || !profile.isPublicProfile()) {
+            return null;
+        }
+        String handle = profile.getHandle();
+        return handle == null || handle.isBlank() ? null : handle;
     }
 
     // -------------------------------------------------------------- validation
